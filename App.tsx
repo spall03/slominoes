@@ -1,14 +1,350 @@
-import { View, Text, StyleSheet, Pressable, SafeAreaView } from 'react-native';
+import React, { useRef, useEffect } from 'react';
+import {
+  View,
+  Text,
+  StyleSheet,
+  Pressable,
+  SafeAreaView,
+  Animated,
+} from 'react-native';
 import { StatusBar } from 'expo-status-bar';
-import { useGameState } from './hooks/useGameState';
-import { SYMBOL_DISPLAY } from './utils/symbols';
-import { WIN_THRESHOLD, BOARD_SIZE } from './constants/gameConfig';
+import { create } from 'zustand';
+
+// =============================================================================
+// CONSTANTS
+// =============================================================================
+
+const BOARD_SIZE = 8;
+const TILES_PER_LEVEL = 15;
+const RESPINS_PER_LEVEL = 5;
+const WIN_THRESHOLD = 3000;
+const MIN_MATCH_LENGTH = 3;
+
+const LENGTH_MULTIPLIERS: Record<number, number> = { 3: 1, 4: 2, 5: 3 };
+const MAX_LENGTH_MULTIPLIER = 4;
+
+function getLengthMultiplier(length: number): number {
+  if (length < MIN_MATCH_LENGTH) return 0;
+  if (length >= 6) return MAX_LENGTH_MULTIPLIER;
+  return LENGTH_MULTIPLIERS[length] ?? MAX_LENGTH_MULTIPLIER;
+}
+
+// =============================================================================
+// SYMBOLS
+// =============================================================================
+
+type Symbol = 'cherry' | 'lemon' | 'bar' | 'bell' | 'seven';
+
+const SYMBOLS: Symbol[] = ['cherry', 'lemon', 'bar', 'bell', 'seven'];
+
+const SYMBOL_VALUES: Record<Symbol, number> = {
+  cherry: 10,
+  lemon: 20,
+  bar: 40,
+  bell: 80,
+  seven: 150,
+};
+
+const SYMBOL_DISPLAY: Record<Symbol, string> = {
+  cherry: '🍒',
+  lemon: '🍋',
+  bar: '🎰',
+  bell: '🔔',
+  seven: '7️⃣',
+};
+
+function getRandomSymbol(): Symbol {
+  return SYMBOLS[Math.floor(Math.random() * SYMBOLS.length)];
+}
+
+// =============================================================================
+// TILES
+// =============================================================================
+
+interface Tile {
+  id: string;
+  symbolA: Symbol;
+  symbolB: Symbol;
+}
+
+function generateTile(id: string): Tile {
+  return { id, symbolA: getRandomSymbol(), symbolB: getRandomSymbol() };
+}
+
+function generateTileQueue(): Tile[] {
+  return Array.from({ length: TILES_PER_LEVEL }, (_, i) => generateTile(`tile-${i}`));
+}
+
+// =============================================================================
+// GRID UTILITIES
+// =============================================================================
+
+type Grid = (Symbol | null)[][];
+
+function createEmptyGrid(): Grid {
+  return Array.from({ length: BOARD_SIZE }, () => Array(BOARD_SIZE).fill(null));
+}
+
+function cloneGrid(grid: Grid): Grid {
+  return grid.map(row => [...row]);
+}
+
+// =============================================================================
+// SCORING
+// =============================================================================
+
+interface Match {
+  cells: [number, number][];
+  symbol: Symbol;
+  length: number;
+  score: number;
+}
+
+function findMatches(grid: Grid): Match[] {
+  const matches: Match[] = [];
+
+  // Horizontal matches
+  for (let row = 0; row < BOARD_SIZE; row++) {
+    let col = 0;
+    while (col < BOARD_SIZE) {
+      const symbol = grid[row][col];
+      if (symbol === null) { col++; continue; }
+
+      let length = 1;
+      while (col + length < BOARD_SIZE && grid[row][col + length] === symbol) {
+        length++;
+      }
+
+      if (length >= MIN_MATCH_LENGTH) {
+        const cells: [number, number][] = [];
+        for (let i = 0; i < length; i++) cells.push([row, col + i]);
+        const score = SYMBOL_VALUES[symbol] * length * getLengthMultiplier(length);
+        matches.push({ cells, symbol, length, score });
+      }
+      col += length;
+    }
+  }
+
+  // Vertical matches
+  for (let col = 0; col < BOARD_SIZE; col++) {
+    let row = 0;
+    while (row < BOARD_SIZE) {
+      const symbol = grid[row][col];
+      if (symbol === null) { row++; continue; }
+
+      let length = 1;
+      while (row + length < BOARD_SIZE && grid[row + length][col] === symbol) {
+        length++;
+      }
+
+      if (length >= MIN_MATCH_LENGTH) {
+        const cells: [number, number][] = [];
+        for (let i = 0; i < length; i++) cells.push([row + i, col]);
+        const score = SYMBOL_VALUES[symbol] * length * getLengthMultiplier(length);
+        matches.push({ cells, symbol, length, score });
+      }
+      row += length;
+    }
+  }
+
+  return matches;
+}
+
+function calculateScore(grid: Grid): { score: number; matches: Match[] } {
+  const matches = findMatches(grid);
+  const score = matches.reduce((sum, m) => sum + m.score, 0);
+  return { score, matches };
+}
+
+// =============================================================================
+// GAME STATE (ZUSTAND)
+// =============================================================================
+
+type GamePhase = 'placing' | 'respinning' | 'ended';
+type Orientation = 'horizontal' | 'vertical';
+type GameResult = 'win' | 'lose' | null;
+
+interface GameState {
+  grid: Grid;
+  tileQueue: Tile[];
+  currentTile: Tile | null;
+  orientation: Orientation;
+  respinsRemaining: number;
+  placementScore: number;
+  respinScore: number;
+  phase: GamePhase;
+  result: GameResult;
+
+  placeTile: (row: number, col: number) => boolean;
+  rotateTile: () => void;
+  respinLine: (type: 'row' | 'col', index: number) => void;
+  resetGame: () => void;
+}
+
+function createInitialState() {
+  const queue = generateTileQueue();
+  return {
+    grid: createEmptyGrid(),
+    tileQueue: queue.slice(1),
+    currentTile: queue[0] ?? null,
+    orientation: 'horizontal' as Orientation,
+    respinsRemaining: RESPINS_PER_LEVEL,
+    placementScore: 0,
+    respinScore: 0,
+    phase: 'placing' as GamePhase,
+    result: null as GameResult,
+  };
+}
+
+const useGameStore = create<GameState>((set, get) => ({
+  ...createInitialState(),
+
+  placeTile: (row: number, col: number): boolean => {
+    const { phase, currentTile, orientation, grid, tileQueue } = get();
+    if (phase !== 'placing' || !currentTile) return false;
+
+    // Check bounds for first cell
+    if (row < 0 || row >= BOARD_SIZE || col < 0 || col >= BOARD_SIZE) return false;
+    if (grid[row][col] !== null) return false;
+
+    // Check second cell
+    const [row2, col2] = orientation === 'horizontal' ? [row, col + 1] : [row + 1, col];
+    if (row2 >= BOARD_SIZE || col2 >= BOARD_SIZE) return false;
+    if (grid[row2][col2] !== null) return false;
+
+    // Place tile
+    const newGrid = cloneGrid(grid);
+    newGrid[row][col] = currentTile.symbolA;
+    newGrid[row2][col2] = currentTile.symbolB;
+
+    const nextTile = tileQueue[0] ?? null;
+    const newQueue = tileQueue.slice(1);
+    const isComplete = nextTile === null;
+
+    if (isComplete) {
+      const { score } = calculateScore(newGrid);
+      set({
+        grid: newGrid,
+        tileQueue: [],
+        currentTile: null,
+        placementScore: score,
+        phase: 'respinning',
+      });
+    } else {
+      set({
+        grid: newGrid,
+        tileQueue: newQueue,
+        currentTile: nextTile,
+      });
+    }
+    return true;
+  },
+
+  rotateTile: () => {
+    set(s => ({ orientation: s.orientation === 'horizontal' ? 'vertical' : 'horizontal' }));
+  },
+
+  respinLine: (type: 'row' | 'col', index: number) => {
+    const { phase, respinsRemaining, grid, placementScore } = get();
+    if (phase !== 'respinning' || respinsRemaining <= 0) return;
+    if (index < 0 || index >= BOARD_SIZE) return;
+
+    const newGrid = cloneGrid(grid);
+
+    if (type === 'row') {
+      for (let col = 0; col < BOARD_SIZE; col++) {
+        if (newGrid[index][col] !== null) newGrid[index][col] = getRandomSymbol();
+      }
+    } else {
+      for (let row = 0; row < BOARD_SIZE; row++) {
+        if (newGrid[row][index] !== null) newGrid[row][index] = getRandomSymbol();
+      }
+    }
+
+    const newRespins = respinsRemaining - 1;
+    const { score } = calculateScore(newGrid);
+
+    if (newRespins === 0) {
+      const total = placementScore + score;
+      set({
+        grid: newGrid,
+        respinsRemaining: 0,
+        respinScore: score,
+        phase: 'ended',
+        result: total >= WIN_THRESHOLD ? 'win' : 'lose',
+      });
+    } else {
+      set({
+        grid: newGrid,
+        respinsRemaining: newRespins,
+        respinScore: score,
+      });
+    }
+  },
+
+  resetGame: () => set(createInitialState()),
+}));
+
+// =============================================================================
+// ANIMATED CELL COMPONENT
+// =============================================================================
+
+function AnimatedCell({
+  symbol,
+  onPress,
+  isEmpty,
+}: {
+  symbol: Symbol | null;
+  onPress: () => void;
+  isEmpty: boolean;
+}) {
+  const scaleAnim = useRef(new Animated.Value(1)).current;
+  const prevSymbol = useRef(symbol);
+
+  useEffect(() => {
+    if (symbol !== prevSymbol.current) {
+      prevSymbol.current = symbol;
+      Animated.sequence([
+        Animated.timing(scaleAnim, {
+          toValue: 1.2,
+          duration: 100,
+          useNativeDriver: true,
+        }),
+        Animated.timing(scaleAnim, {
+          toValue: 1,
+          duration: 100,
+          useNativeDriver: true,
+        }),
+      ]).start();
+    }
+  }, [symbol, scaleAnim]);
+
+  return (
+    <Pressable onPress={onPress}>
+      <Animated.View
+        style={[
+          styles.cell,
+          !isEmpty && styles.filledCell,
+          { transform: [{ scale: scaleAnim }] },
+        ]}
+      >
+        <Text style={styles.cellText}>
+          {symbol ? SYMBOL_DISPLAY[symbol] : ''}
+        </Text>
+      </Animated.View>
+    </Pressable>
+  );
+}
+
+// =============================================================================
+// MAIN APP COMPONENT
+// =============================================================================
 
 export default function App() {
   const {
     grid,
     currentTile,
-    currentOrientation,
+    orientation,
     tileQueue,
     respinsRemaining,
     placementScore,
@@ -19,28 +355,10 @@ export default function App() {
     rotateTile,
     respinLine,
     resetGame,
-  } = useGameState();
+  } = useGameStore();
 
   const totalScore = placementScore + respinScore;
   const tilesRemaining = tileQueue.length + (currentTile ? 1 : 0);
-
-  const handleCellPress = (row: number, col: number) => {
-    if (phase === 'placing') {
-      placeTile(row, col);
-    }
-  };
-
-  const handleRowRespin = (rowIndex: number) => {
-    if (phase === 'respinning' && respinsRemaining > 0) {
-      respinLine('row', rowIndex);
-    }
-  };
-
-  const handleColRespin = (colIndex: number) => {
-    if (phase === 'respinning' && respinsRemaining > 0) {
-      respinLine('col', colIndex);
-    }
-  };
 
   return (
     <SafeAreaView style={styles.container}>
@@ -64,7 +382,7 @@ export default function App() {
               <Pressable
                 key={`col-${col}`}
                 style={styles.respinButton}
-                onPress={() => handleColRespin(col)}
+                onPress={() => respinLine('col', col)}
               >
                 <Text style={styles.respinButtonText}>v</Text>
               </Pressable>
@@ -73,23 +391,16 @@ export default function App() {
         )}
 
         <View style={styles.gridWithRows}>
-          {/* Grid */}
           <View style={styles.grid}>
             {grid.map((row, rowIndex) => (
               <View key={`row-${rowIndex}`} style={styles.row}>
                 {row.map((cell, colIndex) => (
-                  <Pressable
+                  <AnimatedCell
                     key={`cell-${rowIndex}-${colIndex}`}
-                    style={[
-                      styles.cell,
-                      cell !== null && styles.filledCell,
-                    ]}
-                    onPress={() => handleCellPress(rowIndex, colIndex)}
-                  >
-                    <Text style={styles.cellText}>
-                      {cell !== null ? SYMBOL_DISPLAY[cell] : ''}
-                    </Text>
-                  </Pressable>
+                    symbol={cell}
+                    isEmpty={cell === null}
+                    onPress={() => phase === 'placing' && placeTile(rowIndex, colIndex)}
+                  />
                 ))}
               </View>
             ))}
@@ -102,7 +413,7 @@ export default function App() {
                 <Pressable
                   key={`row-btn-${row}`}
                   style={styles.respinButton}
-                  onPress={() => handleRowRespin(row)}
+                  onPress={() => respinLine('row', row)}
                 >
                   <Text style={styles.respinButtonText}>{'>'}</Text>
                 </Pressable>
@@ -118,10 +429,12 @@ export default function App() {
           <>
             <View style={styles.tilePreview}>
               <Text style={styles.previewLabel}>Next tile:</Text>
-              <View style={[
-                styles.previewTile,
-                currentOrientation === 'vertical' && styles.previewTileVertical
-              ]}>
+              <View
+                style={[
+                  styles.previewTile,
+                  orientation === 'vertical' && styles.previewTileVertical,
+                ]}
+              >
                 <Text style={styles.previewSymbol}>
                   {SYMBOL_DISPLAY[currentTile.symbolA]}
                 </Text>
@@ -140,7 +453,7 @@ export default function App() {
         {phase === 'respinning' && (
           <>
             <Text style={styles.infoText}>
-              Respins: {respinsRemaining} | Tap row/column to respin
+              Respins: {respinsRemaining} | Tap row/column arrows to respin
             </Text>
             <Text style={styles.scoreBreakdown}>
               Placement: {placementScore} + Respin: {respinScore}
@@ -150,10 +463,12 @@ export default function App() {
 
         {phase === 'ended' && (
           <View style={styles.endScreen}>
-            <Text style={[
-              styles.resultText,
-              result === 'win' ? styles.winText : styles.loseText
-            ]}>
+            <Text
+              style={[
+                styles.resultText,
+                result === 'win' ? styles.winText : styles.loseText,
+              ]}
+            >
               {result === 'win' ? 'You Win!' : 'Game Over'}
             </Text>
             <Text style={styles.finalScore}>Final Score: {totalScore}</Text>
@@ -166,6 +481,10 @@ export default function App() {
     </SafeAreaView>
   );
 }
+
+// =============================================================================
+// STYLES
+// =============================================================================
 
 const styles = StyleSheet.create({
   container: {
