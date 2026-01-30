@@ -90,6 +90,39 @@ function cloneGrid(grid: Grid): Grid {
 }
 
 // =============================================================================
+// ROTATION UTILITIES
+// =============================================================================
+
+// Rotation: 0 = right (→), 1 = down (↓), 2 = left (←), 3 = up (↑)
+type Rotation = 0 | 1 | 2 | 3;
+
+const ROTATION_LABELS: Record<Rotation, string> = {
+  0: '→',
+  1: '↓',
+  2: '←',
+  3: '↑',
+};
+
+// Get the offset for the second cell based on rotation
+function getSecondCellOffset(rotation: Rotation): [number, number] {
+  switch (rotation) {
+    case 0: return [0, 1];   // right
+    case 1: return [1, 0];   // down
+    case 2: return [0, -1];  // left
+    case 3: return [-1, 0];  // up
+  }
+}
+
+// For rotations 2 and 3, we swap which symbol goes first
+function getSymbolsForRotation(tile: Tile, rotation: Rotation): [Symbol, Symbol] {
+  // For left (2) and up (3), swap the symbols so the tile appears correctly
+  if (rotation === 2 || rotation === 3) {
+    return [tile.symbolB, tile.symbolA];
+  }
+  return [tile.symbolA, tile.symbolB];
+}
+
+// =============================================================================
 // SCORING
 // =============================================================================
 
@@ -161,24 +194,51 @@ function calculateScore(grid: Grid): { score: number; matches: Match[] } {
 // =============================================================================
 
 type GamePhase = 'placing' | 'respinning' | 'ended';
-type Orientation = 'horizontal' | 'vertical';
 type GameResult = 'win' | 'lose' | null;
+
+interface PreviewPosition {
+  row: number;
+  col: number;
+}
 
 interface GameState {
   grid: Grid;
   tileQueue: Tile[];
   currentTile: Tile | null;
-  orientation: Orientation;
+  rotation: Rotation;
   respinsRemaining: number;
-  placementScore: number;
-  respinScore: number;
+  score: number;  // Running total score
+  scoreBeforeRespins: number;  // Score when entering respin phase
   phase: GamePhase;
   result: GameResult;
+  previewPosition: PreviewPosition | null;  // For two-tap placement
 
-  placeTile: (row: number, col: number) => boolean;
+  handleCellTap: (row: number, col: number) => void;
   rotateTile: () => void;
   respinLine: (type: 'row' | 'col', index: number) => void;
   resetGame: () => void;
+  clearPreview: () => void;
+}
+
+function canPlaceTile(
+  grid: Grid,
+  row: number,
+  col: number,
+  rotation: Rotation
+): boolean {
+  // Check bounds for first cell
+  if (row < 0 || row >= BOARD_SIZE || col < 0 || col >= BOARD_SIZE) return false;
+  if (grid[row][col] !== null) return false;
+
+  // Check second cell
+  const [rowOffset, colOffset] = getSecondCellOffset(rotation);
+  const row2 = row + rowOffset;
+  const col2 = col + colOffset;
+
+  if (row2 < 0 || row2 >= BOARD_SIZE || col2 < 0 || col2 >= BOARD_SIZE) return false;
+  if (grid[row2][col2] !== null) return false;
+
+  return true;
 }
 
 function createInitialState() {
@@ -187,65 +247,87 @@ function createInitialState() {
     grid: createEmptyGrid(),
     tileQueue: queue.slice(1),
     currentTile: queue[0] ?? null,
-    orientation: 'horizontal' as Orientation,
+    rotation: 0 as Rotation,
     respinsRemaining: RESPINS_PER_LEVEL,
-    placementScore: 0,
-    respinScore: 0,
+    score: 0,
+    scoreBeforeRespins: 0,
     phase: 'placing' as GamePhase,
     result: null as GameResult,
+    previewPosition: null as PreviewPosition | null,
   };
 }
 
 const useGameStore = create<GameState>((set, get) => ({
   ...createInitialState(),
 
-  placeTile: (row: number, col: number): boolean => {
-    const { phase, currentTile, orientation, grid, tileQueue } = get();
-    if (phase !== 'placing' || !currentTile) return false;
+  handleCellTap: (row: number, col: number) => {
+    const { phase, currentTile, rotation, grid, tileQueue, previewPosition, score } = get();
+    if (phase !== 'placing' || !currentTile) return;
 
-    // Check bounds for first cell
-    if (row < 0 || row >= BOARD_SIZE || col < 0 || col >= BOARD_SIZE) return false;
-    if (grid[row][col] !== null) return false;
+    // Check if placement is valid at this position
+    if (!canPlaceTile(grid, row, col, rotation)) return;
 
-    // Check second cell
-    const [row2, col2] = orientation === 'horizontal' ? [row, col + 1] : [row + 1, col];
-    if (row2 >= BOARD_SIZE || col2 >= BOARD_SIZE) return false;
-    if (grid[row2][col2] !== null) return false;
+    // Check if this is a confirmation tap (same position as preview)
+    const isConfirmation = previewPosition?.row === row && previewPosition?.col === col;
 
-    // Place tile
+    if (!isConfirmation) {
+      // First tap or new position - just set preview
+      set({ previewPosition: { row, col } });
+      return;
+    }
+
+    // Second tap on same position - confirm and place tile
+    const [rowOffset, colOffset] = getSecondCellOffset(rotation);
+    const row2 = row + rowOffset;
+    const col2 = col + colOffset;
+
+    const [symbolFirst, symbolSecond] = getSymbolsForRotation(currentTile, rotation);
+
     const newGrid = cloneGrid(grid);
-    newGrid[row][col] = currentTile.symbolA;
-    newGrid[row2][col2] = currentTile.symbolB;
+    newGrid[row][col] = symbolFirst;
+    newGrid[row2][col2] = symbolSecond;
+
+    // Calculate new score immediately after placement
+    const { score: newTotalScore } = calculateScore(newGrid);
 
     const nextTile = tileQueue[0] ?? null;
     const newQueue = tileQueue.slice(1);
     const isComplete = nextTile === null;
 
     if (isComplete) {
-      const { score } = calculateScore(newGrid);
       set({
         grid: newGrid,
         tileQueue: [],
         currentTile: null,
-        placementScore: score,
+        score: newTotalScore,
+        scoreBeforeRespins: newTotalScore,
         phase: 'respinning',
+        previewPosition: null,
       });
     } else {
       set({
         grid: newGrid,
         tileQueue: newQueue,
         currentTile: nextTile,
+        score: newTotalScore,
+        previewPosition: null,
       });
     }
-    return true;
   },
 
   rotateTile: () => {
-    set(s => ({ orientation: s.orientation === 'horizontal' ? 'vertical' : 'horizontal' }));
+    set(s => ({
+      rotation: ((s.rotation + 1) % 4) as Rotation,
+      previewPosition: null,  // Clear preview when rotating
+    }));
+  },
+
+  clearPreview: () => {
+    set({ previewPosition: null });
   },
 
   respinLine: (type: 'row' | 'col', index: number) => {
-    const { phase, respinsRemaining, grid, placementScore } = get();
+    const { phase, respinsRemaining, grid, score } = get();
     if (phase !== 'respinning' || respinsRemaining <= 0) return;
     if (index < 0 || index >= BOARD_SIZE) return;
 
@@ -262,22 +344,24 @@ const useGameStore = create<GameState>((set, get) => ({
     }
 
     const newRespins = respinsRemaining - 1;
-    const { score } = calculateScore(newGrid);
+    const { score: gridScore } = calculateScore(newGrid);
+
+    // Only add points, never subtract (take max of current score and new calculated score)
+    const newScore = Math.max(score, gridScore);
 
     if (newRespins === 0) {
-      const total = placementScore + score;
       set({
         grid: newGrid,
         respinsRemaining: 0,
-        respinScore: score,
+        score: newScore,
         phase: 'ended',
-        result: total >= WIN_THRESHOLD ? 'win' : 'lose',
+        result: newScore >= WIN_THRESHOLD ? 'win' : 'lose',
       });
     } else {
       set({
         grid: newGrid,
         respinsRemaining: newRespins,
-        respinScore: score,
+        score: newScore,
       });
     }
   },
@@ -293,10 +377,14 @@ function AnimatedCell({
   symbol,
   onPress,
   isEmpty,
+  isPreview,
+  previewSymbol,
 }: {
   symbol: Symbol | null;
   onPress: () => void;
   isEmpty: boolean;
+  isPreview?: boolean;
+  previewSymbol?: Symbol;
 }) {
   const scaleAnim = useRef(new Animated.Value(1)).current;
   const prevSymbol = useRef(symbol);
@@ -319,17 +407,20 @@ function AnimatedCell({
     }
   }, [symbol, scaleAnim]);
 
+  const displaySymbol = isPreview ? previewSymbol : symbol;
+
   return (
     <Pressable onPress={onPress}>
       <Animated.View
         style={[
           styles.cell,
-          !isEmpty && styles.filledCell,
+          !isEmpty && !isPreview && styles.filledCell,
+          isPreview && styles.previewCell,
           { transform: [{ scale: scaleAnim }] },
         ]}
       >
-        <Text style={styles.cellText}>
-          {symbol ? SYMBOL_DISPLAY[symbol] : ''}
+        <Text style={[styles.cellText, isPreview && styles.previewCellText]}>
+          {displaySymbol ? SYMBOL_DISPLAY[displaySymbol] : ''}
         </Text>
       </Animated.View>
     </Pressable>
@@ -344,21 +435,45 @@ export default function App() {
   const {
     grid,
     currentTile,
-    orientation,
+    rotation,
     tileQueue,
     respinsRemaining,
-    placementScore,
-    respinScore,
+    score,
+    scoreBeforeRespins,
     phase,
     result,
-    placeTile,
+    previewPosition,
+    handleCellTap,
     rotateTile,
     respinLine,
     resetGame,
   } = useGameStore();
 
-  const totalScore = placementScore + respinScore;
   const tilesRemaining = tileQueue.length + (currentTile ? 1 : 0);
+  const bonusScore = score - scoreBeforeRespins;
+
+  // Calculate preview cells
+  const getPreviewInfo = (row: number, col: number): { isPreview: boolean; previewSymbol?: Symbol } => {
+    if (!previewPosition || !currentTile || phase !== 'placing') {
+      return { isPreview: false };
+    }
+
+    const [rowOffset, colOffset] = getSecondCellOffset(rotation);
+    const [symbolFirst, symbolSecond] = getSymbolsForRotation(currentTile, rotation);
+
+    if (row === previewPosition.row && col === previewPosition.col) {
+      return { isPreview: true, previewSymbol: symbolFirst };
+    }
+
+    const row2 = previewPosition.row + rowOffset;
+    const col2 = previewPosition.col + colOffset;
+
+    if (row === row2 && col === col2) {
+      return { isPreview: true, previewSymbol: symbolSecond };
+    }
+
+    return { isPreview: false };
+  };
 
   return (
     <SafeAreaView style={styles.container}>
@@ -368,7 +483,7 @@ export default function App() {
       <View style={styles.header}>
         <Text style={styles.title}>Slot Dominoes</Text>
         <View style={styles.scoreRow}>
-          <Text style={styles.scoreText}>Score: {totalScore}</Text>
+          <Text style={styles.scoreText}>Score: {score}</Text>
           <Text style={styles.goalText}>Goal: {WIN_THRESHOLD}</Text>
         </View>
       </View>
@@ -394,14 +509,19 @@ export default function App() {
           <View style={styles.grid}>
             {grid.map((row, rowIndex) => (
               <View key={`row-${rowIndex}`} style={styles.row}>
-                {row.map((cell, colIndex) => (
-                  <AnimatedCell
-                    key={`cell-${rowIndex}-${colIndex}`}
-                    symbol={cell}
-                    isEmpty={cell === null}
-                    onPress={() => phase === 'placing' && placeTile(rowIndex, colIndex)}
-                  />
-                ))}
+                {row.map((cell, colIndex) => {
+                  const { isPreview, previewSymbol } = getPreviewInfo(rowIndex, colIndex);
+                  return (
+                    <AnimatedCell
+                      key={`cell-${rowIndex}-${colIndex}`}
+                      symbol={cell}
+                      isEmpty={cell === null}
+                      isPreview={isPreview}
+                      previewSymbol={previewSymbol}
+                      onPress={() => phase === 'placing' && handleCellTap(rowIndex, colIndex)}
+                    />
+                  );
+                })}
               </View>
             ))}
           </View>
@@ -431,22 +551,25 @@ export default function App() {
               <Text style={styles.previewLabel}>Next tile:</Text>
               <View
                 style={[
-                  styles.previewTile,
-                  orientation === 'vertical' && styles.previewTileVertical,
+                  styles.tilePreviewBox,
+                  (rotation === 1 || rotation === 3) && styles.tilePreviewBoxVertical,
                 ]}
               >
                 <Text style={styles.previewSymbol}>
-                  {SYMBOL_DISPLAY[currentTile.symbolA]}
+                  {SYMBOL_DISPLAY[rotation >= 2 ? currentTile.symbolB : currentTile.symbolA]}
                 </Text>
                 <Text style={styles.previewSymbol}>
-                  {SYMBOL_DISPLAY[currentTile.symbolB]}
+                  {SYMBOL_DISPLAY[rotation >= 2 ? currentTile.symbolA : currentTile.symbolB]}
                 </Text>
               </View>
               <Pressable style={styles.rotateButton} onPress={rotateTile}>
-                <Text style={styles.buttonText}>Rotate</Text>
+                <Text style={styles.buttonText}>Rotate {ROTATION_LABELS[rotation]}</Text>
               </Pressable>
             </View>
             <Text style={styles.infoText}>Tiles left: {tilesRemaining}</Text>
+            {previewPosition && (
+              <Text style={styles.hintText}>Tap again to confirm placement</Text>
+            )}
           </>
         )}
 
@@ -456,7 +579,7 @@ export default function App() {
               Respins: {respinsRemaining} | Tap row/column arrows to respin
             </Text>
             <Text style={styles.scoreBreakdown}>
-              Placement: {placementScore} + Respin: {respinScore}
+              Base: {scoreBeforeRespins} + Bonus: {bonusScore}
             </Text>
           </>
         )}
@@ -471,7 +594,7 @@ export default function App() {
             >
               {result === 'win' ? 'You Win!' : 'Game Over'}
             </Text>
-            <Text style={styles.finalScore}>Final Score: {totalScore}</Text>
+            <Text style={styles.finalScore}>Final Score: {score}</Text>
             <Pressable style={styles.restartButton} onPress={resetGame}>
               <Text style={styles.buttonText}>Play Again</Text>
             </Pressable>
@@ -547,8 +670,17 @@ const styles = StyleSheet.create({
   filledCell: {
     backgroundColor: '#4a4a70',
   },
+  previewCell: {
+    backgroundColor: 'transparent',
+    borderWidth: 2,
+    borderColor: '#ffd700',
+    borderStyle: 'dashed',
+  },
   cellText: {
     fontSize: 20,
+  },
+  previewCellText: {
+    opacity: 0.6,
   },
   rowButtons: {
     marginLeft: 4,
@@ -582,14 +714,14 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: '#888',
   },
-  previewTile: {
+  tilePreviewBox: {
     flexDirection: 'row',
     backgroundColor: '#4a4a70',
     borderRadius: 6,
     padding: 8,
     gap: 4,
   },
-  previewTileVertical: {
+  tilePreviewBoxVertical: {
     flexDirection: 'column',
   },
   previewSymbol: {
@@ -610,6 +742,11 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: '#aaa',
     marginBottom: 8,
+  },
+  hintText: {
+    fontSize: 14,
+    color: '#ffd700',
+    marginTop: 4,
   },
   scoreBreakdown: {
     fontSize: 14,
