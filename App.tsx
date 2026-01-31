@@ -1,4 +1,4 @@
-import React, { useRef, useEffect, useCallback } from 'react';
+import React, { useRef, useEffect, useCallback, useState } from 'react';
 import {
   View,
   Text,
@@ -193,6 +193,13 @@ type GamePhase = 'placing' | 'respinning' | 'ended';
 type GameResult = 'win' | 'lose' | null;
 type PlacementMode = 'idle' | 'placed';
 
+interface ScorePopup {
+  id: string;
+  score: number;
+  row: number;
+  col: number;
+}
+
 interface GameState {
   grid: Grid;
   tileQueue: Tile[];
@@ -206,6 +213,8 @@ interface GameState {
   placementMode: PlacementMode;
   placedPosition: { row: number; col: number } | null;
   holdReady: boolean;
+  matchingCells: Set<string>;
+  scorePopups: ScorePopup[];
 
   startPlacement: (row: number, col: number) => void;
   movePlacement: (row: number, col: number) => void;
@@ -213,6 +222,9 @@ interface GameState {
   confirmPlacement: () => void;
   cancelPlacement: () => void;
   setHoldReady: (ready: boolean) => void;
+  triggerMatchAnimation: (matches: Match[], newCells: [number, number][]) => void;
+  clearMatchAnimation: () => void;
+  removeScorePopup: (id: string) => void;
   respinLine: (type: 'row' | 'col', index: number) => void;
   resetGame: () => void;
 }
@@ -251,6 +263,8 @@ function createInitialState() {
     placementMode: 'idle' as PlacementMode,
     placedPosition: null as { row: number; col: number } | null,
     holdReady: false,
+    matchingCells: new Set<string>(),
+    scorePopups: [] as ScorePopup[],
   };
 }
 
@@ -307,7 +321,7 @@ const useGameStore = create<GameState>((set, get) => ({
     newGrid[row][col] = symbolFirst;
     newGrid[row2][col2] = symbolSecond;
 
-    const { score: newTotalScore } = calculateScore(newGrid);
+    const { score: newTotalScore, matches } = calculateScore(newGrid);
 
     const nextTile = tileQueue[0] ?? null;
     const newQueue = tileQueue.slice(1);
@@ -336,6 +350,12 @@ const useGameStore = create<GameState>((set, get) => ({
         holdReady: false,
       });
     }
+
+    // Trigger match animation for matches involving newly placed cells
+    if (matches.length > 0) {
+      const newCells: [number, number][] = [[row, col], [row2, col2]];
+      get().triggerMatchAnimation(matches, newCells);
+    }
   },
 
   cancelPlacement: () => {
@@ -350,25 +370,74 @@ const useGameStore = create<GameState>((set, get) => ({
     set({ holdReady: ready });
   },
 
+  triggerMatchAnimation: (matches: Match[], newCells: [number, number][]) => {
+    const matchingCells = new Set<string>();
+    const scorePopups: ScorePopup[] = [];
+    const newCellKeys = new Set(newCells.map(([r, c]) => `${r},${c}`));
+
+    // Only animate matches that include at least one new cell
+    const relevantMatches = matches.filter(match =>
+      match.cells.some(([r, c]) => newCellKeys.has(`${r},${c}`))
+    );
+
+    relevantMatches.forEach((match, index) => {
+      // Add all cells in matching combos to highlight set
+      match.cells.forEach(([row, col]) => {
+        matchingCells.add(`${row},${col}`);
+      });
+
+      // Create score popup at center of match
+      const centerIndex = Math.floor(match.cells.length / 2);
+      const [centerRow, centerCol] = match.cells[centerIndex];
+      scorePopups.push({
+        id: `popup-${Date.now()}-${index}`,
+        score: match.score,
+        row: centerRow,
+        col: centerCol,
+      });
+    });
+
+    if (matchingCells.size > 0) {
+      set({ matchingCells, scorePopups });
+    }
+  },
+
+  clearMatchAnimation: () => {
+    set({ matchingCells: new Set<string>() });
+  },
+
+  removeScorePopup: (id: string) => {
+    set(state => ({
+      scorePopups: state.scorePopups.filter(p => p.id !== id),
+    }));
+  },
+
   respinLine: (type: 'row' | 'col', index: number) => {
     const { phase, respinsRemaining, grid, score } = get();
     if (phase !== 'respinning' || respinsRemaining <= 0) return;
     if (index < 0 || index >= BOARD_SIZE) return;
 
     const newGrid = cloneGrid(grid);
+    const changedCells: [number, number][] = [];
 
     if (type === 'row') {
       for (let col = 0; col < BOARD_SIZE; col++) {
-        if (newGrid[index][col] !== null) newGrid[index][col] = getRandomSymbol();
+        if (newGrid[index][col] !== null) {
+          newGrid[index][col] = getRandomSymbol();
+          changedCells.push([index, col]);
+        }
       }
     } else {
       for (let row = 0; row < BOARD_SIZE; row++) {
-        if (newGrid[row][index] !== null) newGrid[row][index] = getRandomSymbol();
+        if (newGrid[row][index] !== null) {
+          newGrid[row][index] = getRandomSymbol();
+          changedCells.push([row, index]);
+        }
       }
     }
 
     const newRespins = respinsRemaining - 1;
-    const { score: gridScore } = calculateScore(newGrid);
+    const { score: gridScore, matches } = calculateScore(newGrid);
     const newScore = Math.max(score, gridScore);
 
     if (newRespins === 0) {
@@ -386,6 +455,11 @@ const useGameStore = create<GameState>((set, get) => ({
         score: newScore,
       });
     }
+
+    // Trigger match animation if score improved
+    if (gridScore > score && matches.length > 0) {
+      get().triggerMatchAnimation(matches, changedCells);
+    }
   },
 
   resetGame: () => set(createInitialState()),
@@ -401,17 +475,24 @@ function AnimatedCell({
   isPreview,
   isPlaced,
   isHoldReady,
+  isMatching,
   previewSymbol,
+  onMatchAnimationComplete,
 }: {
   symbol: Symbol | null;
   isEmpty: boolean;
   isPreview?: boolean;
   isPlaced?: boolean;
   isHoldReady?: boolean;
+  isMatching?: boolean;
   previewSymbol?: Symbol;
+  onMatchAnimationComplete?: () => void;
 }) {
   const scaleAnim = useRef(new Animated.Value(1)).current;
+  const highlightOpacity = useRef(new Animated.Value(0)).current;
   const prevSymbol = useRef(symbol);
+  const onCompleteRef = useRef(onMatchAnimationComplete);
+  onCompleteRef.current = onMatchAnimationComplete;
 
   useEffect(() => {
     if (symbol !== prevSymbol.current) {
@@ -431,6 +512,25 @@ function AnimatedCell({
     }
   }, [symbol, scaleAnim]);
 
+  // Blink animation when matching - runs once on mount if isMatching is true
+  useEffect(() => {
+    if (isMatching) {
+      // Blink 3 times using opacity
+      Animated.sequence([
+        Animated.timing(highlightOpacity, { toValue: 1, duration: 100, useNativeDriver: true }),
+        Animated.timing(highlightOpacity, { toValue: 0, duration: 100, useNativeDriver: true }),
+        Animated.timing(highlightOpacity, { toValue: 1, duration: 100, useNativeDriver: true }),
+        Animated.timing(highlightOpacity, { toValue: 0, duration: 100, useNativeDriver: true }),
+        Animated.timing(highlightOpacity, { toValue: 1, duration: 100, useNativeDriver: true }),
+        Animated.timing(highlightOpacity, { toValue: 0, duration: 100, useNativeDriver: true }),
+      ]).start(() => {
+        onCompleteRef.current?.();
+      });
+    }
+    // Only run on mount - component is re-keyed for each animation trigger
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   const displaySymbol = isPreview ? previewSymbol : symbol;
 
   return (
@@ -441,12 +541,83 @@ function AnimatedCell({
         isPreview && !isPlaced && styles.previewCell,
         isPreview && isPlaced && !isHoldReady && styles.placedCell,
         isPreview && isPlaced && isHoldReady && styles.holdReadyCell,
-        { transform: [{ scale: scaleAnim }] },
+        { transform: [{ scale: scaleAnim }], overflow: 'hidden' },
       ]}
     >
-      <Text style={[styles.cellText, isPreview && !isPlaced && styles.previewCellText]}>
+      {/* Yellow highlight overlay */}
+      <Animated.View
+        style={[
+          styles.highlightOverlay,
+          { opacity: highlightOpacity },
+        ]}
+        pointerEvents="none"
+      />
+      <Text style={[styles.cellText, styles.cellTextAbove, isPreview && !isPlaced && styles.previewCellText]}>
         {displaySymbol ? SYMBOL_DISPLAY[displaySymbol] : ''}
       </Text>
+    </Animated.View>
+  );
+}
+
+// =============================================================================
+// SCORE POPUP COMPONENT
+// =============================================================================
+
+function ScorePopup({
+  score,
+  row,
+  col,
+  onComplete,
+}: {
+  score: number;
+  row: number;
+  col: number;
+  onComplete: () => void;
+}) {
+  const translateY = useRef(new Animated.Value(0)).current;
+  const opacity = useRef(new Animated.Value(1)).current;
+  const onCompleteRef = useRef(onComplete);
+  onCompleteRef.current = onComplete;
+
+  useEffect(() => {
+    Animated.parallel([
+      Animated.timing(translateY, {
+        toValue: -60,
+        duration: 1000,
+        useNativeDriver: true,
+      }),
+      Animated.sequence([
+        Animated.delay(600),
+        Animated.timing(opacity, {
+          toValue: 0,
+          duration: 400,
+          useNativeDriver: true,
+        }),
+      ]),
+    ]).start(() => {
+      onCompleteRef.current();
+    });
+  }, [translateY, opacity]);
+
+  // Position based on cell location (constants defined below)
+  const cellTotal = 40 + 1 * 2; // CELL_SIZE + CELL_MARGIN * 2
+  const gridPadding = 4;
+  const left = gridPadding + col * cellTotal + 20;
+  const top = gridPadding + row * cellTotal;
+
+  return (
+    <Animated.View
+      style={[
+        styles.scorePopup,
+        {
+          left,
+          top,
+          transform: [{ translateY }, { translateX: -20 }],
+          opacity,
+        },
+      ]}
+    >
+      <Text style={styles.scorePopupText}>+{score}</Text>
     </Animated.View>
   );
 }
@@ -469,12 +640,34 @@ function GestureGrid() {
     placementMode,
     placedPosition,
     holdReady,
+    matchingCells,
+    scorePopups,
     startPlacement,
     movePlacement,
     rotatePlacedTile,
     confirmPlacement,
     setHoldReady,
+    clearMatchAnimation,
+    removeScorePopup,
   } = useGameStore();
+
+  const [animationKey, setAnimationKey] = useState(0);
+  const animatingCellsRef = useRef(new Set<string>());
+
+  const handleMatchAnimationComplete = useCallback((cellKey: string) => {
+    animatingCellsRef.current.delete(cellKey);
+    if (animatingCellsRef.current.size === 0) {
+      clearMatchAnimation();
+    }
+  }, [clearMatchAnimation]);
+
+  // Track animating cells when matchingCells changes
+  useEffect(() => {
+    if (matchingCells.size > 0) {
+      animatingCellsRef.current = new Set(matchingCells);
+      setAnimationKey(k => k + 1);
+    }
+  }, [matchingCells]);
 
   const gridOriginRef = useRef({ x: 0, y: 0 });
 
@@ -580,19 +773,33 @@ function GestureGrid() {
           <View key={`row-${rowIndex}`} style={styles.row}>
             {row.map((cell, colIndex) => {
               const { isPreview, previewSymbol } = getPreviewInfo(rowIndex, colIndex);
+              const cellKey = `${rowIndex},${colIndex}`;
+              const isMatching = matchingCells.has(cellKey);
               return (
                 <AnimatedCell
-                  key={`cell-${rowIndex}-${colIndex}`}
+                  key={`cell-${rowIndex}-${colIndex}-${animationKey}`}
                   symbol={cell}
                   isEmpty={cell === null}
                   isPreview={isPreview}
                   isPlaced={placementMode === 'placed'}
                   isHoldReady={holdReady}
+                  isMatching={isMatching}
                   previewSymbol={previewSymbol}
+                  onMatchAnimationComplete={() => handleMatchAnimationComplete(cellKey)}
                 />
               );
             })}
           </View>
+        ))}
+        {/* Score popups */}
+        {scorePopups.map(popup => (
+          <ScorePopup
+            key={popup.id}
+            score={popup.score}
+            row={popup.row}
+            col={popup.col}
+            onComplete={() => removeScorePopup(popup.id)}
+          />
         ))}
       </View>
     </GestureDetector>
@@ -816,8 +1023,29 @@ const styles = StyleSheet.create({
     borderWidth: 2,
     borderColor: '#2196f3',
   },
+  highlightOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: '#ffd700',
+    borderRadius: 4,
+    zIndex: 1,
+  },
+  scorePopup: {
+    position: 'absolute',
+    zIndex: 100,
+  },
+  scorePopupText: {
+    fontSize: 14,
+    fontWeight: 'bold',
+    color: '#ffd700',
+    textShadowColor: '#000',
+    textShadowOffset: { width: 1, height: 1 },
+    textShadowRadius: 2,
+  },
   cellText: {
     fontSize: 20,
+  },
+  cellTextAbove: {
+    zIndex: 2,
   },
   previewCellText: {
     opacity: 0.6,
