@@ -1,4 +1,4 @@
-import React, { useRef, useEffect } from 'react';
+import React, { useRef, useEffect, useCallback } from 'react';
 import {
   View,
   Text,
@@ -6,9 +6,16 @@ import {
   Pressable,
   SafeAreaView,
   Animated,
+  LayoutChangeEvent,
 } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { create } from 'zustand';
+import {
+  GestureDetector,
+  Gesture,
+  GestureHandlerRootView,
+} from 'react-native-gesture-handler';
+import * as Haptics from 'expo-haptics';
 
 // =============================================================================
 // CONSTANTS
@@ -90,6 +97,28 @@ function cloneGrid(grid: Grid): Grid {
 }
 
 // =============================================================================
+// ROTATION UTILITIES
+// =============================================================================
+
+// Rotation: 0 = right (→), 1 = down (↓), 2 = left (←), 3 = up (↑)
+type Rotation = 0 | 1 | 2 | 3;
+
+// Get the offset for the second cell based on rotation
+function getSecondCellOffset(rotation: Rotation): [number, number] {
+  switch (rotation) {
+    case 0: return [0, 1];   // right
+    case 1: return [1, 0];   // down
+    case 2: return [0, -1];  // left
+    case 3: return [-1, 0];  // up
+  }
+}
+
+// Get symbols for placement - always returns [A, B], direction handled by offset
+function getSymbolsForRotation(tile: Tile): [Symbol, Symbol] {
+  return [tile.symbolA, tile.symbolB];
+}
+
+// =============================================================================
 // SCORING
 // =============================================================================
 
@@ -161,24 +190,50 @@ function calculateScore(grid: Grid): { score: number; matches: Match[] } {
 // =============================================================================
 
 type GamePhase = 'placing' | 'respinning' | 'ended';
-type Orientation = 'horizontal' | 'vertical';
 type GameResult = 'win' | 'lose' | null;
+type PlacementMode = 'idle' | 'placed';
 
 interface GameState {
   grid: Grid;
   tileQueue: Tile[];
   currentTile: Tile | null;
-  orientation: Orientation;
+  rotation: Rotation;
   respinsRemaining: number;
-  placementScore: number;
-  respinScore: number;
+  score: number;
+  scoreBeforeRespins: number;
   phase: GamePhase;
   result: GameResult;
+  placementMode: PlacementMode;
+  placedPosition: { row: number; col: number } | null;
+  holdReady: boolean;
 
-  placeTile: (row: number, col: number) => boolean;
-  rotateTile: () => void;
+  startPlacement: (row: number, col: number) => void;
+  movePlacement: (row: number, col: number) => void;
+  rotatePlacedTile: () => void;
+  confirmPlacement: () => void;
+  cancelPlacement: () => void;
+  setHoldReady: (ready: boolean) => void;
   respinLine: (type: 'row' | 'col', index: number) => void;
   resetGame: () => void;
+}
+
+function canPlaceTile(
+  grid: Grid,
+  row: number,
+  col: number,
+  rotation: Rotation
+): boolean {
+  if (row < 0 || row >= BOARD_SIZE || col < 0 || col >= BOARD_SIZE) return false;
+  if (grid[row][col] !== null) return false;
+
+  const [rowOffset, colOffset] = getSecondCellOffset(rotation);
+  const row2 = row + rowOffset;
+  const col2 = col + colOffset;
+
+  if (row2 < 0 || row2 >= BOARD_SIZE || col2 < 0 || col2 >= BOARD_SIZE) return false;
+  if (grid[row2][col2] !== null) return false;
+
+  return true;
 }
 
 function createInitialState() {
@@ -187,65 +242,116 @@ function createInitialState() {
     grid: createEmptyGrid(),
     tileQueue: queue.slice(1),
     currentTile: queue[0] ?? null,
-    orientation: 'horizontal' as Orientation,
+    rotation: 0 as Rotation,
     respinsRemaining: RESPINS_PER_LEVEL,
-    placementScore: 0,
-    respinScore: 0,
+    score: 0,
+    scoreBeforeRespins: 0,
     phase: 'placing' as GamePhase,
     result: null as GameResult,
+    placementMode: 'idle' as PlacementMode,
+    placedPosition: null as { row: number; col: number } | null,
+    holdReady: false,
   };
 }
 
 const useGameStore = create<GameState>((set, get) => ({
   ...createInitialState(),
 
-  placeTile: (row: number, col: number): boolean => {
-    const { phase, currentTile, orientation, grid, tileQueue } = get();
-    if (phase !== 'placing' || !currentTile) return false;
+  startPlacement: (row: number, col: number) => {
+    const { phase, currentTile, rotation, grid } = get();
+    if (phase !== 'placing' || !currentTile) return;
+    if (!canPlaceTile(grid, row, col, rotation)) return;
 
-    // Check bounds for first cell
-    if (row < 0 || row >= BOARD_SIZE || col < 0 || col >= BOARD_SIZE) return false;
-    if (grid[row][col] !== null) return false;
+    set({
+      placementMode: 'placed',
+      placedPosition: { row, col },
+    });
+  },
 
-    // Check second cell
-    const [row2, col2] = orientation === 'horizontal' ? [row, col + 1] : [row + 1, col];
-    if (row2 >= BOARD_SIZE || col2 >= BOARD_SIZE) return false;
-    if (grid[row2][col2] !== null) return false;
+  movePlacement: (row: number, col: number) => {
+    const { phase, currentTile, rotation, grid, placementMode } = get();
+    if (phase !== 'placing' || !currentTile || placementMode !== 'placed') return;
+    if (!canPlaceTile(grid, row, col, rotation)) return;
 
-    // Place tile
+    set({ placedPosition: { row, col } });
+  },
+
+  rotatePlacedTile: () => {
+    const { placementMode, placedPosition, rotation, grid } = get();
+    if (placementMode !== 'placed' || !placedPosition) return;
+
+    // Try each rotation until we find a valid one
+    for (let i = 1; i <= 4; i++) {
+      const newRotation = ((rotation + i) % 4) as Rotation;
+      if (canPlaceTile(grid, placedPosition.row, placedPosition.col, newRotation)) {
+        set({ rotation: newRotation });
+        return;
+      }
+    }
+  },
+
+  confirmPlacement: () => {
+    const { phase, currentTile, rotation, grid, tileQueue, placementMode, placedPosition } = get();
+    if (phase !== 'placing' || !currentTile || placementMode !== 'placed' || !placedPosition) return;
+
+    const { row, col } = placedPosition;
+    if (!canPlaceTile(grid, row, col, rotation)) return;
+
+    const [rowOffset, colOffset] = getSecondCellOffset(rotation);
+    const row2 = row + rowOffset;
+    const col2 = col + colOffset;
+
+    const [symbolFirst, symbolSecond] = getSymbolsForRotation(currentTile);
+
     const newGrid = cloneGrid(grid);
-    newGrid[row][col] = currentTile.symbolA;
-    newGrid[row2][col2] = currentTile.symbolB;
+    newGrid[row][col] = symbolFirst;
+    newGrid[row2][col2] = symbolSecond;
+
+    const { score: newTotalScore } = calculateScore(newGrid);
 
     const nextTile = tileQueue[0] ?? null;
     const newQueue = tileQueue.slice(1);
     const isComplete = nextTile === null;
 
     if (isComplete) {
-      const { score } = calculateScore(newGrid);
       set({
         grid: newGrid,
         tileQueue: [],
         currentTile: null,
-        placementScore: score,
+        score: newTotalScore,
+        scoreBeforeRespins: newTotalScore,
         phase: 'respinning',
+        placementMode: 'idle',
+        placedPosition: null,
+        holdReady: false,
       });
     } else {
       set({
         grid: newGrid,
         tileQueue: newQueue,
         currentTile: nextTile,
+        score: newTotalScore,
+        placementMode: 'idle',
+        placedPosition: null,
+        holdReady: false,
       });
     }
-    return true;
   },
 
-  rotateTile: () => {
-    set(s => ({ orientation: s.orientation === 'horizontal' ? 'vertical' : 'horizontal' }));
+  cancelPlacement: () => {
+    set({
+      placementMode: 'idle',
+      placedPosition: null,
+      holdReady: false,
+    });
+  },
+
+  setHoldReady: (ready: boolean) => {
+    set({ holdReady: ready });
   },
 
   respinLine: (type: 'row' | 'col', index: number) => {
-    const { phase, respinsRemaining, grid, placementScore } = get();
+    const { phase, respinsRemaining, grid, score } = get();
     if (phase !== 'respinning' || respinsRemaining <= 0) return;
     if (index < 0 || index >= BOARD_SIZE) return;
 
@@ -262,22 +368,22 @@ const useGameStore = create<GameState>((set, get) => ({
     }
 
     const newRespins = respinsRemaining - 1;
-    const { score } = calculateScore(newGrid);
+    const { score: gridScore } = calculateScore(newGrid);
+    const newScore = Math.max(score, gridScore);
 
     if (newRespins === 0) {
-      const total = placementScore + score;
       set({
         grid: newGrid,
         respinsRemaining: 0,
-        respinScore: score,
+        score: newScore,
         phase: 'ended',
-        result: total >= WIN_THRESHOLD ? 'win' : 'lose',
+        result: newScore >= WIN_THRESHOLD ? 'win' : 'lose',
       });
     } else {
       set({
         grid: newGrid,
         respinsRemaining: newRespins,
-        respinScore: score,
+        score: newScore,
       });
     }
   },
@@ -291,12 +397,18 @@ const useGameStore = create<GameState>((set, get) => ({
 
 function AnimatedCell({
   symbol,
-  onPress,
   isEmpty,
+  isPreview,
+  isPlaced,
+  isHoldReady,
+  previewSymbol,
 }: {
   symbol: Symbol | null;
-  onPress: () => void;
   isEmpty: boolean;
+  isPreview?: boolean;
+  isPlaced?: boolean;
+  isHoldReady?: boolean;
+  previewSymbol?: Symbol;
 }) {
   const scaleAnim = useRef(new Animated.Value(1)).current;
   const prevSymbol = useRef(symbol);
@@ -319,20 +431,171 @@ function AnimatedCell({
     }
   }, [symbol, scaleAnim]);
 
+  const displaySymbol = isPreview ? previewSymbol : symbol;
+
   return (
-    <Pressable onPress={onPress}>
-      <Animated.View
-        style={[
-          styles.cell,
-          !isEmpty && styles.filledCell,
-          { transform: [{ scale: scaleAnim }] },
-        ]}
-      >
-        <Text style={styles.cellText}>
-          {symbol ? SYMBOL_DISPLAY[symbol] : ''}
-        </Text>
-      </Animated.View>
-    </Pressable>
+    <Animated.View
+      style={[
+        styles.cell,
+        !isEmpty && !isPreview && styles.filledCell,
+        isPreview && !isPlaced && styles.previewCell,
+        isPreview && isPlaced && !isHoldReady && styles.placedCell,
+        isPreview && isPlaced && isHoldReady && styles.holdReadyCell,
+        { transform: [{ scale: scaleAnim }] },
+      ]}
+    >
+      <Text style={[styles.cellText, isPreview && !isPlaced && styles.previewCellText]}>
+        {displaySymbol ? SYMBOL_DISPLAY[displaySymbol] : ''}
+      </Text>
+    </Animated.View>
+  );
+}
+
+// =============================================================================
+// GESTURE GRID COMPONENT
+// =============================================================================
+
+const CELL_SIZE = 40;
+const CELL_MARGIN = 1;
+const CELL_TOTAL = CELL_SIZE + CELL_MARGIN * 2;
+const GRID_PADDING = 4;
+
+function GestureGrid() {
+  const {
+    grid,
+    currentTile,
+    rotation,
+    phase,
+    placementMode,
+    placedPosition,
+    holdReady,
+    startPlacement,
+    movePlacement,
+    rotatePlacedTile,
+    confirmPlacement,
+    setHoldReady,
+  } = useGameStore();
+
+  const gridOriginRef = useRef({ x: 0, y: 0 });
+
+  const handleGridLayout = useCallback((event: LayoutChangeEvent) => {
+    event.target.measure((x, y, width, height, pageX, pageY) => {
+      gridOriginRef.current = { x: pageX, y: pageY };
+    });
+  }, []);
+
+  const getCellFromPosition = useCallback((absoluteX: number, absoluteY: number) => {
+    const relativeX = absoluteX - gridOriginRef.current.x - GRID_PADDING;
+    const relativeY = absoluteY - gridOriginRef.current.y - GRID_PADDING;
+
+    const col = Math.floor(relativeX / CELL_TOTAL);
+    const row = Math.floor(relativeY / CELL_TOTAL);
+
+    if (row >= 0 && row < BOARD_SIZE && col >= 0 && col < BOARD_SIZE) {
+      return { row, col };
+    }
+    return null;
+  }, []);
+
+  const tapGesture = Gesture.Tap()
+    .onEnd((event) => {
+      if (phase !== 'placing' || !currentTile) return;
+
+      const cell = getCellFromPosition(event.absoluteX, event.absoluteY);
+      if (!cell) return;
+
+      if (placementMode === 'idle') {
+        // First tap - place tile
+        if (canPlaceTile(grid, cell.row, cell.col, rotation)) {
+          Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+          startPlacement(cell.row, cell.col);
+        }
+      } else if (placementMode === 'placed') {
+        // Tap while placed - rotate
+        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+        rotatePlacedTile();
+      }
+    });
+
+  const panGesture = Gesture.Pan()
+    .minDistance(10)
+    .onUpdate((event) => {
+      if (phase !== 'placing' || placementMode !== 'placed') return;
+
+      const cell = getCellFromPosition(event.absoluteX, event.absoluteY);
+      if (cell && canPlaceTile(grid, cell.row, cell.col, rotation)) {
+        if (!placedPosition || placedPosition.row !== cell.row || placedPosition.col !== cell.col) {
+          Haptics.selectionAsync();
+          movePlacement(cell.row, cell.col);
+        }
+      }
+    });
+
+  const longPressGesture = Gesture.LongPress()
+    .minDuration(500)
+    .onStart(() => {
+      if (phase === 'placing' && placementMode === 'placed') {
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+        setHoldReady(true);
+      }
+    })
+    .onEnd((event, success) => {
+      if (success && phase === 'placing' && placementMode === 'placed') {
+        confirmPlacement();
+      }
+      setHoldReady(false);
+    })
+    .onFinalize(() => {
+      setHoldReady(false);
+    });
+
+  const composedGesture = Gesture.Exclusive(longPressGesture, panGesture, tapGesture);
+
+  const getPreviewInfo = (row: number, col: number): { isPreview: boolean; previewSymbol?: Symbol } => {
+    if (!placedPosition || !currentTile || phase !== 'placing' || placementMode !== 'placed') {
+      return { isPreview: false };
+    }
+
+    const [rowOffset, colOffset] = getSecondCellOffset(rotation);
+    const [symbolFirst, symbolSecond] = getSymbolsForRotation(currentTile);
+
+    if (row === placedPosition.row && col === placedPosition.col) {
+      return { isPreview: true, previewSymbol: symbolFirst };
+    }
+
+    const row2 = placedPosition.row + rowOffset;
+    const col2 = placedPosition.col + colOffset;
+
+    if (row === row2 && col === col2) {
+      return { isPreview: true, previewSymbol: symbolSecond };
+    }
+
+    return { isPreview: false };
+  };
+
+  return (
+    <GestureDetector gesture={composedGesture}>
+      <View style={styles.grid} onLayout={handleGridLayout}>
+        {grid.map((row, rowIndex) => (
+          <View key={`row-${rowIndex}`} style={styles.row}>
+            {row.map((cell, colIndex) => {
+              const { isPreview, previewSymbol } = getPreviewInfo(rowIndex, colIndex);
+              return (
+                <AnimatedCell
+                  key={`cell-${rowIndex}-${colIndex}`}
+                  symbol={cell}
+                  isEmpty={cell === null}
+                  isPreview={isPreview}
+                  isPlaced={placementMode === 'placed'}
+                  isHoldReady={holdReady}
+                  previewSymbol={previewSymbol}
+                />
+              );
+            })}
+          </View>
+        ))}
+      </View>
+    </GestureDetector>
   );
 }
 
@@ -342,143 +605,133 @@ function AnimatedCell({
 
 export default function App() {
   const {
-    grid,
     currentTile,
-    orientation,
+    rotation,
     tileQueue,
     respinsRemaining,
-    placementScore,
-    respinScore,
+    score,
+    scoreBeforeRespins,
     phase,
     result,
-    placeTile,
-    rotateTile,
+    placementMode,
     respinLine,
     resetGame,
   } = useGameStore();
 
-  const totalScore = placementScore + respinScore;
   const tilesRemaining = tileQueue.length + (currentTile ? 1 : 0);
+  const bonusScore = score - scoreBeforeRespins;
 
   return (
-    <SafeAreaView style={styles.container}>
-      <StatusBar style="light" />
+    <GestureHandlerRootView style={styles.container}>
+      <SafeAreaView style={styles.container}>
+        <StatusBar style="light" />
 
-      {/* Header */}
-      <View style={styles.header}>
-        <Text style={styles.title}>Slot Dominoes</Text>
-        <View style={styles.scoreRow}>
-          <Text style={styles.scoreText}>Score: {totalScore}</Text>
-          <Text style={styles.goalText}>Goal: {WIN_THRESHOLD}</Text>
+        {/* Header */}
+        <View style={styles.header}>
+          <Text style={styles.title}>Slot Dominoes</Text>
+          <View style={styles.scoreRow}>
+            <Text style={styles.scoreText}>Score: {score}</Text>
+            <Text style={styles.goalText}>Goal: {WIN_THRESHOLD}</Text>
+          </View>
         </View>
-      </View>
 
-      {/* Grid */}
-      <View style={styles.gridContainer}>
-        {/* Column respin buttons */}
-        {phase === 'respinning' && (
-          <View style={styles.colButtons}>
-            {Array.from({ length: BOARD_SIZE }).map((_, col) => (
-              <Pressable
-                key={`col-${col}`}
-                style={styles.respinButton}
-                onPress={() => respinLine('col', col)}
-              >
-                <Text style={styles.respinButtonText}>v</Text>
-              </Pressable>
-            ))}
-          </View>
-        )}
-
-        <View style={styles.gridWithRows}>
-          <View style={styles.grid}>
-            {grid.map((row, rowIndex) => (
-              <View key={`row-${rowIndex}`} style={styles.row}>
-                {row.map((cell, colIndex) => (
-                  <AnimatedCell
-                    key={`cell-${rowIndex}-${colIndex}`}
-                    symbol={cell}
-                    isEmpty={cell === null}
-                    onPress={() => phase === 'placing' && placeTile(rowIndex, colIndex)}
-                  />
-                ))}
-              </View>
-            ))}
-          </View>
-
-          {/* Row respin buttons */}
+        {/* Grid */}
+        <View style={styles.gridContainer}>
+          {/* Column respin buttons */}
           {phase === 'respinning' && (
-            <View style={styles.rowButtons}>
-              {Array.from({ length: BOARD_SIZE }).map((_, row) => (
+            <View style={styles.colButtons}>
+              {Array.from({ length: BOARD_SIZE }).map((_, col) => (
                 <Pressable
-                  key={`row-btn-${row}`}
+                  key={`col-${col}`}
                   style={styles.respinButton}
-                  onPress={() => respinLine('row', row)}
+                  onPress={() => respinLine('col', col)}
                 >
-                  <Text style={styles.respinButtonText}>{'>'}</Text>
+                  <Text style={styles.respinButtonText}>v</Text>
                 </Pressable>
               ))}
             </View>
           )}
-        </View>
-      </View>
 
-      {/* Controls */}
-      <View style={styles.controls}>
-        {phase === 'placing' && currentTile && (
-          <>
-            <View style={styles.tilePreview}>
-              <Text style={styles.previewLabel}>Next tile:</Text>
-              <View
+          <View style={styles.gridWithRows}>
+            <GestureGrid />
+
+            {/* Row respin buttons */}
+            {phase === 'respinning' && (
+              <View style={styles.rowButtons}>
+                {Array.from({ length: BOARD_SIZE }).map((_, row) => (
+                  <Pressable
+                    key={`row-btn-${row}`}
+                    style={styles.respinButton}
+                    onPress={() => respinLine('row', row)}
+                  >
+                    <Text style={styles.respinButtonText}>{'>'}</Text>
+                  </Pressable>
+                ))}
+              </View>
+            )}
+          </View>
+        </View>
+
+        {/* Controls */}
+        <View style={styles.controls}>
+          {phase === 'placing' && currentTile && (
+            <>
+              <View style={styles.tilePreview}>
+                <Text style={styles.previewLabel}>Next tile:</Text>
+                <View
+                  style={[
+                    styles.tilePreviewBox,
+                    (rotation === 1 || rotation === 3) && styles.tilePreviewBoxVertical,
+                  ]}
+                >
+                  <Text style={styles.previewSymbol}>
+                    {SYMBOL_DISPLAY[rotation >= 2 ? currentTile.symbolB : currentTile.symbolA]}
+                  </Text>
+                  <Text style={styles.previewSymbol}>
+                    {SYMBOL_DISPLAY[rotation >= 2 ? currentTile.symbolA : currentTile.symbolB]}
+                  </Text>
+                </View>
+              </View>
+              <Text style={styles.infoText}>Tiles left: {tilesRemaining}</Text>
+              {placementMode === 'idle' && (
+                <Text style={styles.hintText}>Tap grid to place tile</Text>
+              )}
+              {placementMode === 'placed' && (
+                <Text style={styles.hintText}>Tap to rotate | Drag to move | Hold to confirm</Text>
+              )}
+            </>
+          )}
+
+          {phase === 'respinning' && (
+            <>
+              <Text style={styles.infoText}>
+                Respins: {respinsRemaining} | Tap row/column arrows to respin
+              </Text>
+              <Text style={styles.scoreBreakdown}>
+                Base: {scoreBeforeRespins} + Bonus: {bonusScore}
+              </Text>
+            </>
+          )}
+
+          {phase === 'ended' && (
+            <View style={styles.endScreen}>
+              <Text
                 style={[
-                  styles.previewTile,
-                  orientation === 'vertical' && styles.previewTileVertical,
+                  styles.resultText,
+                  result === 'win' ? styles.winText : styles.loseText,
                 ]}
               >
-                <Text style={styles.previewSymbol}>
-                  {SYMBOL_DISPLAY[currentTile.symbolA]}
-                </Text>
-                <Text style={styles.previewSymbol}>
-                  {SYMBOL_DISPLAY[currentTile.symbolB]}
-                </Text>
-              </View>
-              <Pressable style={styles.rotateButton} onPress={rotateTile}>
-                <Text style={styles.buttonText}>Rotate</Text>
+                {result === 'win' ? 'You Win!' : 'Game Over'}
+              </Text>
+              <Text style={styles.finalScore}>Final Score: {score}</Text>
+              <Pressable style={styles.restartButton} onPress={resetGame}>
+                <Text style={styles.buttonText}>Play Again</Text>
               </Pressable>
             </View>
-            <Text style={styles.infoText}>Tiles left: {tilesRemaining}</Text>
-          </>
-        )}
-
-        {phase === 'respinning' && (
-          <>
-            <Text style={styles.infoText}>
-              Respins: {respinsRemaining} | Tap row/column arrows to respin
-            </Text>
-            <Text style={styles.scoreBreakdown}>
-              Placement: {placementScore} + Respin: {respinScore}
-            </Text>
-          </>
-        )}
-
-        {phase === 'ended' && (
-          <View style={styles.endScreen}>
-            <Text
-              style={[
-                styles.resultText,
-                result === 'win' ? styles.winText : styles.loseText,
-              ]}
-            >
-              {result === 'win' ? 'You Win!' : 'Game Over'}
-            </Text>
-            <Text style={styles.finalScore}>Final Score: {totalScore}</Text>
-            <Pressable style={styles.restartButton} onPress={resetGame}>
-              <Text style={styles.buttonText}>Play Again</Text>
-            </Pressable>
-          </View>
-        )}
-      </View>
-    </SafeAreaView>
+          )}
+        </View>
+      </SafeAreaView>
+    </GestureHandlerRootView>
   );
 }
 
@@ -530,16 +783,16 @@ const styles = StyleSheet.create({
   grid: {
     backgroundColor: '#2d2d44',
     borderRadius: 8,
-    padding: 4,
+    padding: GRID_PADDING,
   },
   row: {
     flexDirection: 'row',
   },
   cell: {
-    width: 40,
-    height: 40,
+    width: CELL_SIZE,
+    height: CELL_SIZE,
     backgroundColor: '#3d3d5c',
-    margin: 1,
+    margin: CELL_MARGIN,
     borderRadius: 4,
     alignItems: 'center',
     justifyContent: 'center',
@@ -547,17 +800,36 @@ const styles = StyleSheet.create({
   filledCell: {
     backgroundColor: '#4a4a70',
   },
+  previewCell: {
+    backgroundColor: 'transparent',
+    borderWidth: 2,
+    borderColor: '#ffd700',
+    borderStyle: 'dashed',
+  },
+  placedCell: {
+    backgroundColor: 'rgba(76, 175, 80, 0.3)',
+    borderWidth: 2,
+    borderColor: '#4caf50',
+  },
+  holdReadyCell: {
+    backgroundColor: 'rgba(33, 150, 243, 0.3)',
+    borderWidth: 2,
+    borderColor: '#2196f3',
+  },
   cellText: {
     fontSize: 20,
+  },
+  previewCellText: {
+    opacity: 0.6,
   },
   rowButtons: {
     marginLeft: 4,
   },
   respinButton: {
     width: 36,
-    height: 40,
+    height: CELL_SIZE,
     backgroundColor: '#ff6b6b',
-    margin: 1,
+    margin: CELL_MARGIN,
     borderRadius: 4,
     alignItems: 'center',
     justifyContent: 'center',
@@ -582,24 +854,18 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: '#888',
   },
-  previewTile: {
+  tilePreviewBox: {
     flexDirection: 'row',
     backgroundColor: '#4a4a70',
     borderRadius: 6,
     padding: 8,
     gap: 4,
   },
-  previewTileVertical: {
+  tilePreviewBoxVertical: {
     flexDirection: 'column',
   },
   previewSymbol: {
     fontSize: 28,
-  },
-  rotateButton: {
-    backgroundColor: '#5c6bc0',
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderRadius: 6,
   },
   buttonText: {
     color: '#fff',
@@ -610,6 +876,11 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: '#aaa',
     marginBottom: 8,
+  },
+  hintText: {
+    fontSize: 14,
+    color: '#ffd700',
+    marginTop: 4,
   },
   scoreBreakdown: {
     fontSize: 14,
