@@ -222,7 +222,7 @@ interface GameState {
   confirmPlacement: () => void;
   cancelPlacement: () => void;
   setHoldReady: (ready: boolean) => void;
-  triggerMatchAnimation: (matches: Match[]) => void;
+  triggerMatchAnimation: (matches: Match[], newCells: [number, number][]) => void;
   clearMatchAnimation: () => void;
   removeScorePopup: (id: string) => void;
   respinLine: (type: 'row' | 'col', index: number) => void;
@@ -351,9 +351,10 @@ const useGameStore = create<GameState>((set, get) => ({
       });
     }
 
-    // Trigger match animation if there are matches
+    // Trigger match animation for matches involving newly placed cells
     if (matches.length > 0) {
-      get().triggerMatchAnimation(matches);
+      const newCells: [number, number][] = [[row, col], [row2, col2]];
+      get().triggerMatchAnimation(matches, newCells);
     }
   },
 
@@ -369,12 +370,18 @@ const useGameStore = create<GameState>((set, get) => ({
     set({ holdReady: ready });
   },
 
-  triggerMatchAnimation: (matches: Match[]) => {
+  triggerMatchAnimation: (matches: Match[], newCells: [number, number][]) => {
     const matchingCells = new Set<string>();
     const scorePopups: ScorePopup[] = [];
+    const newCellKeys = new Set(newCells.map(([r, c]) => `${r},${c}`));
 
-    matches.forEach((match, index) => {
-      // Add all cells to matching set
+    // Only animate matches that include at least one new cell
+    const relevantMatches = matches.filter(match =>
+      match.cells.some(([r, c]) => newCellKeys.has(`${r},${c}`))
+    );
+
+    relevantMatches.forEach((match, index) => {
+      // Add all cells in matching combos to highlight set
       match.cells.forEach(([row, col]) => {
         matchingCells.add(`${row},${col}`);
       });
@@ -390,7 +397,9 @@ const useGameStore = create<GameState>((set, get) => ({
       });
     });
 
-    set({ matchingCells, scorePopups });
+    if (matchingCells.size > 0) {
+      set({ matchingCells, scorePopups });
+    }
   },
 
   clearMatchAnimation: () => {
@@ -409,14 +418,21 @@ const useGameStore = create<GameState>((set, get) => ({
     if (index < 0 || index >= BOARD_SIZE) return;
 
     const newGrid = cloneGrid(grid);
+    const changedCells: [number, number][] = [];
 
     if (type === 'row') {
       for (let col = 0; col < BOARD_SIZE; col++) {
-        if (newGrid[index][col] !== null) newGrid[index][col] = getRandomSymbol();
+        if (newGrid[index][col] !== null) {
+          newGrid[index][col] = getRandomSymbol();
+          changedCells.push([index, col]);
+        }
       }
     } else {
       for (let row = 0; row < BOARD_SIZE; row++) {
-        if (newGrid[row][index] !== null) newGrid[row][index] = getRandomSymbol();
+        if (newGrid[row][index] !== null) {
+          newGrid[row][index] = getRandomSymbol();
+          changedCells.push([row, index]);
+        }
       }
     }
 
@@ -442,7 +458,7 @@ const useGameStore = create<GameState>((set, get) => ({
 
     // Trigger match animation if score improved
     if (gridScore > score && matches.length > 0) {
-      get().triggerMatchAnimation(matches);
+      get().triggerMatchAnimation(matches, changedCells);
     }
   },
 
@@ -475,7 +491,8 @@ function AnimatedCell({
   const scaleAnim = useRef(new Animated.Value(1)).current;
   const highlightOpacity = useRef(new Animated.Value(0)).current;
   const prevSymbol = useRef(symbol);
-  const wasMatching = useRef(false);
+  const onCompleteRef = useRef(onMatchAnimationComplete);
+  onCompleteRef.current = onMatchAnimationComplete;
 
   useEffect(() => {
     if (symbol !== prevSymbol.current) {
@@ -495,10 +512,9 @@ function AnimatedCell({
     }
   }, [symbol, scaleAnim]);
 
-  // Blink animation when matching
+  // Blink animation when matching - runs once on mount if isMatching is true
   useEffect(() => {
-    if (isMatching && !wasMatching.current) {
-      wasMatching.current = true;
+    if (isMatching) {
       // Blink 3 times using opacity
       Animated.sequence([
         Animated.timing(highlightOpacity, { toValue: 1, duration: 100, useNativeDriver: true }),
@@ -508,13 +524,12 @@ function AnimatedCell({
         Animated.timing(highlightOpacity, { toValue: 1, duration: 100, useNativeDriver: true }),
         Animated.timing(highlightOpacity, { toValue: 0, duration: 100, useNativeDriver: true }),
       ]).start(() => {
-        onMatchAnimationComplete?.();
+        onCompleteRef.current?.();
       });
-    } else if (!isMatching) {
-      wasMatching.current = false;
-      highlightOpacity.setValue(0);
     }
-  }, [isMatching, highlightOpacity, onMatchAnimationComplete]);
+    // Only run on mount - component is re-keyed for each animation trigger
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const displaySymbol = isPreview ? previewSymbol : symbol;
 
