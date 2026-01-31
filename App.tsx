@@ -526,7 +526,7 @@ function AnimatedCell({
         isPreview && !isPlaced && styles.previewCell,
         isPreview && isPlaced && !isHoldReady && styles.placedCell,
         isPreview && isPlaced && isHoldReady && styles.holdReadyCell,
-        { transform: [{ scale: scaleAnim }] },
+        { transform: [{ scale: scaleAnim }], overflow: 'hidden' },
       ]}
     >
       {/* Yellow highlight overlay */}
@@ -535,8 +535,9 @@ function AnimatedCell({
           styles.highlightOverlay,
           { opacity: highlightOpacity },
         ]}
+        pointerEvents="none"
       />
-      <Text style={[styles.cellText, isPreview && !isPlaced && styles.previewCellText]}>
+      <Text style={[styles.cellText, styles.cellTextAbove, isPreview && !isPlaced && styles.previewCellText]}>
         {displaySymbol ? SYMBOL_DISPLAY[displaySymbol] : ''}
       </Text>
     </Animated.View>
@@ -560,27 +561,34 @@ function ScorePopup({
 }) {
   const translateY = useRef(new Animated.Value(0)).current;
   const opacity = useRef(new Animated.Value(1)).current;
+  const onCompleteRef = useRef(onComplete);
+  onCompleteRef.current = onComplete;
 
   useEffect(() => {
     Animated.parallel([
       Animated.timing(translateY, {
-        toValue: -50,
-        duration: 800,
+        toValue: -60,
+        duration: 1000,
         useNativeDriver: true,
       }),
-      Animated.timing(opacity, {
-        toValue: 0,
-        duration: 800,
-        useNativeDriver: true,
-      }),
+      Animated.sequence([
+        Animated.delay(600),
+        Animated.timing(opacity, {
+          toValue: 0,
+          duration: 400,
+          useNativeDriver: true,
+        }),
+      ]),
     ]).start(() => {
-      onComplete();
+      onCompleteRef.current();
     });
-  }, [translateY, opacity, onComplete]);
+  }, [translateY, opacity]);
 
-  // Position based on cell location
-  const left = GRID_PADDING + col * CELL_TOTAL + CELL_SIZE / 2;
-  const top = GRID_PADDING + row * CELL_TOTAL;
+  // Position based on cell location (constants defined below)
+  const cellTotal = 40 + 1 * 2; // CELL_SIZE + CELL_MARGIN * 2
+  const gridPadding = 4;
+  const left = gridPadding + col * cellTotal + 20;
+  const top = gridPadding + row * cellTotal;
 
   return (
     <Animated.View
@@ -1001,13 +1009,10 @@ const styles = StyleSheet.create({
     borderColor: '#2196f3',
   },
   highlightOverlay: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
+    ...StyleSheet.absoluteFillObject,
     backgroundColor: '#ffd700',
     borderRadius: 4,
+    zIndex: 1,
   },
   scorePopup: {
     position: 'absolute',
@@ -1023,6 +1028,9 @@ const styles = StyleSheet.create({
   },
   cellText: {
     fontSize: 20,
+  },
+  cellTextAbove: {
+    zIndex: 2,
   },
   previewCellText: {
     opacity: 0.6,
