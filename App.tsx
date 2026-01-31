@@ -473,7 +473,7 @@ function AnimatedCell({
   onMatchAnimationComplete?: () => void;
 }) {
   const scaleAnim = useRef(new Animated.Value(1)).current;
-  const highlightAnim = useRef(new Animated.Value(0)).current;
+  const highlightOpacity = useRef(new Animated.Value(0)).current;
   const prevSymbol = useRef(symbol);
   const wasMatching = useRef(false);
 
@@ -499,29 +499,24 @@ function AnimatedCell({
   useEffect(() => {
     if (isMatching && !wasMatching.current) {
       wasMatching.current = true;
-      // Blink 3 times
+      // Blink 3 times using opacity
       Animated.sequence([
-        Animated.timing(highlightAnim, { toValue: 1, duration: 100, useNativeDriver: false }),
-        Animated.timing(highlightAnim, { toValue: 0, duration: 100, useNativeDriver: false }),
-        Animated.timing(highlightAnim, { toValue: 1, duration: 100, useNativeDriver: false }),
-        Animated.timing(highlightAnim, { toValue: 0, duration: 100, useNativeDriver: false }),
-        Animated.timing(highlightAnim, { toValue: 1, duration: 100, useNativeDriver: false }),
-        Animated.timing(highlightAnim, { toValue: 0, duration: 100, useNativeDriver: false }),
+        Animated.timing(highlightOpacity, { toValue: 1, duration: 100, useNativeDriver: true }),
+        Animated.timing(highlightOpacity, { toValue: 0, duration: 100, useNativeDriver: true }),
+        Animated.timing(highlightOpacity, { toValue: 1, duration: 100, useNativeDriver: true }),
+        Animated.timing(highlightOpacity, { toValue: 0, duration: 100, useNativeDriver: true }),
+        Animated.timing(highlightOpacity, { toValue: 1, duration: 100, useNativeDriver: true }),
+        Animated.timing(highlightOpacity, { toValue: 0, duration: 100, useNativeDriver: true }),
       ]).start(() => {
         onMatchAnimationComplete?.();
       });
     } else if (!isMatching) {
       wasMatching.current = false;
-      highlightAnim.setValue(0);
+      highlightOpacity.setValue(0);
     }
-  }, [isMatching, highlightAnim, onMatchAnimationComplete]);
+  }, [isMatching, highlightOpacity, onMatchAnimationComplete]);
 
   const displaySymbol = isPreview ? previewSymbol : symbol;
-
-  const animatedBackgroundColor = highlightAnim.interpolate({
-    inputRange: [0, 1],
-    outputRange: ['#4a4a70', '#ffd700'],
-  });
 
   return (
     <Animated.View
@@ -532,9 +527,15 @@ function AnimatedCell({
         isPreview && isPlaced && !isHoldReady && styles.placedCell,
         isPreview && isPlaced && isHoldReady && styles.holdReadyCell,
         { transform: [{ scale: scaleAnim }] },
-        isMatching && { backgroundColor: animatedBackgroundColor },
       ]}
     >
+      {/* Yellow highlight overlay */}
+      <Animated.View
+        style={[
+          styles.highlightOverlay,
+          { opacity: highlightOpacity },
+        ]}
+      />
       <Text style={[styles.cellText, isPreview && !isPlaced && styles.previewCellText]}>
         {displaySymbol ? SYMBOL_DISPLAY[displaySymbol] : ''}
       </Text>
@@ -998,6 +999,15 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(33, 150, 243, 0.3)',
     borderWidth: 2,
     borderColor: '#2196f3',
+  },
+  highlightOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: '#ffd700',
+    borderRadius: 4,
   },
   scorePopup: {
     position: 'absolute',
