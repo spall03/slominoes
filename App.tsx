@@ -831,23 +831,24 @@ export default function App() {
 
         {/* Grid */}
         <View style={styles.gridContainer}>
-          {/* Column respin buttons */}
-          {phase === 'respinning' && (
-            <View style={styles.colButtons}>
-              {Array.from({ length: BOARD_SIZE }).map((_, col) => (
-                <Pressable
-                  key={`col-${col}`}
-                  style={styles.respinButton}
-                  onPress={() => respinLine('col', col)}
-                >
-                  <Text style={styles.respinButtonText}>v</Text>
-                </Pressable>
-              ))}
-            </View>
-          )}
-
           <View style={styles.gridWithRows}>
-            <GestureGrid />
+            <View>
+              {/* Column respin buttons */}
+              {phase === 'respinning' && (
+                <View style={styles.colButtons}>
+                  {Array.from({ length: BOARD_SIZE }).map((_, col) => (
+                    <Pressable
+                      key={`col-${col}`}
+                      style={styles.respinButton}
+                      onPress={() => respinLine('col', col)}
+                    >
+                      <Text style={styles.respinButtonText}>v</Text>
+                    </Pressable>
+                  ))}
+                </View>
+              )}
+              <GestureGrid />
+            </View>
 
             {/* Row respin buttons */}
             {phase === 'respinning' && (
@@ -979,6 +980,7 @@ const styles = StyleSheet.create({
   colButtons: {
     flexDirection: 'row',
     marginBottom: 4,
+    paddingHorizontal: GRID_PADDING,
   },
   gridWithRows: {
     flexDirection: 'row',
@@ -1049,9 +1051,10 @@ const styles = StyleSheet.create({
   },
   rowButtons: {
     marginLeft: 4,
+    alignSelf: 'flex-end',
   },
   respinButton: {
-    width: 36,
+    width: CELL_SIZE,
     height: CELL_SIZE,
     backgroundColor: '#ff6b6b',
     margin: CELL_MARGIN,
