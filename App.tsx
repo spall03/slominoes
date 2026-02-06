@@ -6,7 +6,6 @@ import {
   Pressable,
   SafeAreaView,
   Animated,
-  LayoutChangeEvent,
 } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { create } from 'zustand';
@@ -669,20 +668,9 @@ function GestureGrid() {
     }
   }, [matchingCells]);
 
-  const gridOriginRef = useRef({ x: 0, y: 0 });
-
-  const handleGridLayout = useCallback((event: LayoutChangeEvent) => {
-    event.target.measure((x, y, width, height, pageX, pageY) => {
-      gridOriginRef.current = { x: pageX, y: pageY };
-    });
-  }, []);
-
-  const getCellFromPosition = useCallback((absoluteX: number, absoluteY: number) => {
-    const relativeX = absoluteX - gridOriginRef.current.x - GRID_PADDING;
-    const relativeY = absoluteY - gridOriginRef.current.y - GRID_PADDING;
-
-    const col = Math.floor(relativeX / CELL_TOTAL);
-    const row = Math.floor(relativeY / CELL_TOTAL);
+  const getCellFromPosition = useCallback((x: number, y: number) => {
+    const col = Math.floor((x - GRID_PADDING) / CELL_TOTAL);
+    const row = Math.floor((y - GRID_PADDING) / CELL_TOTAL);
 
     if (row >= 0 && row < BOARD_SIZE && col >= 0 && col < BOARD_SIZE) {
       return { row, col };
@@ -694,7 +682,7 @@ function GestureGrid() {
     .onEnd((event) => {
       if (phase !== 'placing' || !currentTile) return;
 
-      const cell = getCellFromPosition(event.absoluteX, event.absoluteY);
+      const cell = getCellFromPosition(event.x, event.y);
       if (!cell) return;
 
       if (placementMode === 'idle') {
@@ -715,7 +703,7 @@ function GestureGrid() {
     .onUpdate((event) => {
       if (phase !== 'placing' || placementMode !== 'placed') return;
 
-      const cell = getCellFromPosition(event.absoluteX, event.absoluteY);
+      const cell = getCellFromPosition(event.x, event.y);
       if (cell && canPlaceTile(grid, cell.row, cell.col, rotation)) {
         if (!placedPosition || placedPosition.row !== cell.row || placedPosition.col !== cell.col) {
           Haptics.selectionAsync();
@@ -768,7 +756,7 @@ function GestureGrid() {
 
   return (
     <GestureDetector gesture={composedGesture}>
-      <View style={styles.grid} onLayout={handleGridLayout}>
+      <View style={styles.grid}>
         {grid.map((row, rowIndex) => (
           <View key={`row-${rowIndex}`} style={styles.row}>
             {row.map((cell, colIndex) => {
