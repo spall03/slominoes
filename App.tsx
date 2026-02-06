@@ -813,7 +813,6 @@ function GestureGrid() {
 export default function App() {
   const {
     currentTile,
-    rotation,
     tileQueue,
     respinsRemaining,
     score,
@@ -883,22 +882,32 @@ export default function App() {
         <View style={styles.controls}>
           {phase === 'placing' && currentTile && (
             <>
-              <View style={styles.tilePreview}>
-                <Text style={styles.previewLabel}>Next tile:</Text>
-                <View
-                  style={[
-                    styles.tilePreviewBox,
-                    (rotation === 1 || rotation === 3) && styles.tilePreviewBoxVertical,
-                  ]}
-                >
-                  <Text style={styles.previewSymbol}>
-                    {SYMBOL_DISPLAY[rotation >= 2 ? currentTile.symbolB : currentTile.symbolA]}
-                  </Text>
-                  <Text style={styles.previewSymbol}>
-                    {SYMBOL_DISPLAY[rotation >= 2 ? currentTile.symbolA : currentTile.symbolB]}
-                  </Text>
+              {placementMode === 'idle' && (
+                <View style={styles.tilePreview}>
+                  <Text style={styles.previewLabel}>Current tile:</Text>
+                  <View style={styles.tilePreviewBox}>
+                    <Text style={styles.previewSymbol}>
+                      {SYMBOL_DISPLAY[currentTile.symbolA]}
+                    </Text>
+                    <Text style={styles.previewSymbol}>
+                      {SYMBOL_DISPLAY[currentTile.symbolB]}
+                    </Text>
+                  </View>
                 </View>
-              </View>
+              )}
+              {placementMode === 'placed' && tileQueue.length > 0 && (
+                <View style={styles.tilePreview}>
+                  <Text style={styles.previewLabel}>Next tile:</Text>
+                  <View style={styles.tilePreviewBox}>
+                    <Text style={styles.previewSymbol}>
+                      {SYMBOL_DISPLAY[tileQueue[0].symbolA]}
+                    </Text>
+                    <Text style={styles.previewSymbol}>
+                      {SYMBOL_DISPLAY[tileQueue[0].symbolB]}
+                    </Text>
+                  </View>
+                </View>
+              )}
               <Text style={styles.infoText}>Tiles left: {tilesRemaining}</Text>
               {placementMode === 'idle' && (
                 <Text style={styles.hintText}>Tap grid to place tile</Text>
