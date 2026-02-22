@@ -6,6 +6,7 @@ import {
   Pressable,
   SafeAreaView,
   Animated,
+  Platform,
 } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { create } from 'zustand';
@@ -645,12 +646,69 @@ function GestureGrid() {
     movePlacement,
     rotatePlacedTile,
     confirmPlacement,
+    cancelPlacement,
     setHoldReady,
     clearMatchAnimation,
     removeScorePopup,
   } = useGameStore();
 
   const [animationKey, setAnimationKey] = useState(0);
+
+  // Keyboard controls (web only)
+  useEffect(() => {
+    if (Platform.OS !== 'web') return;
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      const state = useGameStore.getState();
+      if (state.phase !== 'placing' || state.placementMode !== 'placed' || !state.placedPosition) return;
+
+      const { row, col } = state.placedPosition;
+
+      switch (e.key) {
+        case 'ArrowUp':
+          e.preventDefault();
+          if (canPlaceTile(state.grid, row - 1, col, state.rotation)) {
+            state.movePlacement(row - 1, col);
+          }
+          break;
+        case 'ArrowDown':
+          e.preventDefault();
+          if (canPlaceTile(state.grid, row + 1, col, state.rotation)) {
+            state.movePlacement(row + 1, col);
+          }
+          break;
+        case 'ArrowLeft':
+          e.preventDefault();
+          if (canPlaceTile(state.grid, row, col - 1, state.rotation)) {
+            state.movePlacement(row, col - 1);
+          }
+          break;
+        case 'ArrowRight':
+          e.preventDefault();
+          if (canPlaceTile(state.grid, row, col + 1, state.rotation)) {
+            state.movePlacement(row, col + 1);
+          }
+          break;
+        case 'r':
+        case 'R':
+          e.preventDefault();
+          state.rotatePlacedTile();
+          break;
+        case 'Enter':
+        case ' ':
+          e.preventDefault();
+          state.confirmPlacement();
+          break;
+        case 'Escape':
+          e.preventDefault();
+          state.cancelPlacement();
+          break;
+      }
+    };
+
+    document.addEventListener('keydown', handleKeyDown);
+    return () => document.removeEventListener('keydown', handleKeyDown);
+  }, []);
   const animatingCellsRef = useRef(new Set<string>());
 
   const handleMatchAnimationComplete = useCallback((cellKey: string) => {
@@ -865,6 +923,18 @@ export default function App() {
               </View>
             )}
           </View>
+
+          {/* Confirm / Cancel buttons when tile is placed */}
+          {phase === 'placing' && placementMode === 'placed' && (
+            <View style={styles.placementButtons}>
+              <Pressable style={styles.confirmButton} onPress={useGameStore.getState().confirmPlacement}>
+                <Text style={styles.buttonText}>Confirm</Text>
+              </Pressable>
+              <Pressable style={styles.cancelButton} onPress={useGameStore.getState().cancelPlacement}>
+                <Text style={styles.buttonText}>Cancel</Text>
+              </Pressable>
+            </View>
+          )}
         </View>
 
         {/* Controls */}
@@ -1138,5 +1208,22 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     borderRadius: 8,
     marginTop: 8,
+  },
+  placementButtons: {
+    flexDirection: 'row',
+    gap: 12,
+    marginTop: 12,
+  },
+  confirmButton: {
+    backgroundColor: '#4caf50',
+    paddingHorizontal: 24,
+    paddingVertical: 10,
+    borderRadius: 8,
+  },
+  cancelButton: {
+    backgroundColor: '#666',
+    paddingHorizontal: 24,
+    paddingVertical: 10,
+    borderRadius: 8,
   },
 });
