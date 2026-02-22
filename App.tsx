@@ -909,9 +909,14 @@ function HelpPanel() {
         e.g. 4 bells = 80 x 4 x 2 = 640
       </Text>
 
+      <Text style={styles.helpHeading}>Scoring</Text>
+      <Text style={styles.helpBody}>
+        Your score equals the total of all matches currently on the grid. It's recalculated after every move — not additive.
+      </Text>
+
       <Text style={styles.helpHeading}>Respins</Text>
       <Text style={styles.helpBody}>
-        After all tiles are placed, you get {RESPINS_PER_LEVEL} respins. Each respin re-randomizes every filled cell in a row or column. Your score can only go up — respins never lower it.
+        After all tiles are placed, you get {RESPINS_PER_LEVEL} respins. Each respin re-randomizes every filled cell in a row or column. Respins can create new matches but also break existing ones. Your score is locked to the best total seen — it can never go down.
       </Text>
     </View>
   );
@@ -923,6 +928,7 @@ function HelpPanel() {
 
 export default function App() {
   const {
+    grid,
     currentTile,
     tileQueue,
     respinsRemaining,
@@ -937,6 +943,8 @@ export default function App() {
 
   const tilesRemaining = tileQueue.length + (currentTile ? 1 : 0);
   const bonusScore = score - scoreBeforeRespins;
+  const currentMatches = (phase === 'respinning' || phase === 'ended') ? findMatches(grid) : [];
+  const gridTotal = currentMatches.reduce((sum, m) => sum + m.score, 0);
   const [showHelp, setShowHelp] = useState(false);
 
   // Respin keyboard cursor (web only)
@@ -1123,9 +1131,19 @@ export default function App() {
                       ? `Respins: ${respinsRemaining} | Arrows: select | Tab: row/col | Enter: pull`
                       : `Respins: ${respinsRemaining} | Tap row/column arrows to respin`}
                   </Text>
-                  <Text style={styles.scoreBreakdown}>
-                    Base: {scoreBeforeRespins} + Bonus: {bonusScore}
-                  </Text>
+                  <View style={styles.matchBreakdown}>
+                    <Text style={styles.matchBreakdownTitle}>
+                      Grid total: {gridTotal}{gridTotal < score ? ` (best: ${score})` : ''}
+                    </Text>
+                    {currentMatches.length > 0 ? currentMatches.map((m, i) => (
+                      <Text key={i} style={styles.matchBreakdownRow}>
+                        {m.cells.length > 0 && (m.cells[0][0] === m.cells[m.cells.length - 1][0] ? 'Row' : 'Col')}{' '}
+                        {SYMBOL_DISPLAY[m.symbol]} x{m.length} = {m.score}
+                      </Text>
+                    )) : (
+                      <Text style={styles.matchBreakdownEmpty}>No matches on grid</Text>
+                    )}
+                  </View>
                 </>
               )}
 
@@ -1354,6 +1372,29 @@ const styles = StyleSheet.create({
   scoreBreakdown: {
     fontSize: 14,
     color: '#888',
+  },
+  matchBreakdown: {
+    marginTop: 8,
+    padding: 8,
+    backgroundColor: '#2d2d44',
+    borderRadius: 6,
+    minWidth: 180,
+  },
+  matchBreakdownTitle: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#ffd700',
+    marginBottom: 4,
+  },
+  matchBreakdownRow: {
+    fontSize: 12,
+    color: '#ccc',
+    lineHeight: 18,
+  },
+  matchBreakdownEmpty: {
+    fontSize: 12,
+    color: '#666',
+    fontStyle: 'italic',
   },
   endScreen: {
     alignItems: 'center',
