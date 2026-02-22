@@ -185,6 +185,10 @@ function calculateScore(grid: Grid): { score: number; matches: Match[] } {
   return { score, matches };
 }
 
+function matchKey(m: Match): string {
+  return m.cells.map(([r, c]) => `${r},${c}`).join('|');
+}
+
 // =============================================================================
 // GAME STATE (ZUSTAND)
 // =============================================================================
@@ -214,7 +218,9 @@ interface GameState {
   placedPosition: { row: number; col: number } | null;
   holdReady: boolean;
   matchingCells: Set<string>;
+  highlightColor: 'gold' | 'red' | 'blue';
   scorePopups: ScorePopup[];
+  pendingPhase2: { cells: Set<string>; popups: ScorePopup[] } | null;
 
   startPlacement: (row: number, col: number) => void;
   movePlacement: (row: number, col: number) => void;
@@ -264,7 +270,9 @@ function createInitialState() {
     placedPosition: null as { row: number; col: number } | null,
     holdReady: false,
     matchingCells: new Set<string>(),
+    highlightColor: 'gold' as 'gold' | 'red' | 'blue',
     scorePopups: [] as ScorePopup[],
+    pendingPhase2: null as { cells: Set<string>; popups: ScorePopup[] } | null,
   };
 }
 
@@ -413,7 +421,18 @@ const useGameStore = create<GameState>((set, get) => ({
   },
 
   clearMatchAnimation: () => {
-    set({ matchingCells: new Set<string>() });
+    const { pendingPhase2 } = get();
+    if (pendingPhase2) {
+      // Advance to phase 2
+      set({
+        matchingCells: pendingPhase2.cells,
+        highlightColor: 'blue',
+        scorePopups: pendingPhase2.popups,
+        pendingPhase2: null,
+      });
+    } else {
+      set({ matchingCells: new Set<string>(), highlightColor: 'gold' });
+    }
   },
 
   removeScorePopup: (id: string) => {
@@ -423,33 +442,86 @@ const useGameStore = create<GameState>((set, get) => ({
   },
 
   respinLine: (type: 'row' | 'col', index: number) => {
-    const { phase, respinsRemaining, grid, score } = get();
+    const { phase, respinsRemaining, grid, score, matchingCells } = get();
     if (phase !== 'respinning' || respinsRemaining <= 0) return;
     if (index < 0 || index >= BOARD_SIZE) return;
+    if (matchingCells.size > 0) return; // Block respins during animation
+
+    const matchesBefore = findMatches(grid);
 
     const newGrid = cloneGrid(grid);
-    const changedCells: [number, number][] = [];
 
     if (type === 'row') {
       for (let col = 0; col < BOARD_SIZE; col++) {
         if (newGrid[index][col] !== null) {
           newGrid[index][col] = getRandomSymbol();
-          changedCells.push([index, col]);
         }
       }
     } else {
       for (let row = 0; row < BOARD_SIZE; row++) {
         if (newGrid[row][index] !== null) {
           newGrid[row][index] = getRandomSymbol();
-          changedCells.push([row, index]);
         }
       }
     }
 
     const newRespins = respinsRemaining - 1;
-    const { score: gridScore, matches } = calculateScore(newGrid);
+    const matchesAfter = findMatches(newGrid);
+    const gridScore = matchesAfter.reduce((sum, m) => sum + m.score, 0);
     const newScore = Math.max(score, gridScore);
 
+    // Diff matches: broken = before only, new = after only
+    const beforeKeys = new Set(matchesBefore.map(matchKey));
+    const afterKeys = new Set(matchesAfter.map(matchKey));
+    const brokenMatches = matchesBefore.filter(m => !afterKeys.has(matchKey(m)));
+    const newMatches = matchesAfter.filter(m => !beforeKeys.has(matchKey(m)));
+
+    // Compute animation state inline so we can set everything atomically
+    let animState: Partial<GameState> = {};
+    if (brokenMatches.length > 0 || newMatches.length > 0) {
+      // Build phase 2 data (blue highlight + positive popups)
+      const phase2Cells = new Set<string>();
+      const phase2PopupMap = new Map<string, number>();
+      newMatches.forEach((match) => {
+        match.cells.forEach(([r, c]) => phase2Cells.add(`${r},${c}`));
+        const ci = Math.floor(match.cells.length / 2);
+        const [cr, cc] = match.cells[ci];
+        const key = `${cr},${cc}`;
+        phase2PopupMap.set(key, (phase2PopupMap.get(key) ?? 0) + match.score);
+      });
+      let idx = 0;
+      const phase2Popups: ScorePopup[] = [];
+      phase2PopupMap.forEach((totalScore, key) => {
+        const [r, c] = key.split(',').map(Number);
+        phase2Popups.push({ id: `popup-p2-${Date.now()}-${idx++}`, score: totalScore, row: r, col: c });
+      });
+
+      if (brokenMatches.length === 0) {
+        // No broken matches — skip to phase 2 directly
+        animState = { matchingCells: phase2Cells, highlightColor: 'blue', scorePopups: phase2Popups, pendingPhase2: null };
+      } else {
+        // Build phase 1 data (red highlight + negative popups)
+        const phase1Cells = new Set<string>();
+        const phase1PopupMap = new Map<string, number>();
+        brokenMatches.forEach((match) => {
+          match.cells.forEach(([r, c]) => phase1Cells.add(`${r},${c}`));
+          const ci = Math.floor(match.cells.length / 2);
+          const [cr, cc] = match.cells[ci];
+          const key = `${cr},${cc}`;
+          phase1PopupMap.set(key, (phase1PopupMap.get(key) ?? 0) + match.score);
+        });
+        let idx1 = 0;
+        const phase1Popups: ScorePopup[] = [];
+        phase1PopupMap.forEach((totalScore, key) => {
+          const [r, c] = key.split(',').map(Number);
+          phase1Popups.push({ id: `popup-p1-${Date.now()}-${idx1++}`, score: -totalScore, row: r, col: c });
+        });
+        const pending = phase2Cells.size > 0 ? { cells: phase2Cells, popups: phase2Popups } : null;
+        animState = { matchingCells: phase1Cells, highlightColor: 'red', scorePopups: phase1Popups, pendingPhase2: pending };
+      }
+    }
+
+    // Single atomic set() — grid + score + animation state together
     if (newRespins === 0) {
       set({
         grid: newGrid,
@@ -457,18 +529,15 @@ const useGameStore = create<GameState>((set, get) => ({
         score: newScore,
         phase: 'ended',
         result: newScore >= WIN_THRESHOLD ? 'win' : 'lose',
+        ...animState,
       });
     } else {
       set({
         grid: newGrid,
         respinsRemaining: newRespins,
         score: newScore,
+        ...animState,
       });
-    }
-
-    // Trigger match animation if score improved
-    if (gridScore > score && matches.length > 0) {
-      get().triggerMatchAnimation(matches, changedCells);
     }
   },
 
@@ -486,6 +555,7 @@ function AnimatedCell({
   isPlaced,
   isHoldReady,
   isMatching,
+  highlightColor,
   previewSymbol,
   onMatchAnimationComplete,
 }: {
@@ -495,6 +565,7 @@ function AnimatedCell({
   isPlaced?: boolean;
   isHoldReady?: boolean;
   isMatching?: boolean;
+  highlightColor?: 'gold' | 'red' | 'blue';
   previewSymbol?: Symbol;
   onMatchAnimationComplete?: () => void;
 }) {
@@ -554,11 +625,11 @@ function AnimatedCell({
         { transform: [{ scale: scaleAnim }], overflow: 'hidden' },
       ]}
     >
-      {/* Yellow highlight overlay */}
+      {/* Highlight overlay */}
       <Animated.View
         style={[
           styles.highlightOverlay,
-          { opacity: highlightOpacity },
+          { opacity: highlightOpacity, backgroundColor: highlightColor === 'red' ? '#ff4444' : highlightColor === 'blue' ? '#4488ff' : '#ffd700' },
         ]}
         pointerEvents="none"
       />
@@ -577,13 +648,20 @@ function ScorePopup({
   score,
   row,
   col,
+  color,
   onComplete,
 }: {
   score: number;
   row: number;
   col: number;
+  color?: string;
   onComplete: () => void;
 }) {
+  const isNegative = score < 0;
+  const driftTarget = isNegative ? 60 : -60;
+  const displayText = isNegative ? `${score}` : `+${score}`;
+  const textColor = color ?? (isNegative ? '#ff4444' : score > 0 ? '#44ff44' : '#ffd700');
+
   const translateY = useRef(new Animated.Value(0)).current;
   const opacity = useRef(new Animated.Value(1)).current;
   const onCompleteRef = useRef(onComplete);
@@ -592,7 +670,7 @@ function ScorePopup({
   useEffect(() => {
     Animated.parallel([
       Animated.timing(translateY, {
-        toValue: -60,
+        toValue: driftTarget,
         duration: 1000,
         useNativeDriver: true,
       }),
@@ -607,7 +685,7 @@ function ScorePopup({
     ]).start(() => {
       onCompleteRef.current();
     });
-  }, [translateY, opacity]);
+  }, [translateY, opacity, driftTarget]);
 
   // Position based on cell location (constants defined below)
   const cellTotal = 40 + 1 * 2; // CELL_SIZE + CELL_MARGIN * 2
@@ -627,7 +705,7 @@ function ScorePopup({
         },
       ]}
     >
-      <Text style={styles.scorePopupText}>+{score}</Text>
+      <Text style={[styles.scorePopupText, { color: textColor }]}>{displayText}</Text>
     </Animated.View>
   );
 }
@@ -651,6 +729,7 @@ function GestureGrid() {
     placedPosition,
     holdReady,
     matchingCells,
+    highlightColor,
     scorePopups,
     startPlacement,
     movePlacement,
@@ -866,6 +945,7 @@ function GestureGrid() {
                   isPlaced={placementMode === 'placed'}
                   isHoldReady={holdReady}
                   isMatching={isMatching}
+                  highlightColor={isMatching ? highlightColor : undefined}
                   previewSymbol={previewSymbol}
                   onMatchAnimationComplete={() => handleMatchAnimationComplete(cellKey)}
                 />
@@ -880,6 +960,7 @@ function GestureGrid() {
             score={popup.score}
             row={popup.row}
             col={popup.col}
+            color={highlightColor === 'gold' ? '#ffd700' : undefined}
             onComplete={() => removeScorePopup(popup.id)}
           />
         ))}
@@ -938,12 +1019,10 @@ function HelpPanel() {
 
 export default function App() {
   const {
-    grid,
     currentTile,
     tileQueue,
     respinsRemaining,
     score,
-    scoreBeforeRespins,
     phase,
     result,
     placementMode,
@@ -952,13 +1031,12 @@ export default function App() {
   } = useGameStore();
 
   const tilesRemaining = tileQueue.length + (currentTile ? 1 : 0);
-  const bonusScore = score - scoreBeforeRespins;
-  const currentMatches = (phase === 'respinning' || phase === 'ended') ? findMatches(grid) : [];
-  const gridTotal = currentMatches.reduce((sum, m) => sum + m.score, 0);
   const [showHelp, setShowHelp] = useState(false);
 
   // Respin keyboard cursor (web only)
   const [respinCursor, setRespinCursor] = useState<{ type: 'row' | 'col'; index: number }>({ type: 'row', index: 0 });
+  const respinCursorRef = useRef(respinCursor);
+  respinCursorRef.current = respinCursor;
 
   useEffect(() => {
     if (Platform.OS !== 'web') return;
@@ -1001,10 +1079,7 @@ export default function App() {
         case 'Enter':
         case ' ':
           e.preventDefault();
-          setRespinCursor(c => {
-            state.respinLine(c.type, c.index);
-            return c;
-          });
+          state.respinLine(respinCursorRef.current.type, respinCursorRef.current.index);
           break;
       }
     };
@@ -1135,26 +1210,11 @@ export default function App() {
               )}
 
               {phase === 'respinning' && (
-                <>
-                  <Text style={styles.infoText}>
-                    {Platform.OS === 'web'
-                      ? `Respins: ${respinsRemaining} | Arrows: select | Tab: row/col | Enter: pull`
-                      : `Respins: ${respinsRemaining} | Tap row/column arrows to respin`}
-                  </Text>
-                  <View style={styles.matchBreakdown}>
-                    <Text style={styles.matchBreakdownTitle}>
-                      Grid total: {gridTotal}{gridTotal < score ? ` (best: ${score})` : ''}
-                    </Text>
-                    {currentMatches.length > 0 ? currentMatches.map((m, i) => (
-                      <Text key={i} style={styles.matchBreakdownRow}>
-                        {m.cells.length > 0 && (m.cells[0][0] === m.cells[m.cells.length - 1][0] ? 'Row' : 'Col')}{' '}
-                        {SYMBOL_DISPLAY[m.symbol]} x{m.length} = {m.score}
-                      </Text>
-                    )) : (
-                      <Text style={styles.matchBreakdownEmpty}>No matches on grid</Text>
-                    )}
-                  </View>
-                </>
+                <Text style={styles.infoText}>
+                  {Platform.OS === 'web'
+                    ? `Respins: ${respinsRemaining} | Arrows: select | Tab: row/col | Enter: pull`
+                    : `Respins: ${respinsRemaining} | Tap row/column arrows to respin`}
+                </Text>
               )}
 
               {phase === 'ended' && (
@@ -1299,7 +1359,6 @@ const styles = StyleSheet.create({
   scorePopupText: {
     fontSize: 14,
     fontWeight: 'bold',
-    color: '#ffd700',
     textShadowColor: '#000',
     textShadowOffset: { width: 1, height: 1 },
     textShadowRadius: 2,
@@ -1378,33 +1437,6 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#ffd700',
     marginTop: 4,
-  },
-  scoreBreakdown: {
-    fontSize: 14,
-    color: '#888',
-  },
-  matchBreakdown: {
-    marginTop: 8,
-    padding: 8,
-    backgroundColor: '#2d2d44',
-    borderRadius: 6,
-    minWidth: 180,
-  },
-  matchBreakdownTitle: {
-    fontSize: 13,
-    fontWeight: '700',
-    color: '#ffd700',
-    marginBottom: 4,
-  },
-  matchBreakdownRow: {
-    fontSize: 12,
-    color: '#ccc',
-    lineHeight: 18,
-  },
-  matchBreakdownEmpty: {
-    fontSize: 12,
-    color: '#666',
-    fontStyle: 'italic',
   },
   endScreen: {
     alignItems: 'center',
