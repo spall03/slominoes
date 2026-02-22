@@ -898,6 +898,7 @@ export default function App() {
 
   const tilesRemaining = tileQueue.length + (currentTile ? 1 : 0);
   const bonusScore = score - scoreBeforeRespins;
+  const [showHelp, setShowHelp] = useState(false);
 
   // Respin keyboard cursor (web only)
   const [respinCursor, setRespinCursor] = useState<{ type: 'row' | 'col'; index: number }>({ type: 'row', index: 0 });
@@ -1100,6 +1101,44 @@ export default function App() {
               <Pressable style={styles.restartButton} onPress={resetGame}>
                 <Text style={styles.buttonText}>Play Again</Text>
               </Pressable>
+            </View>
+          )}
+
+          {/* Help toggle */}
+          <Pressable onPress={() => setShowHelp(h => !h)} style={styles.helpToggle}>
+            <Text style={styles.helpToggleText}>{showHelp ? 'Hide rules' : 'How to play'}</Text>
+          </Pressable>
+
+          {showHelp && (
+            <View style={styles.helpPanel}>
+              <Text style={styles.helpHeading}>Goal</Text>
+              <Text style={styles.helpBody}>
+                Score {WIN_THRESHOLD}+ points by placing {TILES_PER_LEVEL} domino tiles on an 8x8 grid, then using {RESPINS_PER_LEVEL} respins to improve your matches.
+              </Text>
+
+              <Text style={styles.helpHeading}>Matching</Text>
+              <Text style={styles.helpBody}>
+                Line up 3+ identical symbols in a row or column. Longer matches score more:
+              </Text>
+              <Text style={styles.helpBody}>
+                {'  '}3-in-a-row: x1 | 4: x2 | 5: x3 | 6+: x4
+              </Text>
+
+              <Text style={styles.helpHeading}>Symbol values</Text>
+              <Text style={styles.helpBody}>
+                🍒 10  🍋 20  🎰 40  🔔 80  7️⃣ 150
+              </Text>
+
+              <Text style={styles.helpHeading}>Scoring formula</Text>
+              <Text style={styles.helpBody}>
+                value x length x multiplier{'\n'}
+                e.g. 4 bells = 80 x 4 x 2 = 640
+              </Text>
+
+              <Text style={styles.helpHeading}>Respins</Text>
+              <Text style={styles.helpBody}>
+                After all tiles are placed, you get {RESPINS_PER_LEVEL} respins. Each respin re-randomizes every filled cell in a row or column. Your score can only go up — respins never lower it.
+              </Text>
             </View>
           )}
         </View>
@@ -1328,5 +1367,36 @@ const styles = StyleSheet.create({
     paddingHorizontal: 24,
     paddingVertical: 10,
     borderRadius: 8,
+  },
+  helpToggle: {
+    marginTop: 16,
+    paddingVertical: 6,
+    paddingHorizontal: 16,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#555',
+  },
+  helpToggleText: {
+    color: '#aaa',
+    fontSize: 13,
+  },
+  helpPanel: {
+    marginTop: 12,
+    padding: 12,
+    backgroundColor: '#2d2d44',
+    borderRadius: 8,
+    maxWidth: 360,
+  },
+  helpHeading: {
+    color: '#ffd700',
+    fontSize: 13,
+    fontWeight: '700',
+    marginTop: 8,
+    marginBottom: 2,
+  },
+  helpBody: {
+    color: '#ccc',
+    fontSize: 12,
+    lineHeight: 18,
   },
 });
