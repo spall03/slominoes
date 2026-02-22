@@ -1,26 +1,26 @@
 # Working
 
 ## Current Task
-Deploy Slominoes to GitHub Pages with keyboard controls for desktop play.
+Two-phase diff animation for respins — shipped.
 
 ## Progress
-- [x] Installed web deps: react-native-web, react-dom, @expo/metro-runtime
-- [x] Updated app.json with metro bundler, single output, baseUrl /slominoes
-- [x] Added build:web script to package.json
-- [x] Created public/.nojekyll
-- [x] Added keyboard controls (arrow keys, R, Enter/Space, Escape) in GestureGrid — web only
-- [x] Added Confirm/Cancel buttons below grid for discoverability
-- [x] Created .github/workflows/deploy.yml for GitHub Pages
+- [x] Added matchKey utility for diffing matches by cell coords
+- [x] Added highlightColor and pendingPhase2 state fields
+- [x] Respin now diffs before/after matches, shows red blink (broken) then blue blink (new)
+- [x] ScorePopup supports negative scores (red, drift down) and positive (green, drift up)
+- [x] AnimatedCell accepts highlightColor prop (red/blue/gold)
+- [x] Removed text-based match breakdown panel (superseded by visual diff)
+- [x] Fixed keyboard handler that called respinLine inside setState updater
+- [x] Consolidated set() calls in respinLine for atomic state updates
+- [x] Deployed to GitHub Pages
 
 ## Next Steps
-- Test locally with `npx expo start --web`
-- Push to GitHub and enable Pages source = "GitHub Actions" in repo settings
-- Verify at https://spall03.github.io/slominoes/
+- None pending
 
 ## Recent Decisions
-- Keyboard controls only active on web (Platform.OS check)
-- Confirm/Cancel buttons visible on all platforms (helpful for both web click and mobile)
-- Used `document.addEventListener` directly since it's web-only code path
+- Animation state set atomically with grid mutation in single set() call (avoids React batching issues)
+- Keyboard respin uses ref for cursor value instead of setState updater (avoids "Cannot update during render" error)
+- Placement-phase gold animation unchanged; respin uses red (broken) → blue (new) sequence
 
 ## Blockers/Notes
 - expo-haptics has web shim (no-ops on desktop)
