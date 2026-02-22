@@ -658,10 +658,36 @@ function GestureGrid() {
   useEffect(() => {
     if (Platform.OS !== 'web') return;
 
+    const findFirstValidCell = (grid: Grid, rotation: Rotation): { row: number; col: number } | null => {
+      // Start from center, spiral outward
+      const center = Math.floor(BOARD_SIZE / 2);
+      for (let dist = 0; dist < BOARD_SIZE; dist++) {
+        for (let row = center - dist; row <= center + dist; row++) {
+          for (let col = center - dist; col <= center + dist; col++) {
+            if (row < 0 || row >= BOARD_SIZE || col < 0 || col >= BOARD_SIZE) continue;
+            if (canPlaceTile(grid, row, col, rotation)) return { row, col };
+          }
+        }
+      }
+      return null;
+    };
+
     const handleKeyDown = (e: KeyboardEvent) => {
       const state = useGameStore.getState();
-      if (state.phase !== 'placing' || state.placementMode !== 'placed' || !state.placedPosition) return;
+      if (state.phase !== 'placing' || !state.currentTile) return;
 
+      // Idle mode: Enter/Space places tile at first valid cell
+      if (state.placementMode === 'idle') {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault();
+          const cell = findFirstValidCell(state.grid, state.rotation);
+          if (cell) state.startPlacement(cell.row, cell.col);
+        }
+        return;
+      }
+
+      // Placed mode
+      if (!state.placedPosition) return;
       const { row, col } = state.placedPosition;
 
       switch (e.key) {
@@ -969,10 +995,18 @@ export default function App() {
               )}
               <Text style={styles.infoText}>Tiles left: {tilesRemaining}</Text>
               {placementMode === 'idle' && (
-                <Text style={styles.hintText}>Tap grid to place tile</Text>
+                <Text style={styles.hintText}>
+                  {Platform.OS === 'web'
+                    ? 'Click or press Enter to place tile'
+                    : 'Tap grid to place tile'}
+                </Text>
               )}
               {placementMode === 'placed' && (
-                <Text style={styles.hintText}>Tap to rotate | Drag to move | Hold to confirm</Text>
+                <Text style={styles.hintText}>
+                  {Platform.OS === 'web'
+                    ? 'Arrows: move | R: rotate | Enter: confirm | Esc: cancel'
+                    : 'Tap to rotate | Drag to move | Hold to confirm'}
+                </Text>
               )}
             </>
           )}
