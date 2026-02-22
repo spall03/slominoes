@@ -380,20 +380,30 @@ const useGameStore = create<GameState>((set, get) => ({
       match.cells.some(([r, c]) => newCellKeys.has(`${r},${c}`))
     );
 
-    relevantMatches.forEach((match, index) => {
+    // Group scores by cell position so overlapping popups merge
+    const popupMap = new Map<string, number>();
+
+    relevantMatches.forEach((match) => {
       // Add all cells in matching combos to highlight set
       match.cells.forEach(([row, col]) => {
         matchingCells.add(`${row},${col}`);
       });
 
-      // Create score popup at center of match
+      // Accumulate score at center of match
       const centerIndex = Math.floor(match.cells.length / 2);
       const [centerRow, centerCol] = match.cells[centerIndex];
+      const key = `${centerRow},${centerCol}`;
+      popupMap.set(key, (popupMap.get(key) ?? 0) + match.score);
+    });
+
+    let popupIndex = 0;
+    popupMap.forEach((totalScore, key) => {
+      const [row, col] = key.split(',').map(Number);
       scorePopups.push({
-        id: `popup-${Date.now()}-${index}`,
-        score: match.score,
-        row: centerRow,
-        col: centerCol,
+        id: `popup-${Date.now()}-${popupIndex++}`,
+        score: totalScore,
+        row,
+        col,
       });
     });
 
