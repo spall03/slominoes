@@ -899,6 +899,62 @@ export default function App() {
   const tilesRemaining = tileQueue.length + (currentTile ? 1 : 0);
   const bonusScore = score - scoreBeforeRespins;
 
+  // Respin keyboard cursor (web only)
+  const [respinCursor, setRespinCursor] = useState<{ type: 'row' | 'col'; index: number }>({ type: 'row', index: 0 });
+
+  useEffect(() => {
+    if (Platform.OS !== 'web') return;
+
+    const handleRespinKey = (e: KeyboardEvent) => {
+      const state = useGameStore.getState();
+      if (state.phase !== 'respinning') return;
+
+      switch (e.key) {
+        case 'ArrowUp':
+          e.preventDefault();
+          setRespinCursor(c => c.type === 'row'
+            ? { type: 'row', index: (c.index - 1 + BOARD_SIZE) % BOARD_SIZE }
+            : { type: 'col', index: c.index });
+          break;
+        case 'ArrowDown':
+          e.preventDefault();
+          setRespinCursor(c => c.type === 'row'
+            ? { type: 'row', index: (c.index + 1) % BOARD_SIZE }
+            : { type: 'col', index: c.index });
+          break;
+        case 'ArrowLeft':
+          e.preventDefault();
+          setRespinCursor(c => c.type === 'col'
+            ? { type: 'col', index: (c.index - 1 + BOARD_SIZE) % BOARD_SIZE }
+            : { type: 'col', index: 0 });
+          break;
+        case 'ArrowRight':
+          e.preventDefault();
+          setRespinCursor(c => c.type === 'col'
+            ? { type: 'col', index: (c.index + 1) % BOARD_SIZE }
+            : { type: 'col', index: 0 });
+          break;
+        case 'Tab':
+          e.preventDefault();
+          setRespinCursor(c => c.type === 'row'
+            ? { type: 'col', index: c.index < BOARD_SIZE ? c.index : 0 }
+            : { type: 'row', index: c.index < BOARD_SIZE ? c.index : 0 });
+          break;
+        case 'Enter':
+        case ' ':
+          e.preventDefault();
+          setRespinCursor(c => {
+            state.respinLine(c.type, c.index);
+            return c;
+          });
+          break;
+      }
+    };
+
+    document.addEventListener('keydown', handleRespinKey);
+    return () => document.removeEventListener('keydown', handleRespinKey);
+  }, []);
+
   return (
     <GestureHandlerRootView style={styles.container}>
       <SafeAreaView style={styles.container}>
@@ -923,7 +979,10 @@ export default function App() {
                   {Array.from({ length: BOARD_SIZE }).map((_, col) => (
                     <Pressable
                       key={`col-${col}`}
-                      style={styles.respinButton}
+                      style={[
+                        styles.respinButton,
+                        respinCursor.type === 'col' && respinCursor.index === col && styles.respinButtonSelected,
+                      ]}
                       onPress={() => respinLine('col', col)}
                     >
                       <Text style={styles.respinButtonText}>v</Text>
@@ -940,7 +999,10 @@ export default function App() {
                 {Array.from({ length: BOARD_SIZE }).map((_, row) => (
                   <Pressable
                     key={`row-btn-${row}`}
-                    style={styles.respinButton}
+                    style={[
+                      styles.respinButton,
+                      respinCursor.type === 'row' && respinCursor.index === row && styles.respinButtonSelected,
+                    ]}
                     onPress={() => respinLine('row', row)}
                   >
                     <Text style={styles.respinButtonText}>{'>'}</Text>
@@ -1014,7 +1076,9 @@ export default function App() {
           {phase === 'respinning' && (
             <>
               <Text style={styles.infoText}>
-                Respins: {respinsRemaining} | Tap row/column arrows to respin
+                {Platform.OS === 'web'
+                  ? `Respins: ${respinsRemaining} | Arrows: select | Tab: row/col | Enter: pull`
+                  : `Respins: ${respinsRemaining} | Tap row/column arrows to respin`}
               </Text>
               <Text style={styles.scoreBreakdown}>
                 Base: {scoreBeforeRespins} + Bonus: {bonusScore}
@@ -1165,6 +1229,11 @@ const styles = StyleSheet.create({
     borderRadius: 4,
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  respinButtonSelected: {
+    backgroundColor: '#ff3b3b',
+    borderWidth: 2,
+    borderColor: '#ffd700',
   },
   respinButtonText: {
     color: '#fff',
