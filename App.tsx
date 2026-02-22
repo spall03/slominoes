@@ -879,6 +879,45 @@ function GestureGrid() {
 }
 
 // =============================================================================
+// HELP PANEL COMPONENT
+// =============================================================================
+
+function HelpPanel() {
+  return (
+    <View style={styles.helpPanel}>
+      <Text style={styles.helpHeading}>Goal</Text>
+      <Text style={styles.helpBody}>
+        Score {WIN_THRESHOLD}+ points by placing {TILES_PER_LEVEL} domino tiles on an 8x8 grid, then using {RESPINS_PER_LEVEL} respins to improve your matches.
+      </Text>
+
+      <Text style={styles.helpHeading}>Matching</Text>
+      <Text style={styles.helpBody}>
+        Line up 3+ identical symbols in a row or column. Longer matches score more:
+      </Text>
+      <Text style={styles.helpBody}>
+        {'  '}3-in-a-row: x1 | 4: x2 | 5: x3 | 6+: x4
+      </Text>
+
+      <Text style={styles.helpHeading}>Symbol values</Text>
+      <Text style={styles.helpBody}>
+        🍒 10  🍋 20  🎰 40  🔔 80  7️⃣ 150
+      </Text>
+
+      <Text style={styles.helpHeading}>Scoring formula</Text>
+      <Text style={styles.helpBody}>
+        value x length x multiplier{'\n'}
+        e.g. 4 bells = 80 x 4 x 2 = 640
+      </Text>
+
+      <Text style={styles.helpHeading}>Respins</Text>
+      <Text style={styles.helpBody}>
+        After all tiles are placed, you get {RESPINS_PER_LEVEL} respins. Each respin re-randomizes every filled cell in a row or column. Your score can only go up — respins never lower it.
+      </Text>
+    </View>
+  );
+}
+
+// =============================================================================
 // MAIN APP COMPONENT
 // =============================================================================
 
@@ -970,177 +1009,157 @@ export default function App() {
           </View>
         </View>
 
-        {/* Grid */}
-        <View style={styles.gridContainer}>
-          <View style={styles.gridWithRows}>
-            <View>
-              {/* Column respin buttons */}
-              {phase === 'respinning' && (
-                <View style={styles.colButtons}>
-                  {Array.from({ length: BOARD_SIZE }).map((_, col) => (
-                    <Pressable
-                      key={`col-${col}`}
-                      style={[
-                        styles.respinButton,
-                        respinCursor.type === 'col' && respinCursor.index === col && styles.respinButtonSelected,
-                      ]}
-                      onPress={() => respinLine('col', col)}
-                    >
-                      <Text style={styles.respinButtonText}>v</Text>
-                    </Pressable>
-                  ))}
+        <View style={Platform.OS === 'web' ? styles.mainRow : undefined}>
+          {/* Left column: grid + controls */}
+          <View style={Platform.OS === 'web' ? styles.mainColumn : undefined}>
+            {/* Grid */}
+            <View style={styles.gridContainer}>
+              <View style={styles.gridWithRows}>
+                <View>
+                  {/* Column respin buttons */}
+                  {phase === 'respinning' && (
+                    <View style={styles.colButtons}>
+                      {Array.from({ length: BOARD_SIZE }).map((_, col) => (
+                        <Pressable
+                          key={`col-${col}`}
+                          style={[
+                            styles.respinButton,
+                            respinCursor.type === 'col' && respinCursor.index === col && styles.respinButtonSelected,
+                          ]}
+                          onPress={() => respinLine('col', col)}
+                        >
+                          <Text style={styles.respinButtonText}>v</Text>
+                        </Pressable>
+                      ))}
+                    </View>
+                  )}
+                  <GestureGrid />
+                </View>
+
+                {/* Row respin buttons */}
+                {phase === 'respinning' && (
+                  <View style={styles.rowButtons}>
+                    {Array.from({ length: BOARD_SIZE }).map((_, row) => (
+                      <Pressable
+                        key={`row-btn-${row}`}
+                        style={[
+                          styles.respinButton,
+                          respinCursor.type === 'row' && respinCursor.index === row && styles.respinButtonSelected,
+                        ]}
+                        onPress={() => respinLine('row', row)}
+                      >
+                        <Text style={styles.respinButtonText}>{'>'}</Text>
+                      </Pressable>
+                    ))}
+                  </View>
+                )}
+              </View>
+
+              {/* Confirm / Cancel buttons when tile is placed */}
+              {phase === 'placing' && placementMode === 'placed' && (
+                <View style={styles.placementButtons}>
+                  <Pressable style={styles.confirmButton} onPress={useGameStore.getState().confirmPlacement}>
+                    <Text style={styles.buttonText}>Confirm</Text>
+                  </Pressable>
+                  <Pressable style={styles.cancelButton} onPress={useGameStore.getState().cancelPlacement}>
+                    <Text style={styles.buttonText}>Cancel</Text>
+                  </Pressable>
                 </View>
               )}
-              <GestureGrid />
             </View>
 
-            {/* Row respin buttons */}
-            {phase === 'respinning' && (
-              <View style={styles.rowButtons}>
-                {Array.from({ length: BOARD_SIZE }).map((_, row) => (
-                  <Pressable
-                    key={`row-btn-${row}`}
+            {/* Controls */}
+            <View style={styles.controls}>
+              {phase === 'placing' && currentTile && (
+                <>
+                  {placementMode === 'idle' && (
+                    <View style={styles.tilePreview}>
+                      <Text style={styles.previewLabel}>Current tile:</Text>
+                      <View style={styles.tilePreviewBox}>
+                        <Text style={styles.previewSymbol}>
+                          {SYMBOL_DISPLAY[currentTile.symbolA]}
+                        </Text>
+                        <Text style={styles.previewSymbol}>
+                          {SYMBOL_DISPLAY[currentTile.symbolB]}
+                        </Text>
+                      </View>
+                    </View>
+                  )}
+                  {placementMode === 'placed' && tileQueue.length > 0 && (
+                    <View style={styles.tilePreview}>
+                      <Text style={styles.previewLabel}>Next tile:</Text>
+                      <View style={styles.tilePreviewBox}>
+                        <Text style={styles.previewSymbol}>
+                          {SYMBOL_DISPLAY[tileQueue[0].symbolA]}
+                        </Text>
+                        <Text style={styles.previewSymbol}>
+                          {SYMBOL_DISPLAY[tileQueue[0].symbolB]}
+                        </Text>
+                      </View>
+                    </View>
+                  )}
+                  <Text style={styles.infoText}>Tiles left: {tilesRemaining}</Text>
+                  {placementMode === 'idle' && (
+                    <Text style={styles.hintText}>
+                      {Platform.OS === 'web'
+                        ? 'Click or press Enter to place tile'
+                        : 'Tap grid to place tile'}
+                    </Text>
+                  )}
+                  {placementMode === 'placed' && (
+                    <Text style={styles.hintText}>
+                      {Platform.OS === 'web'
+                        ? 'Arrows: move | R: rotate | Enter: confirm | Esc: cancel'
+                        : 'Tap to rotate | Drag to move | Hold to confirm'}
+                    </Text>
+                  )}
+                </>
+              )}
+
+              {phase === 'respinning' && (
+                <>
+                  <Text style={styles.infoText}>
+                    {Platform.OS === 'web'
+                      ? `Respins: ${respinsRemaining} | Arrows: select | Tab: row/col | Enter: pull`
+                      : `Respins: ${respinsRemaining} | Tap row/column arrows to respin`}
+                  </Text>
+                  <Text style={styles.scoreBreakdown}>
+                    Base: {scoreBeforeRespins} + Bonus: {bonusScore}
+                  </Text>
+                </>
+              )}
+
+              {phase === 'ended' && (
+                <View style={styles.endScreen}>
+                  <Text
                     style={[
-                      styles.respinButton,
-                      respinCursor.type === 'row' && respinCursor.index === row && styles.respinButtonSelected,
+                      styles.resultText,
+                      result === 'win' ? styles.winText : styles.loseText,
                     ]}
-                    onPress={() => respinLine('row', row)}
                   >
-                    <Text style={styles.respinButtonText}>{'>'}</Text>
+                    {result === 'win' ? 'You Win!' : 'Game Over'}
+                  </Text>
+                  <Text style={styles.finalScore}>Final Score: {score}</Text>
+                  <Pressable style={styles.restartButton} onPress={resetGame}>
+                    <Text style={styles.buttonText}>Play Again</Text>
                   </Pressable>
-                ))}
-              </View>
-            )}
+                </View>
+              )}
+
+              {/* Help toggle (mobile only — on web the panel is always visible to the right) */}
+              {Platform.OS !== 'web' && (
+                <>
+                  <Pressable onPress={() => setShowHelp(h => !h)} style={styles.helpToggle}>
+                    <Text style={styles.helpToggleText}>{showHelp ? 'Hide rules' : 'How to play'}</Text>
+                  </Pressable>
+                  {showHelp && <HelpPanel />}
+                </>
+              )}
+            </View>
           </View>
 
-          {/* Confirm / Cancel buttons when tile is placed */}
-          {phase === 'placing' && placementMode === 'placed' && (
-            <View style={styles.placementButtons}>
-              <Pressable style={styles.confirmButton} onPress={useGameStore.getState().confirmPlacement}>
-                <Text style={styles.buttonText}>Confirm</Text>
-              </Pressable>
-              <Pressable style={styles.cancelButton} onPress={useGameStore.getState().cancelPlacement}>
-                <Text style={styles.buttonText}>Cancel</Text>
-              </Pressable>
-            </View>
-          )}
-        </View>
-
-        {/* Controls */}
-        <View style={styles.controls}>
-          {phase === 'placing' && currentTile && (
-            <>
-              {placementMode === 'idle' && (
-                <View style={styles.tilePreview}>
-                  <Text style={styles.previewLabel}>Current tile:</Text>
-                  <View style={styles.tilePreviewBox}>
-                    <Text style={styles.previewSymbol}>
-                      {SYMBOL_DISPLAY[currentTile.symbolA]}
-                    </Text>
-                    <Text style={styles.previewSymbol}>
-                      {SYMBOL_DISPLAY[currentTile.symbolB]}
-                    </Text>
-                  </View>
-                </View>
-              )}
-              {placementMode === 'placed' && tileQueue.length > 0 && (
-                <View style={styles.tilePreview}>
-                  <Text style={styles.previewLabel}>Next tile:</Text>
-                  <View style={styles.tilePreviewBox}>
-                    <Text style={styles.previewSymbol}>
-                      {SYMBOL_DISPLAY[tileQueue[0].symbolA]}
-                    </Text>
-                    <Text style={styles.previewSymbol}>
-                      {SYMBOL_DISPLAY[tileQueue[0].symbolB]}
-                    </Text>
-                  </View>
-                </View>
-              )}
-              <Text style={styles.infoText}>Tiles left: {tilesRemaining}</Text>
-              {placementMode === 'idle' && (
-                <Text style={styles.hintText}>
-                  {Platform.OS === 'web'
-                    ? 'Click or press Enter to place tile'
-                    : 'Tap grid to place tile'}
-                </Text>
-              )}
-              {placementMode === 'placed' && (
-                <Text style={styles.hintText}>
-                  {Platform.OS === 'web'
-                    ? 'Arrows: move | R: rotate | Enter: confirm | Esc: cancel'
-                    : 'Tap to rotate | Drag to move | Hold to confirm'}
-                </Text>
-              )}
-            </>
-          )}
-
-          {phase === 'respinning' && (
-            <>
-              <Text style={styles.infoText}>
-                {Platform.OS === 'web'
-                  ? `Respins: ${respinsRemaining} | Arrows: select | Tab: row/col | Enter: pull`
-                  : `Respins: ${respinsRemaining} | Tap row/column arrows to respin`}
-              </Text>
-              <Text style={styles.scoreBreakdown}>
-                Base: {scoreBeforeRespins} + Bonus: {bonusScore}
-              </Text>
-            </>
-          )}
-
-          {phase === 'ended' && (
-            <View style={styles.endScreen}>
-              <Text
-                style={[
-                  styles.resultText,
-                  result === 'win' ? styles.winText : styles.loseText,
-                ]}
-              >
-                {result === 'win' ? 'You Win!' : 'Game Over'}
-              </Text>
-              <Text style={styles.finalScore}>Final Score: {score}</Text>
-              <Pressable style={styles.restartButton} onPress={resetGame}>
-                <Text style={styles.buttonText}>Play Again</Text>
-              </Pressable>
-            </View>
-          )}
-
-          {/* Help toggle */}
-          <Pressable onPress={() => setShowHelp(h => !h)} style={styles.helpToggle}>
-            <Text style={styles.helpToggleText}>{showHelp ? 'Hide rules' : 'How to play'}</Text>
-          </Pressable>
-
-          {showHelp && (
-            <View style={styles.helpPanel}>
-              <Text style={styles.helpHeading}>Goal</Text>
-              <Text style={styles.helpBody}>
-                Score {WIN_THRESHOLD}+ points by placing {TILES_PER_LEVEL} domino tiles on an 8x8 grid, then using {RESPINS_PER_LEVEL} respins to improve your matches.
-              </Text>
-
-              <Text style={styles.helpHeading}>Matching</Text>
-              <Text style={styles.helpBody}>
-                Line up 3+ identical symbols in a row or column. Longer matches score more:
-              </Text>
-              <Text style={styles.helpBody}>
-                {'  '}3-in-a-row: x1 | 4: x2 | 5: x3 | 6+: x4
-              </Text>
-
-              <Text style={styles.helpHeading}>Symbol values</Text>
-              <Text style={styles.helpBody}>
-                🍒 10  🍋 20  🎰 40  🔔 80  7️⃣ 150
-              </Text>
-
-              <Text style={styles.helpHeading}>Scoring formula</Text>
-              <Text style={styles.helpBody}>
-                value x length x multiplier{'\n'}
-                e.g. 4 bells = 80 x 4 x 2 = 640
-              </Text>
-
-              <Text style={styles.helpHeading}>Respins</Text>
-              <Text style={styles.helpBody}>
-                After all tiles are placed, you get {RESPINS_PER_LEVEL} respins. Each respin re-randomizes every filled cell in a row or column. Your score can only go up — respins never lower it.
-              </Text>
-            </View>
-          )}
+          {/* Right column: rules panel (web only, always visible) */}
+          {Platform.OS === 'web' && <HelpPanel />}
         </View>
       </SafeAreaView>
     </GestureHandlerRootView>
@@ -1155,6 +1174,16 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#1a1a2e',
+  },
+  mainRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    justifyContent: 'center',
+    flex: 1,
+    gap: 24,
+  },
+  mainColumn: {
+    alignItems: 'center',
   },
   header: {
     padding: 16,
@@ -1385,7 +1414,7 @@ const styles = StyleSheet.create({
     padding: 12,
     backgroundColor: '#2d2d44',
     borderRadius: 8,
-    maxWidth: 360,
+    width: 260,
   },
   helpHeading: {
     color: '#ffd700',
