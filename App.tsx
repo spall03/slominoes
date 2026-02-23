@@ -6,6 +6,7 @@ import {
   Pressable,
   SafeAreaView,
   Animated,
+  Dimensions,
   Platform,
 } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
@@ -687,11 +688,10 @@ function ScorePopup({
     });
   }, [translateY, opacity, driftTarget]);
 
-  // Position based on cell location (constants defined below)
-  const cellTotal = 40 + 1 * 2; // CELL_SIZE + CELL_MARGIN * 2
-  const gridPadding = 4;
-  const left = gridPadding + col * cellTotal + 20;
-  const top = gridPadding + row * cellTotal;
+  // Position based on cell location
+  const halfCell = Math.floor(CELL_SIZE / 2);
+  const left = GRID_PADDING + col * CELL_TOTAL + halfCell;
+  const top = GRID_PADDING + row * CELL_TOTAL;
 
   return (
     <Animated.View
@@ -700,7 +700,7 @@ function ScorePopup({
         {
           left,
           top,
-          transform: [{ translateY }, { translateX: -20 }],
+          transform: [{ translateY }, { translateX: -halfCell }],
           opacity,
         },
       ]}
@@ -714,10 +714,16 @@ function ScorePopup({
 // GESTURE GRID COMPONENT
 // =============================================================================
 
-const CELL_SIZE = 40;
+// Responsive cell size: grid (8 cells) + respin buttons (1 cell) + padding must fit screen
 const CELL_MARGIN = 1;
-const CELL_TOTAL = CELL_SIZE + CELL_MARGIN * 2;
 const GRID_PADDING = 4;
+const _screenWidth = Dimensions.get('window').width;
+// Total width = GRID_PADDING*2 + 9*(CELL_SIZE + CELL_MARGIN*2) + 4(gap) + 16(outer margin)
+const CELL_SIZE = _screenWidth < 500
+  ? Math.floor((_screenWidth - GRID_PADDING * 2 - 4 - 16) / 9 - CELL_MARGIN * 2)
+  : 40;
+const CELL_TOTAL = CELL_SIZE + CELL_MARGIN * 2;
+
 
 function GestureGrid() {
   const {
@@ -1276,7 +1282,7 @@ const styles = StyleSheet.create({
   header: {
     padding: 16,
     alignItems: 'center',
-    paddingTop: 48,
+    paddingTop: Platform.OS === 'web' ? 8 : 48,
   },
   title: {
     fontSize: 28,
@@ -1364,7 +1370,7 @@ const styles = StyleSheet.create({
     textShadowRadius: 2,
   },
   cellText: {
-    fontSize: 20,
+    fontSize: CELL_SIZE < 36 ? 16 : 20,
   },
   cellTextAbove: {
     zIndex: 2,
