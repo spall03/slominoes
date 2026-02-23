@@ -1108,9 +1108,9 @@ export default function App() {
           </View>
         </View>
 
-        <View style={Platform.OS === 'web' ? styles.mainRow : undefined}>
+        <View style={Platform.OS === 'web' && _screenWidth >= 700 ? styles.mainRow : undefined}>
           {/* Left column: grid + controls */}
-          <View style={Platform.OS === 'web' ? styles.mainColumn : undefined}>
+          <View style={Platform.OS === 'web' && _screenWidth >= 700 ? styles.mainColumn : undefined}>
             {/* Grid */}
             <View style={styles.gridContainer}>
               <View style={styles.gridWithRows}>
@@ -1241,7 +1241,7 @@ export default function App() {
               )}
 
               {/* Help toggle (mobile only — on web the panel is always visible to the right) */}
-              {Platform.OS !== 'web' && (
+              {(Platform.OS !== 'web' || _screenWidth < 700) && (
                 <>
                   <Pressable onPress={() => setShowHelp(h => !h)} style={styles.helpToggle}>
                     <Text style={styles.helpToggleText}>{showHelp ? 'Hide rules' : 'How to play'}</Text>
@@ -1253,7 +1253,7 @@ export default function App() {
           </View>
 
           {/* Right column: rules panel (web only, always visible) */}
-          {Platform.OS === 'web' && <HelpPanel />}
+          {Platform.OS === 'web' && _screenWidth >= 700 && <HelpPanel />}
         </View>
       </SafeAreaView>
     </GestureHandlerRootView>
