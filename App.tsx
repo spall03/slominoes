@@ -1021,6 +1021,62 @@ const ALL_RELICS: Relic[] = [
   { id: 'overflow', name: 'Overflow', description: 'Excess score = bonus coins', emoji: '\uD83D\uDCC8', category: 'defensive' },
 ];
 
+// =============================================================================
+// SHOP ITEM GENERATION
+// =============================================================================
+
+function generateShopItems(shopVisit: number, ownedRelicIds: Set<string>): ShopItem[] {
+  const priceScale = 1 + (shopVisit - 1) * 0.5; // visits 1, 2, 3 → 1x, 1.5x, 2x
+  const items: ShopItem[] = [];
+
+  // Always offer extra respins
+  items.push({
+    id: 'shop-respins',
+    name: 'Extra Respins',
+    description: '+2 respins next level',
+    emoji: '🔄',
+    cost: Math.round(300 * priceScale),
+    type: 'respins',
+  });
+
+  // Offer a relic if available
+  const availableRelics = ALL_RELICS.filter(r => !ownedRelicIds.has(r.id));
+  if (availableRelics.length > 0) {
+    const relic = availableRelics[Math.floor(Math.random() * availableRelics.length)];
+    items.push({
+      id: `shop-relic-${relic.id}`,
+      name: relic.name,
+      description: relic.description,
+      emoji: relic.emoji,
+      cost: Math.round(1000 * priceScale),
+      type: 'relic',
+      relic,
+    });
+  }
+
+  // Tile reroll
+  items.push({
+    id: 'shop-reroll',
+    name: 'Tile Reroll',
+    description: 'Discard & redraw tile once next level',
+    emoji: '🎲',
+    cost: Math.round(400 * priceScale),
+    type: 'tileReroll',
+  });
+
+  // Entry unlock
+  items.push({
+    id: 'shop-entry',
+    name: 'Extra Entries',
+    description: 'Add left/right entry points next level',
+    emoji: '🚪',
+    cost: Math.round(500 * priceScale),
+    type: 'entryUnlock',
+  });
+
+  return items;
+}
+
 interface RunState {
   runPhase: RunPhase;
   currentLevel: number;
@@ -1031,6 +1087,9 @@ interface RunState {
   levelRespinsLeft: number;
   rewardChoices: Relic[];
   shopItems: ShopItem[];
+  bonusRespins: number;
+  hasTileReroll: boolean;
+  hasEntryUnlock: boolean;
 
   startRun: () => void;
   startLevel: () => void;
@@ -1052,6 +1111,9 @@ const useRunStore = create<RunState>((set, get) => ({
   levelRespinsLeft: 0,
   rewardChoices: [],
   shopItems: [],
+  bonusRespins: 0,
+  hasTileReroll: false,
+  hasEntryUnlock: false,
 
   startRun: () => {
     set({
@@ -1064,14 +1126,23 @@ const useRunStore = create<RunState>((set, get) => ({
       levelRespinsLeft: 0,
       rewardChoices: [],
       shopItems: [],
+      bonusRespins: 0,
+      hasTileReroll: false,
+      hasEntryUnlock: false,
     });
   },
 
   startLevel: () => {
-    const { currentLevel } = get();
-    const config = LEVEL_CONFIGS[currentLevel - 1];
+    const { currentLevel, bonusRespins, hasEntryUnlock } = get();
+    const baseConfig = LEVEL_CONFIGS[currentLevel - 1];
+    const config = {
+      ...baseConfig,
+      respins: baseConfig.respins + (bonusRespins || 0),
+      entrySpotCount: hasEntryUnlock ? 4 : baseConfig.entrySpotCount,
+    };
     useGameStore.getState().resetGame(config);
-    set({ runPhase: 'playing' });
+    // Reset single-use shop bonuses
+    set({ runPhase: 'playing', bonusRespins: 0, hasTileReroll: false, hasEntryUnlock: false });
   },
 
   completeLevel: (score: number, threshold: number, respinsLeft: number) => {
@@ -1117,15 +1188,17 @@ const useRunStore = create<RunState>((set, get) => ({
   },
 
   advanceFromReward: () => {
-    const { currentLevel } = get();
+    const { currentLevel, relics } = get();
     if (currentLevel >= 10) {
       set({ runPhase: 'victory' });
       return;
     }
     // Shop after levels 3, 6, 9
     if (currentLevel === 3 || currentLevel === 6 || currentLevel === 9) {
-      // Generate shop items (stub — will be fleshed out in Task 12)
-      set({ runPhase: 'shop', shopItems: [] });
+      const shopVisit = Math.floor(currentLevel / 3); // 1, 2, 3
+      const ownedRelicIds = new Set(relics.map(r => r.id));
+      const items = generateShopItems(shopVisit, ownedRelicIds);
+      set({ runPhase: 'shop', shopItems: items });
     } else {
       set({ currentLevel: currentLevel + 1, runPhase: 'levelPreview' });
     }
@@ -1135,11 +1208,23 @@ const useRunStore = create<RunState>((set, get) => ({
     const { shopItems, coins } = get();
     const item = shopItems.find(i => i.id === itemId);
     if (!item || coins < item.cost) return;
-    set(state => ({
-      coins: state.coins - item.cost,
-      shopItems: state.shopItems.filter(i => i.id !== itemId),
-      ...(item.relic ? { relics: [...state.relics, item.relic] } : {}),
-    }));
+
+    const updates: Partial<RunState> = {
+      coins: coins - item.cost,
+      shopItems: shopItems.filter(i => i.id !== itemId),
+    };
+
+    if (item.type === 'relic' && item.relic) {
+      updates.relics = [...get().relics, item.relic];
+    } else if (item.type === 'respins') {
+      updates.bonusRespins = (get().bonusRespins || 0) + 2;
+    } else if (item.type === 'tileReroll') {
+      updates.hasTileReroll = true;
+    } else if (item.type === 'entryUnlock') {
+      updates.hasEntryUnlock = true;
+    }
+
+    set(updates as any);
   },
 
   skipShop: () => {
@@ -1963,21 +2048,52 @@ function RewardScreen() {
 }
 
 // =============================================================================
-// SHOP PLACEHOLDER SCREEN
+// SHOP SCREEN
 // =============================================================================
 
 function ShopScreen() {
+  const { coins, shopItems } = useRunStore();
+
   return (
     <GestureHandlerRootView style={styles.container}>
       <SafeAreaView style={styles.container}>
         <StatusBar style="light" />
-        <View style={styles.screenContainer}>
+        <ScrollView contentContainerStyle={styles.screenContainer}>
           <Text style={styles.screenTitle}>Shop</Text>
-          <Text style={styles.screenSubtitle}>Shop coming soon</Text>
-          <Pressable style={styles.startButton} onPress={() => useRunStore.getState().skipShop()}>
+          <Text style={styles.coinText}>{'💰'} {coins} coins</Text>
+
+          <View style={{ marginTop: 16, alignItems: 'center' }}>
+            {shopItems.map(item => {
+              const canAfford = coins >= item.cost;
+              return (
+                <Pressable
+                  key={item.id}
+                  style={[styles.shopItemCard, !canAfford && styles.shopItemDisabled]}
+                  disabled={!canAfford}
+                  onPress={() => useRunStore.getState().buyShopItem(item.id)}
+                >
+                  <Text style={{ fontSize: 28 }}>{item.emoji}</Text>
+                  <View style={styles.shopItemInfo}>
+                    <Text style={styles.shopItemName}>{item.name}</Text>
+                    <Text style={styles.shopItemDesc}>{item.description}</Text>
+                  </View>
+                  <Text style={styles.shopItemCost}>{item.cost}</Text>
+                </Pressable>
+              );
+            })}
+          </View>
+
+          {shopItems.length === 0 && (
+            <Text style={{ color: '#888', marginTop: 16 }}>All items purchased!</Text>
+          )}
+
+          <Pressable
+            style={[styles.startButton, { marginTop: 24 }]}
+            onPress={() => useRunStore.getState().skipShop()}
+          >
             <Text style={styles.startButtonText}>Continue</Text>
           </Pressable>
-        </View>
+        </ScrollView>
       </SafeAreaView>
     </GestureHandlerRootView>
   );
@@ -2760,5 +2876,40 @@ const styles = StyleSheet.create({
     gap: 4,
     marginBottom: 8,
     flexWrap: 'wrap',
+  },
+
+  // =========================================================================
+  // Shop styles
+  // =========================================================================
+  shopItemCard: {
+    backgroundColor: '#2d2d44',
+    borderRadius: 10,
+    padding: 16,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    width: 300,
+    marginBottom: 8,
+  },
+  shopItemInfo: {
+    flex: 1,
+  },
+  shopItemName: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#fff',
+  },
+  shopItemDesc: {
+    fontSize: 11,
+    color: '#aaa',
+    marginTop: 2,
+  },
+  shopItemCost: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#ffd700',
+  },
+  shopItemDisabled: {
+    opacity: 0.4,
   },
 });
