@@ -1,7 +1,7 @@
 # Working
 
 ## Current Task
-Roguelike feature — Task 13 complete. Next: Task 14-16 (HUD, styling polish, playtest).
+Roguelike feature — All 16 tasks complete.
 
 ## Progress
 - [x] Task 1: Added LevelConfig type and LEVEL_CONFIGS constant (10 levels with escalating difficulty)
@@ -12,10 +12,13 @@ Roguelike feature — Task 13 complete. Next: Task 14-16 (HUD, styling polish, p
 - [x] Task 7-11: Between-level screens (title, levelPreview, reward, shop, victory, gameOver)
 - [x] Task 12: Shop screen with item purchasing and bonuses
 - [x] Task 13: Hook relic effects into game logic
-- [ ] Task 14-16: HUD, styling polish, and playtest
+- [x] Task 14: Run info HUD (level, coins, relics) shown during gameplay
+- [x] Task 15: Consistent styling (borderRadius 10, gold headings, HUD styles)
+- [x] Task 16: TypeScript compiles cleanly, title is "Slominoes" everywhere
 
 ## Next Steps
-- Task 14-16: HUD, styling polish, and playtest
+- Playtesting and polish
+- Implement remaining complex relic effects (Wildcard, Rotate Free, Pathfinder)
 
 ## Recent Decisions
 - LevelConfig includes boardMask (boolean[][] | null) for shaped boards

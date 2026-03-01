@@ -2225,6 +2225,8 @@ function PlayingScreen() {
     resetGame,
   } = useGameStore();
 
+  const { currentLevel, coins, relics } = useRunStore();
+
   const tilesRemaining = tileQueue.length + (currentTile ? 1 : 0);
   const [showHelp, setShowHelp] = useState(false);
 
@@ -2290,11 +2292,22 @@ function PlayingScreen() {
 
         {/* Header */}
         <View style={styles.header}>
-          <Text style={styles.title}>Slot Dominoes</Text>
+          <Text style={styles.title}>Slominoes</Text>
           <View style={styles.scoreRow}>
             <Text style={styles.scoreText}>Score: {score}</Text>
             <Text style={styles.goalText}>Goal: {levelConfig.threshold}</Text>
           </View>
+          <View style={styles.hudRow}>
+            <Text style={styles.hudText}>Level {currentLevel} / 10</Text>
+            <Text style={styles.hudText}>{'💰'} {coins}</Text>
+          </View>
+          {relics.length > 0 && (
+            <View style={styles.hudRelicRow}>
+              {relics.map(r => (
+                <Text key={r.id} style={styles.hudRelicEmoji}>{r.emoji}</Text>
+              ))}
+            </View>
+          )}
         </View>
 
         <View style={Platform.OS === 'web' && _screenWidth >= 700 ? styles.mainRow : undefined}>
@@ -2527,7 +2540,7 @@ const styles = StyleSheet.create({
   },
   grid: {
     backgroundColor: '#2d2d44',
-    borderRadius: 8,
+    borderRadius: 10,
     padding: GRID_PADDING,
   },
   row: {
@@ -2678,7 +2691,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#5c6bc0',
     paddingHorizontal: 24,
     paddingVertical: 12,
-    borderRadius: 8,
+    borderRadius: 10,
     marginTop: 8,
   },
   placementButtons: {
@@ -2690,13 +2703,13 @@ const styles = StyleSheet.create({
     backgroundColor: '#4caf50',
     paddingHorizontal: 24,
     paddingVertical: 10,
-    borderRadius: 8,
+    borderRadius: 10,
   },
   cancelButton: {
     backgroundColor: '#666',
     paddingHorizontal: 24,
     paddingVertical: 10,
-    borderRadius: 8,
+    borderRadius: 10,
   },
   helpToggle: {
     marginTop: 16,
@@ -2714,7 +2727,7 @@ const styles = StyleSheet.create({
     marginTop: 12,
     padding: 12,
     backgroundColor: '#2d2d44',
-    borderRadius: 8,
+    borderRadius: 10,
     width: 260,
   },
   helpHeading: {
@@ -2810,7 +2823,7 @@ const styles = StyleSheet.create({
   },
   statBadge: {
     backgroundColor: '#2d2d44',
-    borderRadius: 8,
+    borderRadius: 10,
     paddingHorizontal: 12,
     paddingVertical: 6,
   },
@@ -2941,5 +2954,28 @@ const styles = StyleSheet.create({
   },
   shopItemDisabled: {
     opacity: 0.4,
+  },
+
+  // =========================================================================
+  // HUD styles (playing screen header)
+  // =========================================================================
+  hudRow: {
+    flexDirection: 'row',
+    gap: 16,
+    alignItems: 'center',
+    marginTop: 4,
+  },
+  hudText: {
+    fontSize: 14,
+    color: '#aaa',
+  },
+  hudRelicRow: {
+    flexDirection: 'row',
+    gap: 2,
+    flexWrap: 'wrap',
+    marginTop: 4,
+  },
+  hudRelicEmoji: {
+    fontSize: 14,
   },
 });
