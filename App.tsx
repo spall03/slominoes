@@ -263,7 +263,7 @@ const LEVEL_CONFIGS: LevelConfig[] = [
 // SYMBOLS
 // =============================================================================
 
-type Symbol = 'cherry' | 'lemon' | 'bar' | 'bell' | 'seven';
+type Symbol = 'cherry' | 'lemon' | 'bar' | 'bell' | 'seven' | 'wall';
 
 const SYMBOLS: Symbol[] = ['cherry', 'lemon', 'bar', 'bell', 'seven'];
 
@@ -273,6 +273,7 @@ const SYMBOL_VALUES: Record<Symbol, number> = {
   bar: 40,
   bell: 80,
   seven: 150,
+  wall: 0,
 };
 
 const SYMBOL_DISPLAY: Record<Symbol, string> = {
@@ -281,6 +282,7 @@ const SYMBOL_DISPLAY: Record<Symbol, string> = {
   bar: '🎰',
   bell: '🔔',
   seven: '7️⃣',
+  wall: '🧱',
 };
 
 function getRandomSymbol(symbolCount: number = SYMBOLS.length): Symbol {
@@ -320,6 +322,32 @@ function createEmptyGrid(): Grid {
 
 function cloneGrid(grid: Grid): Grid {
   return grid.map(row => [...row]);
+}
+
+function createGridFromConfig(config: LevelConfig): Grid {
+  const grid = createEmptyGrid();
+
+  // Apply board mask
+  if (config.boardMask) {
+    for (let r = 0; r < BOARD_SIZE; r++) {
+      for (let c = 0; c < BOARD_SIZE; c++) {
+        if (!config.boardMask[r][c]) {
+          grid[r][c] = 'wall';
+        }
+      }
+    }
+  }
+
+  // Place obstacles
+  for (const obs of config.obstacles) {
+    if (obs.symbol === 'wall') {
+      grid[obs.row][obs.col] = 'wall';
+    } else {
+      grid[obs.row][obs.col] = obs.symbol;
+    }
+  }
+
+  return grid;
 }
 
 // =============================================================================
@@ -441,7 +469,7 @@ function findMatches(grid: Grid): Match[] {
     let col = 0;
     while (col < BOARD_SIZE) {
       const symbol = grid[row][col];
-      if (symbol === null) { col++; continue; }
+      if (symbol === null || symbol === 'wall') { col++; continue; }
 
       let length = 1;
       while (col + length < BOARD_SIZE && grid[row][col + length] === symbol) {
@@ -463,7 +491,7 @@ function findMatches(grid: Grid): Match[] {
     let row = 0;
     while (row < BOARD_SIZE) {
       const symbol = grid[row][col];
-      if (symbol === null) { row++; continue; }
+      if (symbol === null || symbol === 'wall') { row++; continue; }
 
       let length = 1;
       while (row + length < BOARD_SIZE && grid[row + length][col] === symbol) {
@@ -841,13 +869,13 @@ const useGameStore = create<GameState>((set, get) => ({
 
     if (type === 'row') {
       for (let col = 0; col < BOARD_SIZE; col++) {
-        if (newGrid[index][col] !== null) {
+        if (newGrid[index][col] !== null && newGrid[index][col] !== 'wall') {
           newGrid[index][col] = getRandomSymbol();
         }
       }
     } else {
       for (let row = 0; row < BOARD_SIZE; row++) {
-        if (newGrid[row][index] !== null) {
+        if (newGrid[row][index] !== null && newGrid[row][index] !== 'wall') {
           newGrid[row][index] = getRandomSymbol();
         }
       }
@@ -1013,6 +1041,7 @@ function AnimatedCell({
       style={[
         styles.cell,
         !isEmpty && !isPreview && styles.filledCell,
+        symbol === 'wall' && styles.wallCell,
         isPreview && !isPlaced && styles.previewCell,
         isPreview && isPlaced && !isHoldReady && styles.placedCell,
         isPreview && isPlaced && isHoldReady && styles.holdReadyCell,
@@ -1885,6 +1914,9 @@ const styles = StyleSheet.create({
   },
   filledCell: {
     backgroundColor: '#4a4a70',
+  },
+  wallCell: {
+    backgroundColor: '#2a2a3e',
   },
   previewCell: {
     backgroundColor: 'transparent',
