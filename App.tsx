@@ -589,6 +589,7 @@ interface GameState {
   clearMatchAnimation: () => void;
   removeScorePopup: (id: string) => void;
   respinLine: (type: 'row' | 'col', index: number) => void;
+  skipRespins: () => void;
   resetGame: (config?: LevelConfig, wideEntry?: boolean) => void;
 }
 
@@ -983,6 +984,18 @@ const useGameStore = create<GameState>((set, get) => ({
         score: newScore,
         ...animState,
       });
+    }
+  },
+
+  skipRespins: () => {
+    const { phase, respinsRemaining, score, levelConfig } = get();
+    if (phase !== 'respinning') return;
+    const result = score >= levelConfig.threshold ? 'win' : 'lose';
+    set({ phase: 'ended', result });
+    if (result === 'win') {
+      useRunStore.getState().completeLevel(score, levelConfig.threshold, respinsRemaining);
+    } else {
+      useRunStore.getState().failLevel(score);
     }
   },
 
@@ -2316,6 +2329,11 @@ function PlayingScreen() {
           e.preventDefault();
           state.respinLine(respinCursorRef.current.type, respinCursorRef.current.index);
           break;
+        case 's':
+        case 'S':
+          e.preventDefault();
+          state.skipRespins();
+          break;
       }
     };
 
@@ -2476,11 +2494,21 @@ function PlayingScreen() {
               )}
 
               {phase === 'respinning' && (
-                <Text style={styles.infoText}>
-                  {Platform.OS === 'web'
-                    ? `Respins: ${respinsRemaining} | Arrows: select | Tab: row/col | Enter: pull`
-                    : `Respins: ${respinsRemaining} | Tap row/column arrows to respin`}
-                </Text>
+                <View>
+                  <Text style={styles.infoText}>
+                    {Platform.OS === 'web'
+                      ? `Respins: ${respinsRemaining} | Arrows: select | Tab: row/col | Enter: pull | S: skip`
+                      : `Respins: ${respinsRemaining} | Tap row/column arrows to respin`}
+                  </Text>
+                  <Pressable
+                    style={[styles.restartButton, { marginTop: 8, backgroundColor: '#5c6bc0' }]}
+                    onPress={() => useGameStore.getState().skipRespins()}
+                  >
+                    <Text style={styles.buttonText}>
+                      Skip Respins ({respinsRemaining} x 200 = {respinsRemaining * 200} coins)
+                    </Text>
+                  </Pressable>
+                </View>
               )}
 
               {phase === 'ended' && (
