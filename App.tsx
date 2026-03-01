@@ -987,13 +987,14 @@ function GestureGrid() {
   useEffect(() => {
     if (Platform.OS !== 'web') return;
 
-    const findFirstValidCell = (grid: Grid, reachable: Set<string> | null): { row: number; col: number } | null => {
-      if (!reachable) return null;
-      // Start from center, spiral outward — any rotation counts (startPlacement auto-rotates)
-      const center = Math.floor(BOARD_SIZE / 2);
+    const findFirstValidCell = (grid: Grid, reachable: Set<string> | null, entryIndex: number | null): { row: number; col: number } | null => {
+      if (!reachable || entryIndex === null) return null;
+      // Start searching from the selected entry's cells, spiral outward
+      const entry = ENTRY_SPOTS[entryIndex];
+      const [startRow, startCol] = entry.cells[0];
       for (let dist = 0; dist < BOARD_SIZE; dist++) {
-        for (let row = center - dist; row <= center + dist; row++) {
-          for (let col = center - dist; col <= center + dist; col++) {
+        for (let row = startRow - dist; row <= startRow + dist; row++) {
+          for (let col = startCol - dist; col <= startCol + dist; col++) {
             if (row < 0 || row >= BOARD_SIZE || col < 0 || col >= BOARD_SIZE) continue;
             for (let rot = 0; rot < 4; rot++) {
               if (canPlaceTileWithEntry(grid, row, col, rot as Rotation, reachable)) return { row, col };
@@ -1035,7 +1036,7 @@ function GestureGrid() {
           case ' ':
             e.preventDefault();
             {
-              const cell = findFirstValidCell(state.grid, state.reachableCells);
+              const cell = findFirstValidCell(state.grid, state.reachableCells, state.selectedEntry);
               if (cell) state.startPlacement(cell.row, cell.col);
             }
             break;
