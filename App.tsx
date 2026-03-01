@@ -56,8 +56,7 @@ const ENTRY_SPOTS: EntrySpot[] = [
   // { id: 3, label: 'Right', cells: [[3, 7], [4, 7]], arrowDirection: 'left' },
 ];
 
-function getEntrySpots(count: number): EntrySpot[] {
-  const wide = hasRelic('wideEntry');
+function getEntrySpots(count: number, wide: boolean = false): EntrySpot[] {
   const all: EntrySpot[] = [
     { id: 0, label: 'Top', cells: wide ? [[0, 2], [0, 3], [0, 4]] : [[0, 3], [0, 4]], arrowDirection: 'down' },
     { id: 1, label: 'Bottom', cells: wide ? [[7, 2], [7, 3], [7, 4]] : [[7, 3], [7, 4]], arrowDirection: 'up' },
@@ -590,7 +589,7 @@ interface GameState {
   clearMatchAnimation: () => void;
   removeScorePopup: (id: string) => void;
   respinLine: (type: 'row' | 'col', index: number) => void;
-  resetGame: (config?: LevelConfig) => void;
+  resetGame: (config?: LevelConfig, wideEntry?: boolean) => void;
 }
 
 function canPlaceTile(
@@ -612,9 +611,9 @@ function canPlaceTile(
   return true;
 }
 
-function createInitialState(config: LevelConfig = LEVEL_CONFIGS[0]) {
+function createInitialState(config: LevelConfig = LEVEL_CONFIGS[0], wideEntry: boolean = false) {
   const queue = generateTileQueue(config.tilesPerLevel, config.symbolCount);
-  const spots = getEntrySpots(config.entrySpotCount);
+  const spots = getEntrySpots(config.entrySpotCount, wideEntry);
   return {
     levelConfig: config,
     grid: createGridFromConfig(config),
@@ -987,7 +986,7 @@ const useGameStore = create<GameState>((set, get) => ({
     }
   },
 
-  resetGame: (config?: LevelConfig) => set(createInitialState(config ?? LEVEL_CONFIGS[0])),
+  resetGame: (config?: LevelConfig, wideEntry?: boolean) => set(createInitialState(config ?? LEVEL_CONFIGS[0], wideEntry ?? false)),
 }));
 
 // =============================================================================
@@ -1155,7 +1154,8 @@ const useRunStore = create<RunState>((set, get) => ({
       respins: baseConfig.respins + (bonusRespins || 0) + extraSpinRelics,
       entrySpotCount: hasEntryUnlock ? 4 : baseConfig.entrySpotCount,
     };
-    useGameStore.getState().resetGame(config);
+    const wideEntry = relics.some(r => r.id === 'wideEntry');
+    useGameStore.getState().resetGame(config, wideEntry);
     // Reset single-use shop bonuses
     set({ runPhase: 'playing', bonusRespins: 0, hasTileReroll: false, hasEntryUnlock: false });
   },
@@ -1446,11 +1446,14 @@ function EntrySpotButton({
   isBlocked: boolean;
   onPress: () => void;
 }) {
-  const arrow = entry.arrowDirection === 'down' ? '▼' : '▲';
+  const arrowMap: Record<string, string> = { down: '▼', up: '▲', right: '▶', left: '◀' };
+  const arrow = arrowMap[entry.arrowDirection] ?? '▼';
+  const isSide = entry.arrowDirection === 'left' || entry.arrowDirection === 'right';
   return (
     <Pressable
       style={[
         styles.entrySpotButton,
+        isSide && styles.entrySpotButtonSide,
         isSelected && styles.entrySpotButtonSelected,
         isBlocked && styles.entrySpotButtonBlocked,
       ]}
@@ -1539,29 +1542,27 @@ function GestureGrid() {
       const state = useGameStore.getState();
       if (state.phase !== 'placing' || !state.currentTile) return;
 
-      // No entry selected: 1/2 keys select entry, all other keys ignored
+      // No entry selected: 1-4 keys select entry, all other keys ignored
       if (state.selectedEntry === null) {
-        if (e.key === '1') {
+        const entryKeyMap: Record<string, number> = { '1': 0, '2': 1, '3': 2, '4': 3 };
+        const entryId = entryKeyMap[e.key];
+        if (entryId !== undefined && state.entrySpots.some(s => s.id === entryId)) {
           e.preventDefault();
-          state.selectEntry(0);
-        } else if (e.key === '2') {
-          e.preventDefault();
-          state.selectEntry(1);
+          state.selectEntry(entryId);
         }
         return;
       }
 
       // Entry selected, idle mode
       if (state.placementMode === 'idle') {
+        const entryKeyMap: Record<string, number> = { '1': 0, '2': 1, '3': 2, '4': 3 };
+        const entryId = entryKeyMap[e.key];
+        if (entryId !== undefined && state.entrySpots.some(s => s.id === entryId)) {
+          e.preventDefault();
+          state.selectEntry(entryId);
+          return;
+        }
         switch (e.key) {
-          case '1':
-            e.preventDefault();
-            state.selectEntry(0);
-            break;
-          case '2':
-            e.preventDefault();
-            state.selectEntry(1);
-            break;
           case 'Enter':
           case ' ':
             e.preventDefault();
@@ -1755,6 +1756,10 @@ function GestureGrid() {
     return true;
   }), [grid, entrySpots]);
 
+  const leftEntries = entrySpots.filter(e => e.arrowDirection === 'right');
+  const rightEntries = entrySpots.filter(e => e.arrowDirection === 'left');
+  const hasSideEntries = phase === 'placing' && currentTile && (leftEntries.length > 0 || rightEntries.length > 0);
+
   return (
     <View>
       {/* Top entry spot buttons */}
@@ -1773,48 +1778,78 @@ function GestureGrid() {
             ))}
         </View>
       )}
-      <GestureDetector gesture={composedGesture}>
-        <View style={styles.grid}>
-          {grid.map((row, rowIndex) => (
-            <View key={`row-${rowIndex}`} style={styles.row}>
-              {row.map((cell, colIndex) => {
-                const { isPreview, previewSymbol } = getPreviewInfo(rowIndex, colIndex);
-                const cellKey = `${rowIndex},${colIndex}`;
-                const isMatching = matchingCells.has(cellKey);
-                const isReachable = reachableCells?.has(cellKey) ?? false;
-                const entryCellDir = entryCellMap.get(cellKey) ?? null;
-                return (
-                  <AnimatedCell
-                    key={`cell-${rowIndex}-${colIndex}-${animationKey}`}
-                    symbol={cell}
-                    isEmpty={cell === null}
-                    isPreview={isPreview}
-                    isPlaced={placementMode === 'placed'}
-                    isHoldReady={holdReady}
-                    isMatching={isMatching}
-                    isReachable={isReachable}
-                    isEntryCell={entryCellDir}
-                    highlightColor={isMatching ? highlightColor : undefined}
-                    previewSymbol={previewSymbol}
-                    onMatchAnimationComplete={() => handleMatchAnimationComplete(cellKey)}
-                  />
-                );
-              })}
-            </View>
+      <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+        {/* Left entry spot buttons */}
+        {hasSideEntries && (
+          <View style={styles.entrySpotCol}>
+            {leftEntries.map(entry => (
+              <EntrySpotButton
+                key={entry.id}
+                entry={entry}
+                isSelected={selectedEntry === entry.id}
+                isBlocked={entryBlocked[entry.id]}
+                onPress={() => selectEntry(entry.id)}
+              />
+            ))}
+          </View>
+        )}
+        <GestureDetector gesture={composedGesture}>
+          <View style={styles.grid}>
+            {grid.map((row, rowIndex) => (
+              <View key={`row-${rowIndex}`} style={styles.row}>
+                {row.map((cell, colIndex) => {
+                  const { isPreview, previewSymbol } = getPreviewInfo(rowIndex, colIndex);
+                  const cellKey = `${rowIndex},${colIndex}`;
+                  const isMatching = matchingCells.has(cellKey);
+                  const isReachable = reachableCells?.has(cellKey) ?? false;
+                  const entryCellDir = entryCellMap.get(cellKey) ?? null;
+                  return (
+                    <AnimatedCell
+                      key={`cell-${rowIndex}-${colIndex}-${animationKey}`}
+                      symbol={cell}
+                      isEmpty={cell === null}
+                      isPreview={isPreview}
+                      isPlaced={placementMode === 'placed'}
+                      isHoldReady={holdReady}
+                      isMatching={isMatching}
+                      isReachable={isReachable}
+                      isEntryCell={entryCellDir}
+                      highlightColor={isMatching ? highlightColor : undefined}
+                      previewSymbol={previewSymbol}
+                      onMatchAnimationComplete={() => handleMatchAnimationComplete(cellKey)}
+                    />
+                  );
+                })}
+              </View>
+            ))}
+          {/* Score popups */}
+          {scorePopups.map(popup => (
+            <ScorePopup
+              key={popup.id}
+              score={popup.score}
+              row={popup.row}
+              col={popup.col}
+              color={highlightColor === 'gold' ? '#ffd700' : undefined}
+              onComplete={() => removeScorePopup(popup.id)}
+            />
           ))}
-        {/* Score popups */}
-        {scorePopups.map(popup => (
-          <ScorePopup
-            key={popup.id}
-            score={popup.score}
-            row={popup.row}
-            col={popup.col}
-            color={highlightColor === 'gold' ? '#ffd700' : undefined}
-            onComplete={() => removeScorePopup(popup.id)}
-          />
-        ))}
-        </View>
-      </GestureDetector>
+          </View>
+        </GestureDetector>
+        {/* Right entry spot buttons */}
+        {hasSideEntries && (
+          <View style={styles.entrySpotCol}>
+            {rightEntries.map(entry => (
+              <EntrySpotButton
+                key={entry.id}
+                entry={entry}
+                isSelected={selectedEntry === entry.id}
+                isBlocked={entryBlocked[entry.id]}
+                onPress={() => selectEntry(entry.id)}
+              />
+            ))}
+          </View>
+        )}
+      </View>
       {/* Bottom entry spot buttons */}
       {phase === 'placing' && currentTile && (
         <View style={styles.entrySpotRow}>
@@ -1874,7 +1909,7 @@ function HelpPanel() {
 
       <Text style={styles.helpHeading}>Entry Points</Text>
       <Text style={styles.helpBody}>
-        Before placing each tile, choose an entry point (top or bottom arrows). You can only place tiles in empty cells reachable from that entry. Earlier placements may block paths, creating a spatial puzzle.
+        Before placing each tile, choose an entry point. You can only place tiles in empty cells reachable from that entry. Earlier placements may block paths, creating a spatial puzzle. Some levels have side entries too!
       </Text>
 
       <Text style={styles.helpHeading}>Respins</Text>
@@ -1913,7 +1948,8 @@ function TitleScreen() {
 function LevelPreviewScreen() {
   const { currentLevel, coins, relics } = useRunStore();
   const config = LEVEL_CONFIGS[currentLevel - 1];
-  const entrySpots = getEntrySpots(config.entrySpotCount);
+  const wideEntry = relics.some(r => r.id === 'wideEntry');
+  const entrySpots = getEntrySpots(config.entrySpotCount, wideEntry);
 
   // Build a set of entry cells for highlighting
   const entryCellSet = useMemo(() => {
@@ -2221,6 +2257,7 @@ function PlayingScreen() {
     result,
     placementMode,
     selectedEntry,
+    entrySpots,
     respinLine,
     resetGame,
   } = useGameStore();
@@ -2228,6 +2265,7 @@ function PlayingScreen() {
   const { currentLevel, coins, relics } = useRunStore();
 
   const tilesRemaining = tileQueue.length + (currentTile ? 1 : 0);
+  const entryKeyHint = entrySpots.length > 2 ? '1-4' : '1 or 2';
   const [showHelp, setShowHelp] = useState(false);
 
   // Respin keyboard cursor (web only)
@@ -2416,7 +2454,7 @@ function PlayingScreen() {
                   {placementMode === 'idle' && selectedEntry === null && (
                     <Text style={styles.hintText}>
                       {Platform.OS === 'web'
-                        ? 'Press 1 or 2 to select an entry point'
+                        ? `Press ${entryKeyHint} to select an entry point`
                         : 'Tap an entry point arrow'}
                     </Text>
                   )}
@@ -2748,6 +2786,11 @@ const styles = StyleSheet.create({
     gap: 8,
     paddingVertical: 4,
   },
+  entrySpotCol: {
+    justifyContent: 'center',
+    gap: 8,
+    paddingHorizontal: 4,
+  },
   entrySpotButton: {
     width: CELL_SIZE * 2 + CELL_MARGIN * 4,
     height: CELL_SIZE,
@@ -2755,6 +2798,10 @@ const styles = StyleSheet.create({
     borderRadius: 6,
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  entrySpotButtonSide: {
+    width: CELL_SIZE,
+    height: CELL_SIZE * 2 + CELL_MARGIN * 4,
   },
   entrySpotButtonSelected: {
     backgroundColor: '#ffc107',
