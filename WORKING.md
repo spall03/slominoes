@@ -1,7 +1,7 @@
 # Working
 
 ## Current Task
-Roguelike feature — Task 12 complete. Next: Task 13 (hook relic effects into game logic).
+Roguelike feature — Task 13 complete. Next: Task 14-16 (HUD, styling polish, playtest).
 
 ## Progress
 - [x] Task 1: Added LevelConfig type and LEVEL_CONFIGS constant (10 levels with escalating difficulty)
@@ -11,11 +11,11 @@ Roguelike feature — Task 12 complete. Next: Task 13 (hook relic effects into g
 - [x] Task 5-6: Added RunState store (useRunStore) with roguelike meta-layer; wired game completion
 - [x] Task 7-11: Between-level screens (title, levelPreview, reward, shop, victory, gameOver)
 - [x] Task 12: Shop screen with item purchasing and bonuses
-- [ ] Task 13: Hook relic effects into game logic
+- [x] Task 13: Hook relic effects into game logic
 - [ ] Task 14-16: HUD, styling polish, and playtest
 
 ## Next Steps
-- Task 13: Hook relic effects into game logic
+- Task 14-16: HUD, styling polish, and playtest
 
 ## Recent Decisions
 - LevelConfig includes boardMask (boolean[][] | null) for shaped boards
@@ -38,4 +38,5 @@ Roguelike feature — Task 12 complete. Next: Task 13 (hook relic effects into g
 ## Blockers/Notes
 - expo-haptics has web shim (no-ops on desktop)
 - useNativeDriver: true falls back to JS animation on web (console warning only)
-- hasTileReroll flag is stored but not yet consumed in game logic (needs Task 13)
+- hasTileReroll flag is stored but not yet consumed in game logic (needs follow-up)
+- Wildcard, Rotate Free, Pathfinder relics: defined in ALL_RELICS but effects not yet implemented (complex logic)

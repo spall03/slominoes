@@ -57,11 +57,12 @@ const ENTRY_SPOTS: EntrySpot[] = [
 ];
 
 function getEntrySpots(count: number): EntrySpot[] {
+  const wide = hasRelic('wideEntry');
   const all: EntrySpot[] = [
-    { id: 0, label: 'Top', cells: [[0, 3], [0, 4]], arrowDirection: 'down' },
-    { id: 1, label: 'Bottom', cells: [[7, 3], [7, 4]], arrowDirection: 'up' },
-    { id: 2, label: 'Left', cells: [[3, 0], [4, 0]], arrowDirection: 'right' },
-    { id: 3, label: 'Right', cells: [[3, 7], [4, 7]], arrowDirection: 'left' },
+    { id: 0, label: 'Top', cells: wide ? [[0, 2], [0, 3], [0, 4]] : [[0, 3], [0, 4]], arrowDirection: 'down' },
+    { id: 1, label: 'Bottom', cells: wide ? [[7, 2], [7, 3], [7, 4]] : [[7, 3], [7, 4]], arrowDirection: 'up' },
+    { id: 2, label: 'Left', cells: wide ? [[2, 0], [3, 0], [4, 0]] : [[3, 0], [4, 0]], arrowDirection: 'right' },
+    { id: 3, label: 'Right', cells: wide ? [[2, 7], [3, 7], [4, 7]] : [[3, 7], [4, 7]], arrowDirection: 'left' },
   ];
   if (count <= 1) return [all[0]];
   if (count === 2) return [all[0], all[1]];
@@ -492,7 +493,10 @@ function findMatches(grid: Grid): Match[] {
       if (length >= MIN_MATCH_LENGTH) {
         const cells: [number, number][] = [];
         for (let i = 0; i < length; i++) cells.push([row, col + i]);
-        const score = SYMBOL_VALUES[symbol] * length * getLengthMultiplier(length);
+        let multiplier = getLengthMultiplier(length);
+        if (length >= 4 && hasRelic('comboKing')) multiplier += 1;
+        let score = SYMBOL_VALUES[symbol] * length * multiplier;
+        if (symbol === 'seven' && hasRelic('lucky7s')) score *= 2;
         matches.push({ cells, symbol, length, score });
       }
       col += length;
@@ -514,7 +518,10 @@ function findMatches(grid: Grid): Match[] {
       if (length >= MIN_MATCH_LENGTH) {
         const cells: [number, number][] = [];
         for (let i = 0; i < length; i++) cells.push([row + i, col]);
-        const score = SYMBOL_VALUES[symbol] * length * getLengthMultiplier(length);
+        let multiplier = getLengthMultiplier(length);
+        if (length >= 4 && hasRelic('comboKing')) multiplier += 1;
+        let score = SYMBOL_VALUES[symbol] * length * multiplier;
+        if (symbol === 'seven' && hasRelic('lucky7s')) score *= 2;
         matches.push({ cells, symbol, length, score });
       }
       row += length;
@@ -1021,6 +1028,13 @@ const ALL_RELICS: Relic[] = [
   { id: 'overflow', name: 'Overflow', description: 'Excess score = bonus coins', emoji: '\uD83D\uDCC8', category: 'defensive' },
 ];
 
+// TODO: Wildcard, Rotate Free, Pathfinder — relic effects not yet implemented (complex logic, follow-up task)
+
+/** Check if the player currently owns a relic by id. Safe to call from any function at runtime. */
+function hasRelic(id: string): boolean {
+  return useRunStore.getState().relics.some(r => r.id === id);
+}
+
 // =============================================================================
 // SHOP ITEM GENERATION
 // =============================================================================
@@ -1133,11 +1147,12 @@ const useRunStore = create<RunState>((set, get) => ({
   },
 
   startLevel: () => {
-    const { currentLevel, bonusRespins, hasEntryUnlock } = get();
+    const { currentLevel, bonusRespins, hasEntryUnlock, relics } = get();
     const baseConfig = LEVEL_CONFIGS[currentLevel - 1];
+    const extraSpinRelics = relics.filter(r => r.id === 'extraSpin').length;
     const config = {
       ...baseConfig,
-      respins: baseConfig.respins + (bonusRespins || 0),
+      respins: baseConfig.respins + (bonusRespins || 0) + extraSpinRelics,
       entrySpotCount: hasEntryUnlock ? 4 : baseConfig.entrySpotCount,
     };
     useGameStore.getState().resetGame(config);
@@ -1148,9 +1163,11 @@ const useRunStore = create<RunState>((set, get) => ({
   completeLevel: (score: number, threshold: number, respinsLeft: number) => {
     const { relics } = get();
     const hasGreed = relics.some(r => r.id === 'greed');
+    const hasOverflow = relics.some(r => r.id === 'overflow');
     const surplus = Math.max(0, score - threshold);
+    const adjustedSurplus = hasOverflow ? surplus * 2 : surplus;
     const respinBonus = respinsLeft * 200;
-    const baseCoins = 50 + surplus + respinBonus;
+    const baseCoins = 50 + adjustedSurplus + respinBonus;
     const earnedCoins = hasGreed ? Math.floor(baseCoins * 1.5) : baseCoins;
 
     // Generate 3 relic choices (ones player doesn't own)
@@ -2365,6 +2382,19 @@ function PlayingScreen() {
                         </Text>
                         <Text style={styles.previewSymbol}>
                           {SYMBOL_DISPLAY[tileQueue[0].symbolB]}
+                        </Text>
+                      </View>
+                    </View>
+                  )}
+                  {placementMode === 'placed' && hasRelic('crystalBall') && tileQueue.length > 1 && (
+                    <View style={styles.tilePreview}>
+                      <Text style={styles.previewLabel}>After next:</Text>
+                      <View style={styles.tilePreviewBox}>
+                        <Text style={styles.previewSymbol}>
+                          {SYMBOL_DISPLAY[tileQueue[1].symbolA]}
+                        </Text>
+                        <Text style={styles.previewSymbol}>
+                          {SYMBOL_DISPLAY[tileQueue[1].symbolB]}
                         </Text>
                       </View>
                     </View>
