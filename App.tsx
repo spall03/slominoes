@@ -412,11 +412,26 @@ const useGameStore = create<GameState>((set, get) => ({
   startPlacement: (row: number, col: number) => {
     const { phase, currentTile, rotation, grid, reachableCells } = get();
     if (phase !== 'placing' || !currentTile) return;
-    if (!canPlaceTileWithEntry(grid, row, col, rotation, reachableCells)) return;
+
+    // Try current rotation first, then others
+    let useRotation: Rotation | null = null;
+    if (canPlaceTileWithEntry(grid, row, col, rotation, reachableCells)) {
+      useRotation = rotation;
+    } else {
+      for (let i = 1; i <= 3; i++) {
+        const tryRot = ((rotation + i) % 4) as Rotation;
+        if (canPlaceTileWithEntry(grid, row, col, tryRot, reachableCells)) {
+          useRotation = tryRot;
+          break;
+        }
+      }
+    }
+    if (useRotation === null) return;
 
     set({
       placementMode: 'placed',
       placedPosition: { row, col },
+      rotation: useRotation,
     });
   },
 
@@ -972,15 +987,17 @@ function GestureGrid() {
   useEffect(() => {
     if (Platform.OS !== 'web') return;
 
-    const findFirstValidCell = (grid: Grid, rotation: Rotation, reachable: Set<string> | null): { row: number; col: number } | null => {
+    const findFirstValidCell = (grid: Grid, reachable: Set<string> | null): { row: number; col: number } | null => {
       if (!reachable) return null;
-      // Start from center, spiral outward
+      // Start from center, spiral outward — any rotation counts (startPlacement auto-rotates)
       const center = Math.floor(BOARD_SIZE / 2);
       for (let dist = 0; dist < BOARD_SIZE; dist++) {
         for (let row = center - dist; row <= center + dist; row++) {
           for (let col = center - dist; col <= center + dist; col++) {
             if (row < 0 || row >= BOARD_SIZE || col < 0 || col >= BOARD_SIZE) continue;
-            if (canPlaceTileWithEntry(grid, row, col, rotation, reachable)) return { row, col };
+            for (let rot = 0; rot < 4; rot++) {
+              if (canPlaceTileWithEntry(grid, row, col, rot as Rotation, reachable)) return { row, col };
+            }
           }
         }
       }
@@ -1018,7 +1035,7 @@ function GestureGrid() {
           case ' ':
             e.preventDefault();
             {
-              const cell = findFirstValidCell(state.grid, state.rotation, state.reachableCells);
+              const cell = findFirstValidCell(state.grid, state.reachableCells);
               if (cell) state.startPlacement(cell.row, cell.col);
             }
             break;
@@ -1115,8 +1132,11 @@ function GestureGrid() {
       if (!cell) return;
 
       if (placementMode === 'idle') {
-        // First tap - place tile
-        if (canPlaceTileWithEntry(grid, cell.row, cell.col, rotation, reachableCells)) {
+        // First tap - place tile (startPlacement auto-rotates if needed)
+        const anyRotFits = [0, 1, 2, 3].some(r =>
+          canPlaceTileWithEntry(grid, cell.row, cell.col, r as Rotation, reachableCells)
+        );
+        if (anyRotFits) {
           Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
           startPlacement(cell.row, cell.col);
         }
