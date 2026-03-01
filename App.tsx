@@ -8,6 +8,7 @@ import {
   Animated,
   Dimensions,
   Platform,
+  ScrollView,
 } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { create } from 'zustand';
@@ -55,11 +56,227 @@ const ENTRY_SPOTS: EntrySpot[] = [
   // { id: 3, label: 'Right', cells: [[3, 7], [4, 7]], arrowDirection: 'left' },
 ];
 
+function getEntrySpots(count: number, wide: boolean = false): EntrySpot[] {
+  const all: EntrySpot[] = [
+    { id: 0, label: 'Top', cells: wide ? [[0, 2], [0, 3], [0, 4]] : [[0, 3], [0, 4]], arrowDirection: 'down' },
+    { id: 1, label: 'Bottom', cells: wide ? [[7, 2], [7, 3], [7, 4]] : [[7, 3], [7, 4]], arrowDirection: 'up' },
+    { id: 2, label: 'Left', cells: wide ? [[2, 0], [3, 0], [4, 0]] : [[3, 0], [4, 0]], arrowDirection: 'right' },
+    { id: 3, label: 'Right', cells: wide ? [[2, 7], [3, 7], [4, 7]] : [[3, 7], [4, 7]], arrowDirection: 'left' },
+  ];
+  if (count <= 1) return [all[0]];
+  if (count === 2) return [all[0], all[1]];
+  return all;
+}
+
+// =============================================================================
+// LEVEL CONFIGS
+// =============================================================================
+
+interface ObstacleCell {
+  row: number;
+  col: number;
+  symbol: Symbol | 'wall';
+}
+
+interface LevelConfig {
+  level: number;
+  threshold: number;
+  respins: number;
+  tilesPerLevel: number;
+  symbolCount: number;
+  obstacles: ObstacleCell[];
+  entrySpotCount: number;
+  boardMask: boolean[][] | null;
+}
+
+const LEVEL_CONFIGS: LevelConfig[] = [
+  // Level 1 — gentle intro, lower threshold, full board
+  {
+    level: 1,
+    threshold: 2500,
+    respins: 4,
+    tilesPerLevel: 15,
+    symbolCount: 5,
+    obstacles: [],
+    entrySpotCount: 2,
+    boardMask: null,
+  },
+  // Level 2 — introduce walls
+  {
+    level: 2,
+    threshold: 3000,
+    respins: 4,
+    tilesPerLevel: 15,
+    symbolCount: 5,
+    obstacles: [
+      { row: 3, col: 2, symbol: 'wall' },
+      { row: 4, col: 5, symbol: 'wall' },
+    ],
+    entrySpotCount: 2,
+    boardMask: null,
+  },
+  // Level 3 — corner-ish walls
+  {
+    level: 3,
+    threshold: 3500,
+    respins: 4,
+    tilesPerLevel: 15,
+    symbolCount: 5,
+    obstacles: [
+      { row: 1, col: 1, symbol: 'wall' },
+      { row: 1, col: 6, symbol: 'wall' },
+      { row: 6, col: 1, symbol: 'wall' },
+      { row: 6, col: 6, symbol: 'wall' },
+    ],
+    entrySpotCount: 2,
+    boardMask: null,
+  },
+  // Level 4 — corners + center, fewer respins, more symbols
+  {
+    level: 4,
+    threshold: 4000,
+    respins: 3,
+    tilesPerLevel: 15,
+    symbolCount: 6,
+    obstacles: [
+      { row: 1, col: 1, symbol: 'wall' },
+      { row: 1, col: 6, symbol: 'wall' },
+      { row: 6, col: 1, symbol: 'wall' },
+      { row: 6, col: 6, symbol: 'wall' },
+      { row: 3, col: 3, symbol: 'wall' },
+      { row: 4, col: 4, symbol: 'wall' },
+    ],
+    entrySpotCount: 2,
+    boardMask: null,
+  },
+  // Level 5 — scattered walls
+  {
+    level: 5,
+    threshold: 4500,
+    respins: 3,
+    tilesPerLevel: 15,
+    symbolCount: 6,
+    obstacles: [
+      { row: 0, col: 1, symbol: 'wall' },
+      { row: 1, col: 5, symbol: 'wall' },
+      { row: 2, col: 2, symbol: 'wall' },
+      { row: 3, col: 6, symbol: 'wall' },
+      { row: 4, col: 1, symbol: 'wall' },
+      { row: 5, col: 5, symbol: 'wall' },
+      { row: 6, col: 2, symbol: 'wall' },
+      { row: 7, col: 6, symbol: 'wall' },
+    ],
+    entrySpotCount: 2,
+    boardMask: null,
+  },
+  // Level 6 — cross-shaped board, no obstacles
+  {
+    level: 6,
+    threshold: 5000,
+    respins: 3,
+    tilesPerLevel: 15,
+    symbolCount: 6,
+    obstacles: [],
+    entrySpotCount: 2,
+    boardMask: (() => {
+      const mask = Array.from({ length: 8 }, () => Array(8).fill(true) as boolean[]);
+      // Cut 3 cells from each corner
+      // Top-left
+      mask[0][0] = false; mask[0][1] = false; mask[1][0] = false;
+      // Top-right
+      mask[0][6] = false; mask[0][7] = false; mask[1][7] = false;
+      // Bottom-left
+      mask[6][0] = false; mask[7][0] = false; mask[7][1] = false;
+      // Bottom-right
+      mask[6][7] = false; mask[7][6] = false; mask[7][7] = false;
+      return mask;
+    })(),
+  },
+  // Level 7 — scattered walls, more symbols, fewer respins
+  {
+    level: 7,
+    threshold: 6000,
+    respins: 2,
+    tilesPerLevel: 15,
+    symbolCount: 7,
+    obstacles: [
+      { row: 0, col: 2, symbol: 'wall' },
+      { row: 1, col: 5, symbol: 'wall' },
+      { row: 2, col: 0, symbol: 'wall' },
+      { row: 2, col: 7, symbol: 'wall' },
+      { row: 3, col: 3, symbol: 'wall' },
+      { row: 4, col: 4, symbol: 'wall' },
+      { row: 5, col: 1, symbol: 'wall' },
+      { row: 5, col: 6, symbol: 'wall' },
+      { row: 6, col: 3, symbol: 'wall' },
+      { row: 7, col: 5, symbol: 'wall' },
+    ],
+    entrySpotCount: 2,
+    boardMask: null,
+  },
+  // Level 8 — L-shaped board (top-right quadrant cut), single entry
+  {
+    level: 8,
+    threshold: 7000,
+    respins: 2,
+    tilesPerLevel: 15,
+    symbolCount: 7,
+    obstacles: [],
+    entrySpotCount: 1,
+    boardMask: (() => {
+      const mask = Array.from({ length: 8 }, () => Array(8).fill(true) as boolean[]);
+      // Block top-right quadrant: rows 0-3, cols 4-7
+      for (let r = 0; r < 4; r++) {
+        for (let c = 4; c < 8; c++) {
+          mask[r][c] = false;
+        }
+      }
+      return mask;
+    })(),
+  },
+  // Level 9 — full board with 4 walls, tough threshold
+  {
+    level: 9,
+    threshold: 8000,
+    respins: 2,
+    tilesPerLevel: 15,
+    symbolCount: 7,
+    obstacles: [
+      { row: 2, col: 2, symbol: 'wall' },
+      { row: 2, col: 5, symbol: 'wall' },
+      { row: 5, col: 2, symbol: 'wall' },
+      { row: 5, col: 5, symbol: 'wall' },
+    ],
+    entrySpotCount: 2,
+    boardMask: null,
+  },
+  // Level 10 — final gauntlet: corners + center block, single entry
+  {
+    level: 10,
+    threshold: 9500,
+    respins: 2,
+    tilesPerLevel: 15,
+    symbolCount: 7,
+    obstacles: [
+      { row: 1, col: 1, symbol: 'wall' },
+      { row: 1, col: 6, symbol: 'wall' },
+      { row: 6, col: 1, symbol: 'wall' },
+      { row: 6, col: 6, symbol: 'wall' },
+      { row: 3, col: 3, symbol: 'wall' },
+      { row: 3, col: 4, symbol: 'wall' },
+      { row: 4, col: 3, symbol: 'wall' },
+      { row: 4, col: 4, symbol: 'wall' },
+    ],
+    entrySpotCount: 1,
+    boardMask: null,
+  },
+];
+
 // =============================================================================
 // SYMBOLS
 // =============================================================================
 
-type Symbol = 'cherry' | 'lemon' | 'bar' | 'bell' | 'seven';
+type Symbol = 'cherry' | 'lemon' | 'bar' | 'bell' | 'seven' | 'wall';
 
 const SYMBOLS: Symbol[] = ['cherry', 'lemon', 'bar', 'bell', 'seven'];
 
@@ -69,6 +286,7 @@ const SYMBOL_VALUES: Record<Symbol, number> = {
   bar: 40,
   bell: 80,
   seven: 150,
+  wall: 0,
 };
 
 const SYMBOL_DISPLAY: Record<Symbol, string> = {
@@ -77,10 +295,12 @@ const SYMBOL_DISPLAY: Record<Symbol, string> = {
   bar: '🎰',
   bell: '🔔',
   seven: '7️⃣',
+  wall: '🧱',
 };
 
-function getRandomSymbol(): Symbol {
-  return SYMBOLS[Math.floor(Math.random() * SYMBOLS.length)];
+function getRandomSymbol(symbolCount: number = SYMBOLS.length): Symbol {
+  const count = Math.min(symbolCount, SYMBOLS.length);
+  return SYMBOLS[Math.floor(Math.random() * count)];
 }
 
 // =============================================================================
@@ -93,12 +313,14 @@ interface Tile {
   symbolB: Symbol;
 }
 
-function generateTile(id: string): Tile {
-  return { id, symbolA: getRandomSymbol(), symbolB: getRandomSymbol() };
+function generateTile(id: string, symbolCount: number = SYMBOLS.length): Tile {
+  return { id, symbolA: getRandomSymbol(symbolCount), symbolB: getRandomSymbol(symbolCount) };
 }
 
-function generateTileQueue(): Tile[] {
-  return Array.from({ length: TILES_PER_LEVEL }, (_, i) => generateTile(`tile-${i}`));
+function generateTileQueue(tilesPerLevel: number = TILES_PER_LEVEL, symbolCount: number = SYMBOLS.length): Tile[] {
+  return Array.from({ length: tilesPerLevel }, (_, i) =>
+    generateTile(`tile-${i}`, symbolCount)
+  );
 }
 
 // =============================================================================
@@ -113,6 +335,32 @@ function createEmptyGrid(): Grid {
 
 function cloneGrid(grid: Grid): Grid {
   return grid.map(row => [...row]);
+}
+
+function createGridFromConfig(config: LevelConfig): Grid {
+  const grid = createEmptyGrid();
+
+  // Apply board mask
+  if (config.boardMask) {
+    for (let r = 0; r < BOARD_SIZE; r++) {
+      for (let c = 0; c < BOARD_SIZE; c++) {
+        if (!config.boardMask[r][c]) {
+          grid[r][c] = 'wall';
+        }
+      }
+    }
+  }
+
+  // Place obstacles
+  for (const obs of config.obstacles) {
+    if (obs.symbol === 'wall') {
+      grid[obs.row][obs.col] = 'wall';
+    } else {
+      grid[obs.row][obs.col] = obs.symbol;
+    }
+  }
+
+  return grid;
 }
 
 // =============================================================================
@@ -176,8 +424,8 @@ function canPlaceTileWithEntry(
 }
 
 // Check if any entry spot has valid placements on the grid
-function anyEntryHasValidPlacement(grid: Grid): boolean {
-  for (const entry of ENTRY_SPOTS) {
+function anyEntryHasValidPlacement(grid: Grid, entrySpots: EntrySpot[]): boolean {
+  for (const entry of entrySpots) {
     const reachable = computeReachableCells(grid, entry);
     if (reachable.size < 2) continue;
     // Check if any placement works in any rotation
@@ -234,7 +482,7 @@ function findMatches(grid: Grid): Match[] {
     let col = 0;
     while (col < BOARD_SIZE) {
       const symbol = grid[row][col];
-      if (symbol === null) { col++; continue; }
+      if (symbol === null || symbol === 'wall') { col++; continue; }
 
       let length = 1;
       while (col + length < BOARD_SIZE && grid[row][col + length] === symbol) {
@@ -244,7 +492,10 @@ function findMatches(grid: Grid): Match[] {
       if (length >= MIN_MATCH_LENGTH) {
         const cells: [number, number][] = [];
         for (let i = 0; i < length; i++) cells.push([row, col + i]);
-        const score = SYMBOL_VALUES[symbol] * length * getLengthMultiplier(length);
+        let multiplier = getLengthMultiplier(length);
+        if (length >= 4 && hasRelic('comboKing')) multiplier += 1;
+        let score = SYMBOL_VALUES[symbol] * length * multiplier;
+        if (symbol === 'seven' && hasRelic('lucky7s')) score *= 2;
         matches.push({ cells, symbol, length, score });
       }
       col += length;
@@ -256,7 +507,7 @@ function findMatches(grid: Grid): Match[] {
     let row = 0;
     while (row < BOARD_SIZE) {
       const symbol = grid[row][col];
-      if (symbol === null) { row++; continue; }
+      if (symbol === null || symbol === 'wall') { row++; continue; }
 
       let length = 1;
       while (row + length < BOARD_SIZE && grid[row + length][col] === symbol) {
@@ -266,7 +517,10 @@ function findMatches(grid: Grid): Match[] {
       if (length >= MIN_MATCH_LENGTH) {
         const cells: [number, number][] = [];
         for (let i = 0; i < length; i++) cells.push([row + i, col]);
-        const score = SYMBOL_VALUES[symbol] * length * getLengthMultiplier(length);
+        let multiplier = getLengthMultiplier(length);
+        if (length >= 4 && hasRelic('comboKing')) multiplier += 1;
+        let score = SYMBOL_VALUES[symbol] * length * multiplier;
+        if (symbol === 'seven' && hasRelic('lucky7s')) score *= 2;
         matches.push({ cells, symbol, length, score });
       }
       row += length;
@@ -302,6 +556,7 @@ interface ScorePopup {
 }
 
 interface GameState {
+  levelConfig: LevelConfig;
   grid: Grid;
   tileQueue: Tile[];
   currentTile: Tile | null;
@@ -334,7 +589,7 @@ interface GameState {
   clearMatchAnimation: () => void;
   removeScorePopup: (id: string) => void;
   respinLine: (type: 'row' | 'col', index: number) => void;
-  resetGame: () => void;
+  resetGame: (config?: LevelConfig, wideEntry?: boolean) => void;
 }
 
 function canPlaceTile(
@@ -356,14 +611,16 @@ function canPlaceTile(
   return true;
 }
 
-function createInitialState() {
-  const queue = generateTileQueue();
+function createInitialState(config: LevelConfig = LEVEL_CONFIGS[0], wideEntry: boolean = false) {
+  const queue = generateTileQueue(config.tilesPerLevel, config.symbolCount);
+  const spots = getEntrySpots(config.entrySpotCount, wideEntry);
   return {
-    grid: createEmptyGrid(),
+    levelConfig: config,
+    grid: createGridFromConfig(config),
     tileQueue: queue.slice(1),
     currentTile: queue[0] ?? null,
     rotation: 0 as Rotation,
-    respinsRemaining: RESPINS_PER_LEVEL,
+    respinsRemaining: config.respins,
     score: 0,
     scoreBeforeRespins: 0,
     phase: 'placing' as GamePhase,
@@ -375,7 +632,7 @@ function createInitialState() {
     highlightColor: 'gold' as 'gold' | 'red' | 'blue',
     scorePopups: [] as ScorePopup[],
     pendingPhase2: null as { cells: Set<string>; popups: ScorePopup[] } | null,
-    entrySpots: ENTRY_SPOTS,
+    entrySpots: spots,
     selectedEntry: null as number | null,
     reachableCells: null as Set<string> | null,
   };
@@ -385,9 +642,9 @@ const useGameStore = create<GameState>((set, get) => ({
   ...createInitialState(),
 
   selectEntry: (index: number) => {
-    const { phase, grid } = get();
+    const { phase, grid, entrySpots } = get();
     if (phase !== 'placing') return;
-    const entry = ENTRY_SPOTS[index];
+    const entry = entrySpots[index];
     if (!entry) return;
     const reachable = computeReachableCells(grid, entry);
     set({
@@ -496,7 +753,7 @@ const useGameStore = create<GameState>((set, get) => ({
       });
     } else {
       // Check if any entry has valid placements on the new grid
-      const stuck = !anyEntryHasValidPlacement(newGrid);
+      const stuck = !anyEntryHasValidPlacement(newGrid, get().entrySpots);
       if (stuck) {
         // Skip to respinning early
         set({
@@ -634,14 +891,14 @@ const useGameStore = create<GameState>((set, get) => ({
 
     if (type === 'row') {
       for (let col = 0; col < BOARD_SIZE; col++) {
-        if (newGrid[index][col] !== null) {
-          newGrid[index][col] = getRandomSymbol();
+        if (newGrid[index][col] !== null && newGrid[index][col] !== 'wall') {
+          newGrid[index][col] = getRandomSymbol(get().levelConfig.symbolCount);
         }
       }
     } else {
       for (let row = 0; row < BOARD_SIZE; row++) {
-        if (newGrid[row][index] !== null) {
-          newGrid[row][index] = getRandomSymbol();
+        if (newGrid[row][index] !== null && newGrid[row][index] !== 'wall') {
+          newGrid[row][index] = getRandomSymbol(get().levelConfig.symbolCount);
         }
       }
     }
@@ -709,9 +966,16 @@ const useGameStore = create<GameState>((set, get) => ({
         respinsRemaining: 0,
         score: newScore,
         phase: 'ended',
-        result: newScore >= WIN_THRESHOLD ? 'win' : 'lose',
+        result: newScore >= get().levelConfig.threshold ? 'win' : 'lose',
         ...animState,
       });
+      // Notify run store
+      const finalState = get();
+      if (finalState.result === 'win') {
+        useRunStore.getState().completeLevel(finalState.score, finalState.levelConfig.threshold, 0);
+      } else {
+        useRunStore.getState().failLevel(finalState.score);
+      }
     } else {
       set({
         grid: newGrid,
@@ -722,7 +986,270 @@ const useGameStore = create<GameState>((set, get) => ({
     }
   },
 
-  resetGame: () => set(createInitialState()),
+  resetGame: (config?: LevelConfig, wideEntry?: boolean) => set(createInitialState(config ?? LEVEL_CONFIGS[0], wideEntry ?? false)),
+}));
+
+// =============================================================================
+// RUN STATE (ROGUELIKE META-LAYER)
+// =============================================================================
+
+type RunPhase = 'title' | 'levelPreview' | 'playing' | 'reward' | 'shop' | 'victory' | 'gameOver';
+
+interface Relic {
+  id: string;
+  name: string;
+  description: string;
+  emoji: string;
+  category: 'scoring' | 'resource' | 'placement' | 'defensive';
+}
+
+interface ShopItem {
+  id: string;
+  name: string;
+  description: string;
+  emoji: string;
+  cost: number;
+  type: 'relic' | 'respins' | 'intel' | 'tileReroll' | 'entryUnlock';
+  relic?: Relic;
+}
+
+const ALL_RELICS: Relic[] = [
+  { id: 'lucky7s', name: 'Lucky 7s', description: 'Seven symbols score 2x', emoji: '7\uFE0F\u20E3', category: 'scoring' },
+  { id: 'comboKing', name: 'Combo King', description: '4+ matches get extra multiplier', emoji: '\uD83D\uDC51', category: 'scoring' },
+  { id: 'greed', name: 'Greed', description: 'Surplus coins x1.5', emoji: '\uD83D\uDCB0', category: 'scoring' },
+  { id: 'extraSpin', name: 'Extra Spin', description: '+1 respin per level', emoji: '\uD83D\uDD04', category: 'resource' },
+  { id: 'crystalBall', name: 'Crystal Ball', description: 'See 2 tiles ahead', emoji: '\uD83D\uDD2E', category: 'resource' },
+  { id: 'wideEntry', name: 'Wide Entry', description: 'Entry spots span 3 columns', emoji: '\uD83D\uDEAA', category: 'resource' },
+  { id: 'wildcard', name: 'Wildcard', description: 'Every 5th tile has a wild symbol', emoji: '\uD83C\uDCCF', category: 'placement' },
+  { id: 'rotateFree', name: 'Rotate Free', description: 'Auto-rotate to best fit', emoji: '\uD83D\uDD03', category: 'placement' },
+  { id: 'pathfinder', name: 'Pathfinder', description: 'BFS passes through 1 filled cell', emoji: '\uD83E\uDDED', category: 'placement' },
+  { id: 'safetyNet', name: 'Safety Net', description: 'Survive one failed level', emoji: '\uD83D\uDEE1\uFE0F', category: 'defensive' },
+  { id: 'overflow', name: 'Overflow', description: 'Excess score = bonus coins', emoji: '\uD83D\uDCC8', category: 'defensive' },
+];
+
+// TODO: Wildcard, Rotate Free, Pathfinder — relic effects not yet implemented (complex logic, follow-up task)
+
+/** Check if the player currently owns a relic by id. Safe to call from any function at runtime. */
+function hasRelic(id: string): boolean {
+  return useRunStore.getState().relics.some(r => r.id === id);
+}
+
+// =============================================================================
+// SHOP ITEM GENERATION
+// =============================================================================
+
+function generateShopItems(shopVisit: number, ownedRelicIds: Set<string>): ShopItem[] {
+  const priceScale = 1 + (shopVisit - 1) * 0.5; // visits 1, 2, 3 → 1x, 1.5x, 2x
+  const items: ShopItem[] = [];
+
+  // Always offer extra respins
+  items.push({
+    id: 'shop-respins',
+    name: 'Extra Respins',
+    description: '+2 respins next level',
+    emoji: '🔄',
+    cost: Math.round(300 * priceScale),
+    type: 'respins',
+  });
+
+  // Offer a relic if available
+  const availableRelics = ALL_RELICS.filter(r => !ownedRelicIds.has(r.id));
+  if (availableRelics.length > 0) {
+    const relic = availableRelics[Math.floor(Math.random() * availableRelics.length)];
+    items.push({
+      id: `shop-relic-${relic.id}`,
+      name: relic.name,
+      description: relic.description,
+      emoji: relic.emoji,
+      cost: Math.round(1000 * priceScale),
+      type: 'relic',
+      relic,
+    });
+  }
+
+  // Tile reroll
+  items.push({
+    id: 'shop-reroll',
+    name: 'Tile Reroll',
+    description: 'Discard & redraw tile once next level',
+    emoji: '🎲',
+    cost: Math.round(400 * priceScale),
+    type: 'tileReroll',
+  });
+
+  // Entry unlock
+  items.push({
+    id: 'shop-entry',
+    name: 'Extra Entries',
+    description: 'Add left/right entry points next level',
+    emoji: '🚪',
+    cost: Math.round(500 * priceScale),
+    type: 'entryUnlock',
+  });
+
+  return items;
+}
+
+interface RunState {
+  runPhase: RunPhase;
+  currentLevel: number;
+  coins: number;
+  totalCoinsEarned: number;
+  relics: Relic[];
+  levelScore: number;
+  levelRespinsLeft: number;
+  rewardChoices: Relic[];
+  shopItems: ShopItem[];
+  bonusRespins: number;
+  hasTileReroll: boolean;
+  hasEntryUnlock: boolean;
+
+  startRun: () => void;
+  startLevel: () => void;
+  completeLevel: (score: number, threshold: number, respinsLeft: number) => void;
+  failLevel: (score: number) => void;
+  pickRelic: (relic: Relic) => void;
+  buyShopItem: (itemId: string) => void;
+  skipShop: () => void;
+  advanceFromReward: () => void;
+}
+
+const useRunStore = create<RunState>((set, get) => ({
+  runPhase: 'title',
+  currentLevel: 1,
+  coins: 0,
+  totalCoinsEarned: 0,
+  relics: [],
+  levelScore: 0,
+  levelRespinsLeft: 0,
+  rewardChoices: [],
+  shopItems: [],
+  bonusRespins: 0,
+  hasTileReroll: false,
+  hasEntryUnlock: false,
+
+  startRun: () => {
+    set({
+      runPhase: 'levelPreview',
+      currentLevel: 1,
+      coins: 0,
+      totalCoinsEarned: 0,
+      relics: [],
+      levelScore: 0,
+      levelRespinsLeft: 0,
+      rewardChoices: [],
+      shopItems: [],
+      bonusRespins: 0,
+      hasTileReroll: false,
+      hasEntryUnlock: false,
+    });
+  },
+
+  startLevel: () => {
+    const { currentLevel, bonusRespins, hasEntryUnlock, relics } = get();
+    const baseConfig = LEVEL_CONFIGS[currentLevel - 1];
+    const extraSpinRelics = relics.filter(r => r.id === 'extraSpin').length;
+    const config = {
+      ...baseConfig,
+      respins: baseConfig.respins + (bonusRespins || 0) + extraSpinRelics,
+      entrySpotCount: hasEntryUnlock ? 4 : baseConfig.entrySpotCount,
+    };
+    const wideEntry = relics.some(r => r.id === 'wideEntry');
+    useGameStore.getState().resetGame(config, wideEntry);
+    // Reset single-use shop bonuses
+    set({ runPhase: 'playing', bonusRespins: 0, hasTileReroll: false, hasEntryUnlock: false });
+  },
+
+  completeLevel: (score: number, threshold: number, respinsLeft: number) => {
+    const { relics } = get();
+    const hasGreed = relics.some(r => r.id === 'greed');
+    const hasOverflow = relics.some(r => r.id === 'overflow');
+    const surplus = Math.max(0, score - threshold);
+    const adjustedSurplus = hasOverflow ? surplus * 2 : surplus;
+    const respinBonus = respinsLeft * 200;
+    const baseCoins = 50 + adjustedSurplus + respinBonus;
+    const earnedCoins = hasGreed ? Math.floor(baseCoins * 1.5) : baseCoins;
+
+    // Generate 3 relic choices (ones player doesn't own)
+    const owned = new Set(relics.map(r => r.id));
+    const available = ALL_RELICS.filter(r => !owned.has(r.id));
+    const shuffled = [...available].sort(() => Math.random() - 0.5);
+    const choices = shuffled.slice(0, 3);
+
+    set(state => ({
+      runPhase: 'reward',
+      coins: state.coins + earnedCoins,
+      totalCoinsEarned: state.totalCoinsEarned + earnedCoins,
+      levelScore: score,
+      levelRespinsLeft: respinsLeft,
+      rewardChoices: choices,
+    }));
+  },
+
+  failLevel: (score: number) => {
+    const { relics } = get();
+    const safetyNetIndex = relics.findIndex(r => r.id === 'safetyNet');
+    if (safetyNetIndex >= 0) {
+      // Consume safety net, retry level
+      const newRelics = [...relics];
+      newRelics.splice(safetyNetIndex, 1);
+      set({ relics: newRelics, runPhase: 'levelPreview' });
+    } else {
+      set({ runPhase: 'gameOver', levelScore: score });
+    }
+  },
+
+  pickRelic: (relic: Relic) => {
+    set(state => ({ relics: [...state.relics, relic] }));
+    get().advanceFromReward();
+  },
+
+  advanceFromReward: () => {
+    const { currentLevel, relics } = get();
+    if (currentLevel >= 10) {
+      set({ runPhase: 'victory' });
+      return;
+    }
+    // Shop after levels 3, 6, 9
+    if (currentLevel === 3 || currentLevel === 6 || currentLevel === 9) {
+      const shopVisit = Math.floor(currentLevel / 3); // 1, 2, 3
+      const ownedRelicIds = new Set(relics.map(r => r.id));
+      const items = generateShopItems(shopVisit, ownedRelicIds);
+      set({ runPhase: 'shop', shopItems: items });
+    } else {
+      set({ currentLevel: currentLevel + 1, runPhase: 'levelPreview' });
+    }
+  },
+
+  buyShopItem: (itemId: string) => {
+    const { shopItems, coins } = get();
+    const item = shopItems.find(i => i.id === itemId);
+    if (!item || coins < item.cost) return;
+
+    const updates: Partial<RunState> = {
+      coins: coins - item.cost,
+      shopItems: shopItems.filter(i => i.id !== itemId),
+    };
+
+    if (item.type === 'relic' && item.relic) {
+      updates.relics = [...get().relics, item.relic];
+    } else if (item.type === 'respins') {
+      updates.bonusRespins = (get().bonusRespins || 0) + 2;
+    } else if (item.type === 'tileReroll') {
+      updates.hasTileReroll = true;
+    } else if (item.type === 'entryUnlock') {
+      updates.hasEntryUnlock = true;
+    }
+
+    set(updates as any);
+  },
+
+  skipShop: () => {
+    set(state => ({
+      currentLevel: state.currentLevel + 1,
+      runPhase: 'levelPreview',
+    }));
+  },
 }));
 
 // =============================================================================
@@ -806,6 +1333,7 @@ function AnimatedCell({
       style={[
         styles.cell,
         !isEmpty && !isPreview && styles.filledCell,
+        symbol === 'wall' && styles.wallCell,
         isPreview && !isPlaced && styles.previewCell,
         isPreview && isPlaced && !isHoldReady && styles.placedCell,
         isPreview && isPlaced && isHoldReady && styles.holdReadyCell,
@@ -918,11 +1446,14 @@ function EntrySpotButton({
   isBlocked: boolean;
   onPress: () => void;
 }) {
-  const arrow = entry.arrowDirection === 'down' ? '▼' : '▲';
+  const arrowMap: Record<string, string> = { down: '▼', up: '▲', right: '▶', left: '◀' };
+  const arrow = arrowMap[entry.arrowDirection] ?? '▼';
+  const isSide = entry.arrowDirection === 'left' || entry.arrowDirection === 'right';
   return (
     <Pressable
       style={[
         styles.entrySpotButton,
+        isSide && styles.entrySpotButtonSide,
         isSelected && styles.entrySpotButtonSelected,
         isBlocked && styles.entrySpotButtonBlocked,
       ]}
@@ -990,7 +1521,9 @@ function GestureGrid() {
     const findFirstValidCell = (grid: Grid, reachable: Set<string> | null, entryIndex: number | null): { row: number; col: number } | null => {
       if (!reachable || entryIndex === null) return null;
       // Start searching from the selected entry's cells, spiral outward
-      const entry = ENTRY_SPOTS[entryIndex];
+      const state = useGameStore.getState();
+      const entry = state.entrySpots[entryIndex];
+      if (!entry) return null;
       const [startRow, startCol] = entry.cells[0];
       for (let dist = 0; dist < BOARD_SIZE; dist++) {
         for (let row = startRow - dist; row <= startRow + dist; row++) {
@@ -1009,29 +1542,27 @@ function GestureGrid() {
       const state = useGameStore.getState();
       if (state.phase !== 'placing' || !state.currentTile) return;
 
-      // No entry selected: 1/2 keys select entry, all other keys ignored
+      // No entry selected: 1-4 keys select entry, all other keys ignored
       if (state.selectedEntry === null) {
-        if (e.key === '1') {
+        const entryKeyMap: Record<string, number> = { '1': 0, '2': 1, '3': 2, '4': 3 };
+        const entryId = entryKeyMap[e.key];
+        if (entryId !== undefined && state.entrySpots.some(s => s.id === entryId)) {
           e.preventDefault();
-          state.selectEntry(0);
-        } else if (e.key === '2') {
-          e.preventDefault();
-          state.selectEntry(1);
+          state.selectEntry(entryId);
         }
         return;
       }
 
       // Entry selected, idle mode
       if (state.placementMode === 'idle') {
+        const entryKeyMap: Record<string, number> = { '1': 0, '2': 1, '3': 2, '4': 3 };
+        const entryId = entryKeyMap[e.key];
+        if (entryId !== undefined && state.entrySpots.some(s => s.id === entryId)) {
+          e.preventDefault();
+          state.selectEntry(entryId);
+          return;
+        }
         switch (e.key) {
-          case '1':
-            e.preventDefault();
-            state.selectEntry(0);
-            break;
-          case '2':
-            e.preventDefault();
-            state.selectEntry(1);
-            break;
           case 'Enter':
           case ' ':
             e.preventDefault();
@@ -1225,6 +1756,10 @@ function GestureGrid() {
     return true;
   }), [grid, entrySpots]);
 
+  const leftEntries = entrySpots.filter(e => e.arrowDirection === 'right');
+  const rightEntries = entrySpots.filter(e => e.arrowDirection === 'left');
+  const hasSideEntries = phase === 'placing' && currentTile && (leftEntries.length > 0 || rightEntries.length > 0);
+
   return (
     <View>
       {/* Top entry spot buttons */}
@@ -1243,48 +1778,78 @@ function GestureGrid() {
             ))}
         </View>
       )}
-      <GestureDetector gesture={composedGesture}>
-        <View style={styles.grid}>
-          {grid.map((row, rowIndex) => (
-            <View key={`row-${rowIndex}`} style={styles.row}>
-              {row.map((cell, colIndex) => {
-                const { isPreview, previewSymbol } = getPreviewInfo(rowIndex, colIndex);
-                const cellKey = `${rowIndex},${colIndex}`;
-                const isMatching = matchingCells.has(cellKey);
-                const isReachable = reachableCells?.has(cellKey) ?? false;
-                const entryCellDir = entryCellMap.get(cellKey) ?? null;
-                return (
-                  <AnimatedCell
-                    key={`cell-${rowIndex}-${colIndex}-${animationKey}`}
-                    symbol={cell}
-                    isEmpty={cell === null}
-                    isPreview={isPreview}
-                    isPlaced={placementMode === 'placed'}
-                    isHoldReady={holdReady}
-                    isMatching={isMatching}
-                    isReachable={isReachable}
-                    isEntryCell={entryCellDir}
-                    highlightColor={isMatching ? highlightColor : undefined}
-                    previewSymbol={previewSymbol}
-                    onMatchAnimationComplete={() => handleMatchAnimationComplete(cellKey)}
-                  />
-                );
-              })}
-            </View>
+      <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+        {/* Left entry spot buttons */}
+        {hasSideEntries && (
+          <View style={styles.entrySpotCol}>
+            {leftEntries.map(entry => (
+              <EntrySpotButton
+                key={entry.id}
+                entry={entry}
+                isSelected={selectedEntry === entry.id}
+                isBlocked={entryBlocked[entry.id]}
+                onPress={() => selectEntry(entry.id)}
+              />
+            ))}
+          </View>
+        )}
+        <GestureDetector gesture={composedGesture}>
+          <View style={styles.grid}>
+            {grid.map((row, rowIndex) => (
+              <View key={`row-${rowIndex}`} style={styles.row}>
+                {row.map((cell, colIndex) => {
+                  const { isPreview, previewSymbol } = getPreviewInfo(rowIndex, colIndex);
+                  const cellKey = `${rowIndex},${colIndex}`;
+                  const isMatching = matchingCells.has(cellKey);
+                  const isReachable = reachableCells?.has(cellKey) ?? false;
+                  const entryCellDir = entryCellMap.get(cellKey) ?? null;
+                  return (
+                    <AnimatedCell
+                      key={`cell-${rowIndex}-${colIndex}-${animationKey}`}
+                      symbol={cell}
+                      isEmpty={cell === null}
+                      isPreview={isPreview}
+                      isPlaced={placementMode === 'placed'}
+                      isHoldReady={holdReady}
+                      isMatching={isMatching}
+                      isReachable={isReachable}
+                      isEntryCell={entryCellDir}
+                      highlightColor={isMatching ? highlightColor : undefined}
+                      previewSymbol={previewSymbol}
+                      onMatchAnimationComplete={() => handleMatchAnimationComplete(cellKey)}
+                    />
+                  );
+                })}
+              </View>
+            ))}
+          {/* Score popups */}
+          {scorePopups.map(popup => (
+            <ScorePopup
+              key={popup.id}
+              score={popup.score}
+              row={popup.row}
+              col={popup.col}
+              color={highlightColor === 'gold' ? '#ffd700' : undefined}
+              onComplete={() => removeScorePopup(popup.id)}
+            />
           ))}
-        {/* Score popups */}
-        {scorePopups.map(popup => (
-          <ScorePopup
-            key={popup.id}
-            score={popup.score}
-            row={popup.row}
-            col={popup.col}
-            color={highlightColor === 'gold' ? '#ffd700' : undefined}
-            onComplete={() => removeScorePopup(popup.id)}
-          />
-        ))}
-        </View>
-      </GestureDetector>
+          </View>
+        </GestureDetector>
+        {/* Right entry spot buttons */}
+        {hasSideEntries && (
+          <View style={styles.entrySpotCol}>
+            {rightEntries.map(entry => (
+              <EntrySpotButton
+                key={entry.id}
+                entry={entry}
+                isSelected={selectedEntry === entry.id}
+                isBlocked={entryBlocked[entry.id]}
+                onPress={() => selectEntry(entry.id)}
+              />
+            ))}
+          </View>
+        )}
+      </View>
       {/* Bottom entry spot buttons */}
       {phase === 'placing' && currentTile && (
         <View style={styles.entrySpotRow}>
@@ -1310,11 +1875,12 @@ function GestureGrid() {
 // =============================================================================
 
 function HelpPanel() {
+  const { levelConfig } = useGameStore();
   return (
     <View style={styles.helpPanel}>
       <Text style={styles.helpHeading}>Goal</Text>
       <Text style={styles.helpBody}>
-        Score {WIN_THRESHOLD}+ points by placing {TILES_PER_LEVEL} domino tiles on an 8x8 grid, then using {RESPINS_PER_LEVEL} respins to improve your matches.
+        Score {levelConfig.threshold}+ points by placing {levelConfig.tilesPerLevel} domino tiles on an 8x8 grid, then using {levelConfig.respins} respins to improve your matches.
       </Text>
 
       <Text style={styles.helpHeading}>Matching</Text>
@@ -1343,14 +1909,321 @@ function HelpPanel() {
 
       <Text style={styles.helpHeading}>Entry Points</Text>
       <Text style={styles.helpBody}>
-        Before placing each tile, choose an entry point (top or bottom arrows). You can only place tiles in empty cells reachable from that entry. Earlier placements may block paths, creating a spatial puzzle.
+        Before placing each tile, choose an entry point. You can only place tiles in empty cells reachable from that entry. Earlier placements may block paths, creating a spatial puzzle. Some levels have side entries too!
       </Text>
 
       <Text style={styles.helpHeading}>Respins</Text>
       <Text style={styles.helpBody}>
-        After all tiles are placed, you get {RESPINS_PER_LEVEL} respins. Each respin re-randomizes every filled cell in a row or column. Respins can create new matches but also break existing ones. Your score is locked to the best total seen — it can never go down.
+        After all tiles are placed, you get {levelConfig.respins} respins. Each respin re-randomizes every filled cell in a row or column. Respins can create new matches but also break existing ones. Your score is locked to the best total seen — it can never go down.
       </Text>
     </View>
+  );
+}
+
+// =============================================================================
+// TITLE SCREEN
+// =============================================================================
+
+function TitleScreen() {
+  return (
+    <GestureHandlerRootView style={styles.container}>
+      <SafeAreaView style={styles.container}>
+        <StatusBar style="light" />
+        <View style={styles.screenContainer}>
+          <Text style={[styles.screenTitle, { fontSize: 48 }]}>Slominoes</Text>
+          <Text style={styles.screenSubtitle}>A Roguelike Puzzle</Text>
+          <Pressable style={styles.startButton} onPress={() => useRunStore.getState().startRun()}>
+            <Text style={styles.startButtonText}>New Run</Text>
+          </Pressable>
+        </View>
+      </SafeAreaView>
+    </GestureHandlerRootView>
+  );
+}
+
+// =============================================================================
+// LEVEL PREVIEW SCREEN
+// =============================================================================
+
+function LevelPreviewScreen() {
+  const { currentLevel, coins, relics } = useRunStore();
+  const config = LEVEL_CONFIGS[currentLevel - 1];
+  const wideEntry = relics.some(r => r.id === 'wideEntry');
+  const entrySpots = getEntrySpots(config.entrySpotCount, wideEntry);
+
+  // Build a set of entry cells for highlighting
+  const entryCellSet = useMemo(() => {
+    const set = new Set<string>();
+    for (const entry of entrySpots) {
+      for (const [r, c] of entry.cells) {
+        set.add(`${r},${c}`);
+      }
+    }
+    return set;
+  }, [entrySpots]);
+
+  // Build wall set from obstacles
+  const wallSet = useMemo(() => {
+    const set = new Set<string>();
+    for (const obs of config.obstacles) {
+      if (obs.symbol === 'wall') set.add(`${obs.row},${obs.col}`);
+    }
+    return set;
+  }, [config.obstacles]);
+
+  return (
+    <GestureHandlerRootView style={styles.container}>
+      <SafeAreaView style={styles.container}>
+        <StatusBar style="light" />
+        <ScrollView contentContainerStyle={styles.screenContainer}>
+          <Text style={styles.screenTitle}>Level {currentLevel}</Text>
+          <View style={styles.statsRow}>
+            <View style={styles.statBadge}>
+              <Text style={styles.statText}>Threshold: {config.threshold}</Text>
+            </View>
+            <View style={styles.statBadge}>
+              <Text style={styles.statText}>Respins: {config.respins}</Text>
+            </View>
+            <View style={styles.statBadge}>
+              <Text style={styles.statText}>Symbols: {config.symbolCount}</Text>
+            </View>
+          </View>
+
+          {/* Mini board preview */}
+          <View style={styles.miniGrid}>
+            {Array.from({ length: BOARD_SIZE }).map((_, row) => (
+              <View key={row} style={styles.miniRow}>
+                {Array.from({ length: BOARD_SIZE }).map((_, col) => {
+                  const key = `${row},${col}`;
+                  const isMasked = config.boardMask ? !config.boardMask[row][col] : false;
+                  const isWall = wallSet.has(key);
+                  const isEntry = entryCellSet.has(key);
+
+                  let cellStyle = styles.miniCellOpen;
+                  if (isMasked) cellStyle = styles.miniCellMasked;
+                  else if (isWall) cellStyle = styles.miniCellWall;
+                  else if (isEntry) cellStyle = styles.miniCellEntry;
+
+                  return <View key={col} style={[styles.miniCell, cellStyle]} />;
+                })}
+              </View>
+            ))}
+          </View>
+
+          {/* Run info */}
+          <Text style={styles.coinText}>Coins: {coins}</Text>
+          {relics.length > 0 && (
+            <View style={styles.relicRow}>
+              {relics.map(r => (
+                <Text key={r.id} style={{ fontSize: 20 }}>{r.emoji}</Text>
+              ))}
+            </View>
+          )}
+
+          <Pressable style={styles.startButton} onPress={() => useRunStore.getState().startLevel()}>
+            <Text style={styles.startButtonText}>Start Level</Text>
+          </Pressable>
+        </ScrollView>
+      </SafeAreaView>
+    </GestureHandlerRootView>
+  );
+}
+
+// =============================================================================
+// REWARD SCREEN
+// =============================================================================
+
+function RewardScreen() {
+  const { currentLevel, levelScore, levelRespinsLeft, rewardChoices, coins, relics } = useRunStore();
+  const config = LEVEL_CONFIGS[currentLevel - 1];
+  const surplus = Math.max(0, levelScore - config.threshold);
+  const respinBonus = levelRespinsLeft * 200;
+  const totalEarned = 50 + surplus + respinBonus;
+
+  return (
+    <GestureHandlerRootView style={styles.container}>
+      <SafeAreaView style={styles.container}>
+        <StatusBar style="light" />
+        <ScrollView contentContainerStyle={styles.screenContainer}>
+          <Text style={styles.screenTitle}>Level {currentLevel} Complete!</Text>
+
+          <Text style={styles.sectionHeading}>Score Breakdown</Text>
+          <View style={styles.breakdownRow}>
+            <Text style={styles.breakdownLabel}>Score</Text>
+            <Text style={styles.breakdownValue}>{levelScore}</Text>
+          </View>
+          <View style={styles.breakdownRow}>
+            <Text style={styles.breakdownLabel}>Threshold</Text>
+            <Text style={styles.breakdownValue}>{config.threshold}</Text>
+          </View>
+          <View style={styles.breakdownRow}>
+            <Text style={styles.breakdownLabel}>Surplus</Text>
+            <Text style={styles.breakdownValue}>+{surplus} coins</Text>
+          </View>
+          <View style={styles.breakdownRow}>
+            <Text style={styles.breakdownLabel}>Unused respins ({levelRespinsLeft} x 200)</Text>
+            <Text style={styles.breakdownValue}>+{respinBonus} coins</Text>
+          </View>
+          <View style={[styles.breakdownRow, { marginTop: 4, borderTopWidth: 1, borderTopColor: '#444', paddingTop: 4 }]}>
+            <Text style={[styles.breakdownLabel, { color: '#ffd700' }]}>Total earned</Text>
+            <Text style={[styles.breakdownValue, { color: '#ffd700' }]}>+{totalEarned} coins</Text>
+          </View>
+
+          {rewardChoices.length > 0 ? (
+            <>
+              <Text style={styles.sectionHeading}>Choose a Relic:</Text>
+              <View style={styles.relicCardsRow}>
+                {rewardChoices.map(relic => (
+                  <Pressable
+                    key={relic.id}
+                    style={styles.relicCard}
+                    onPress={() => useRunStore.getState().pickRelic(relic)}
+                  >
+                    <Text style={styles.relicEmoji}>{relic.emoji}</Text>
+                    <Text style={styles.relicName}>{relic.name}</Text>
+                    <Text style={styles.relicDesc}>{relic.description}</Text>
+                  </Pressable>
+                ))}
+              </View>
+            </>
+          ) : (
+            <>
+              <Text style={[styles.sectionHeading, { marginTop: 24 }]}>All relics collected!</Text>
+              <Pressable style={styles.startButton} onPress={() => useRunStore.getState().advanceFromReward()}>
+                <Text style={styles.startButtonText}>Continue</Text>
+              </Pressable>
+            </>
+          )}
+        </ScrollView>
+      </SafeAreaView>
+    </GestureHandlerRootView>
+  );
+}
+
+// =============================================================================
+// SHOP SCREEN
+// =============================================================================
+
+function ShopScreen() {
+  const { coins, shopItems } = useRunStore();
+
+  return (
+    <GestureHandlerRootView style={styles.container}>
+      <SafeAreaView style={styles.container}>
+        <StatusBar style="light" />
+        <ScrollView contentContainerStyle={styles.screenContainer}>
+          <Text style={styles.screenTitle}>Shop</Text>
+          <Text style={styles.coinText}>{'💰'} {coins} coins</Text>
+
+          <View style={{ marginTop: 16, alignItems: 'center' }}>
+            {shopItems.map(item => {
+              const canAfford = coins >= item.cost;
+              return (
+                <Pressable
+                  key={item.id}
+                  style={[styles.shopItemCard, !canAfford && styles.shopItemDisabled]}
+                  disabled={!canAfford}
+                  onPress={() => useRunStore.getState().buyShopItem(item.id)}
+                >
+                  <Text style={{ fontSize: 28 }}>{item.emoji}</Text>
+                  <View style={styles.shopItemInfo}>
+                    <Text style={styles.shopItemName}>{item.name}</Text>
+                    <Text style={styles.shopItemDesc}>{item.description}</Text>
+                  </View>
+                  <Text style={styles.shopItemCost}>{item.cost}</Text>
+                </Pressable>
+              );
+            })}
+          </View>
+
+          {shopItems.length === 0 && (
+            <Text style={{ color: '#888', marginTop: 16 }}>All items purchased!</Text>
+          )}
+
+          <Pressable
+            style={[styles.startButton, { marginTop: 24 }]}
+            onPress={() => useRunStore.getState().skipShop()}
+          >
+            <Text style={styles.startButtonText}>Continue</Text>
+          </Pressable>
+        </ScrollView>
+      </SafeAreaView>
+    </GestureHandlerRootView>
+  );
+}
+
+// =============================================================================
+// GAME OVER SCREEN
+// =============================================================================
+
+function GameOverScreen() {
+  const { currentLevel, levelScore, relics, totalCoinsEarned } = useRunStore();
+
+  return (
+    <GestureHandlerRootView style={styles.container}>
+      <SafeAreaView style={styles.container}>
+        <StatusBar style="light" />
+        <View style={styles.screenContainer}>
+          <Text style={[styles.screenTitle, { color: '#f44336' }]}>Run Over</Text>
+          <Text style={styles.screenSubtitle}>Reached Level {currentLevel} / 10</Text>
+          <Text style={[styles.statText, { fontSize: 18, marginBottom: 12 }]}>Score: {levelScore}</Text>
+
+          <Text style={styles.sectionHeading}>Relics Collected</Text>
+          {relics.length > 0 ? (
+            <View style={styles.relicRow}>
+              {relics.map(r => (
+                <Text key={r.id} style={{ fontSize: 24 }}>{r.emoji}</Text>
+              ))}
+            </View>
+          ) : (
+            <Text style={{ color: '#888', marginBottom: 8 }}>None</Text>
+          )}
+
+          <Text style={styles.coinText}>Total coins earned: {totalCoinsEarned}</Text>
+
+          <Pressable style={[styles.startButton, { marginTop: 16 }]} onPress={() => useRunStore.getState().startRun()}>
+            <Text style={styles.startButtonText}>Run Again</Text>
+          </Pressable>
+        </View>
+      </SafeAreaView>
+    </GestureHandlerRootView>
+  );
+}
+
+// =============================================================================
+// VICTORY SCREEN
+// =============================================================================
+
+function VictoryScreen() {
+  const { relics, totalCoinsEarned } = useRunStore();
+
+  return (
+    <GestureHandlerRootView style={styles.container}>
+      <SafeAreaView style={styles.container}>
+        <StatusBar style="light" />
+        <View style={styles.screenContainer}>
+          <Text style={[styles.screenTitle, { color: '#4caf50', fontSize: 48 }]}>Victory!</Text>
+          <Text style={styles.screenSubtitle}>All 10 levels complete!</Text>
+
+          <Text style={styles.coinText}>Total coins earned: {totalCoinsEarned}</Text>
+
+          <Text style={styles.sectionHeading}>Relics Collected</Text>
+          {relics.length > 0 ? (
+            <View style={styles.relicRow}>
+              {relics.map(r => (
+                <Text key={r.id} style={{ fontSize: 24 }}>{r.emoji}</Text>
+              ))}
+            </View>
+          ) : (
+            <Text style={{ color: '#888', marginBottom: 8 }}>None</Text>
+          )}
+
+          <Pressable style={[styles.startButton, { marginTop: 16 }]} onPress={() => useRunStore.getState().startRun()}>
+            <Text style={styles.startButtonText}>Play Again</Text>
+          </Pressable>
+        </View>
+      </SafeAreaView>
+    </GestureHandlerRootView>
   );
 }
 
@@ -1359,7 +2232,23 @@ function HelpPanel() {
 // =============================================================================
 
 export default function App() {
+  const runPhase = useRunStore(s => s.runPhase);
+
+  // Route to non-playing screens
+  if (runPhase === 'title') return <TitleScreen />;
+  if (runPhase === 'levelPreview') return <LevelPreviewScreen />;
+  if (runPhase === 'reward') return <RewardScreen />;
+  if (runPhase === 'shop') return <ShopScreen />;
+  if (runPhase === 'victory') return <VictoryScreen />;
+  if (runPhase === 'gameOver') return <GameOverScreen />;
+
+  // runPhase === 'playing' — render normal game UI
+  return <PlayingScreen />;
+}
+
+function PlayingScreen() {
   const {
+    levelConfig,
     currentTile,
     tileQueue,
     respinsRemaining,
@@ -1368,11 +2257,15 @@ export default function App() {
     result,
     placementMode,
     selectedEntry,
+    entrySpots,
     respinLine,
     resetGame,
   } = useGameStore();
 
+  const { currentLevel, coins, relics } = useRunStore();
+
   const tilesRemaining = tileQueue.length + (currentTile ? 1 : 0);
+  const entryKeyHint = entrySpots.length > 2 ? '1-4' : '1 or 2';
   const [showHelp, setShowHelp] = useState(false);
 
   // Respin keyboard cursor (web only)
@@ -1437,11 +2330,22 @@ export default function App() {
 
         {/* Header */}
         <View style={styles.header}>
-          <Text style={styles.title}>Slot Dominoes</Text>
+          <Text style={styles.title}>Slominoes</Text>
           <View style={styles.scoreRow}>
             <Text style={styles.scoreText}>Score: {score}</Text>
-            <Text style={styles.goalText}>Goal: {WIN_THRESHOLD}</Text>
+            <Text style={styles.goalText}>Goal: {levelConfig.threshold}</Text>
           </View>
+          <View style={styles.hudRow}>
+            <Text style={styles.hudText}>Level {currentLevel} / 10</Text>
+            <Text style={styles.hudText}>{'💰'} {coins}</Text>
+          </View>
+          {relics.length > 0 && (
+            <View style={styles.hudRelicRow}>
+              {relics.map(r => (
+                <Text key={r.id} style={styles.hudRelicEmoji}>{r.emoji}</Text>
+              ))}
+            </View>
+          )}
         </View>
 
         <View style={Platform.OS === 'web' && _screenWidth >= 700 ? styles.mainRow : undefined}>
@@ -1533,11 +2437,24 @@ export default function App() {
                       </View>
                     </View>
                   )}
+                  {placementMode === 'placed' && hasRelic('crystalBall') && tileQueue.length > 1 && (
+                    <View style={styles.tilePreview}>
+                      <Text style={styles.previewLabel}>After next:</Text>
+                      <View style={styles.tilePreviewBox}>
+                        <Text style={styles.previewSymbol}>
+                          {SYMBOL_DISPLAY[tileQueue[1].symbolA]}
+                        </Text>
+                        <Text style={styles.previewSymbol}>
+                          {SYMBOL_DISPLAY[tileQueue[1].symbolB]}
+                        </Text>
+                      </View>
+                    </View>
+                  )}
                   <Text style={styles.infoText}>Tiles left: {tilesRemaining}</Text>
                   {placementMode === 'idle' && selectedEntry === null && (
                     <Text style={styles.hintText}>
                       {Platform.OS === 'web'
-                        ? 'Press 1 or 2 to select an entry point'
+                        ? `Press ${entryKeyHint} to select an entry point`
                         : 'Tap an entry point arrow'}
                     </Text>
                   )}
@@ -1577,7 +2494,7 @@ export default function App() {
                     {result === 'win' ? 'You Win!' : 'Game Over'}
                   </Text>
                   <Text style={styles.finalScore}>Final Score: {score}</Text>
-                  <Pressable style={styles.restartButton} onPress={resetGame}>
+                  <Pressable style={styles.restartButton} onPress={() => useRunStore.getState().startRun()}>
                     <Text style={styles.buttonText}>Play Again</Text>
                   </Pressable>
                 </View>
@@ -1661,7 +2578,7 @@ const styles = StyleSheet.create({
   },
   grid: {
     backgroundColor: '#2d2d44',
-    borderRadius: 8,
+    borderRadius: 10,
     padding: GRID_PADDING,
   },
   row: {
@@ -1678,6 +2595,9 @@ const styles = StyleSheet.create({
   },
   filledCell: {
     backgroundColor: '#4a4a70',
+  },
+  wallCell: {
+    backgroundColor: '#2a2a3e',
   },
   previewCell: {
     backgroundColor: 'transparent',
@@ -1809,7 +2729,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#5c6bc0',
     paddingHorizontal: 24,
     paddingVertical: 12,
-    borderRadius: 8,
+    borderRadius: 10,
     marginTop: 8,
   },
   placementButtons: {
@@ -1821,13 +2741,13 @@ const styles = StyleSheet.create({
     backgroundColor: '#4caf50',
     paddingHorizontal: 24,
     paddingVertical: 10,
-    borderRadius: 8,
+    borderRadius: 10,
   },
   cancelButton: {
     backgroundColor: '#666',
     paddingHorizontal: 24,
     paddingVertical: 10,
-    borderRadius: 8,
+    borderRadius: 10,
   },
   helpToggle: {
     marginTop: 16,
@@ -1845,7 +2765,7 @@ const styles = StyleSheet.create({
     marginTop: 12,
     padding: 12,
     backgroundColor: '#2d2d44',
-    borderRadius: 8,
+    borderRadius: 10,
     width: 260,
   },
   helpHeading: {
@@ -1866,6 +2786,11 @@ const styles = StyleSheet.create({
     gap: 8,
     paddingVertical: 4,
   },
+  entrySpotCol: {
+    justifyContent: 'center',
+    gap: 8,
+    paddingHorizontal: 4,
+  },
   entrySpotButton: {
     width: CELL_SIZE * 2 + CELL_MARGIN * 4,
     height: CELL_SIZE,
@@ -1873,6 +2798,10 @@ const styles = StyleSheet.create({
     borderRadius: 6,
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  entrySpotButtonSide: {
+    width: CELL_SIZE,
+    height: CELL_SIZE * 2 + CELL_MARGIN * 4,
   },
   entrySpotButtonSelected: {
     backgroundColor: '#ffc107',
@@ -1899,5 +2828,201 @@ const styles = StyleSheet.create({
     fontSize: CELL_SIZE < 36 ? 10 : 12,
     color: '#5c6bc0',
     opacity: 0.7,
+  },
+
+  // =========================================================================
+  // Screen styles (title, preview, reward, game over, victory)
+  // =========================================================================
+  screenContainer: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 24,
+  },
+  screenTitle: {
+    fontSize: 36,
+    fontWeight: 'bold',
+    color: '#ffd700',
+    marginBottom: 8,
+  },
+  screenSubtitle: {
+    fontSize: 16,
+    color: '#888',
+    marginBottom: 32,
+  },
+  startButton: {
+    backgroundColor: '#5c6bc0',
+    paddingHorizontal: 32,
+    paddingVertical: 14,
+    borderRadius: 10,
+  },
+  startButtonText: {
+    color: '#fff',
+    fontSize: 18,
+    fontWeight: '600',
+  },
+  statsRow: {
+    flexDirection: 'row',
+    gap: 16,
+    marginBottom: 16,
+    flexWrap: 'wrap',
+    justifyContent: 'center',
+  },
+  statBadge: {
+    backgroundColor: '#2d2d44',
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+  },
+  statText: {
+    color: '#fff',
+    fontSize: 14,
+  },
+  miniGrid: {
+    flexDirection: 'column',
+    gap: 1,
+    marginVertical: 16,
+  },
+  miniRow: {
+    flexDirection: 'row',
+    gap: 1,
+  },
+  miniCell: {
+    width: 20,
+    height: 20,
+    borderRadius: 2,
+  },
+  miniCellOpen: {
+    backgroundColor: '#3d3d5c',
+  },
+  miniCellWall: {
+    backgroundColor: '#2a2a3e',
+  },
+  miniCellMasked: {
+    backgroundColor: 'transparent',
+  },
+  miniCellEntry: {
+    backgroundColor: '#5c6bc0',
+  },
+  relicCardsRow: {
+    flexDirection: 'row',
+    gap: 12,
+    marginTop: 16,
+    flexWrap: 'wrap',
+    justifyContent: 'center',
+  },
+  relicCard: {
+    backgroundColor: '#2d2d44',
+    borderRadius: 10,
+    padding: 16,
+    alignItems: 'center',
+    width: 140,
+  },
+  relicEmoji: {
+    fontSize: 32,
+    marginBottom: 8,
+  },
+  relicName: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#fff',
+    marginBottom: 4,
+    textAlign: 'center',
+  },
+  relicDesc: {
+    fontSize: 11,
+    color: '#aaa',
+    textAlign: 'center',
+  },
+  coinText: {
+    fontSize: 16,
+    color: '#ffd700',
+    marginBottom: 8,
+  },
+  sectionHeading: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: '#fff',
+    marginTop: 16,
+    marginBottom: 8,
+  },
+  breakdownRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    width: 260,
+    marginBottom: 4,
+  },
+  breakdownLabel: {
+    fontSize: 14,
+    color: '#aaa',
+  },
+  breakdownValue: {
+    fontSize: 14,
+    color: '#fff',
+    fontWeight: '600',
+  },
+  relicRow: {
+    flexDirection: 'row',
+    gap: 4,
+    marginBottom: 8,
+    flexWrap: 'wrap',
+  },
+
+  // =========================================================================
+  // Shop styles
+  // =========================================================================
+  shopItemCard: {
+    backgroundColor: '#2d2d44',
+    borderRadius: 10,
+    padding: 16,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    width: 300,
+    marginBottom: 8,
+  },
+  shopItemInfo: {
+    flex: 1,
+  },
+  shopItemName: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#fff',
+  },
+  shopItemDesc: {
+    fontSize: 11,
+    color: '#aaa',
+    marginTop: 2,
+  },
+  shopItemCost: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#ffd700',
+  },
+  shopItemDisabled: {
+    opacity: 0.4,
+  },
+
+  // =========================================================================
+  // HUD styles (playing screen header)
+  // =========================================================================
+  hudRow: {
+    flexDirection: 'row',
+    gap: 16,
+    alignItems: 'center',
+    marginTop: 4,
+  },
+  hudText: {
+    fontSize: 14,
+    color: '#aaa',
+  },
+  hudRelicRow: {
+    flexDirection: 'row',
+    gap: 2,
+    flexWrap: 'wrap',
+    marginTop: 4,
+  },
+  hudRelicEmoji: {
+    fontSize: 14,
   },
 });
