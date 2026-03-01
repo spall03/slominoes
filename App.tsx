@@ -1,4 +1,4 @@
-import React, { useRef, useEffect, useCallback, useState } from 'react';
+import React, { useRef, useEffect, useCallback, useState, useMemo } from 'react';
 import {
   View,
   Text,
@@ -36,6 +36,24 @@ function getLengthMultiplier(length: number): number {
   if (length >= 6) return MAX_LENGTH_MULTIPLIER;
   return LENGTH_MULTIPLIERS[length] ?? MAX_LENGTH_MULTIPLIER;
 }
+
+// =============================================================================
+// ENTRY SPOTS
+// =============================================================================
+
+interface EntrySpot {
+  id: number;
+  label: string;
+  cells: [number, number][];
+  arrowDirection: 'down' | 'up' | 'left' | 'right';
+}
+
+const ENTRY_SPOTS: EntrySpot[] = [
+  { id: 0, label: 'Top', cells: [[0, 3], [0, 4]], arrowDirection: 'down' },
+  { id: 1, label: 'Bottom', cells: [[7, 3], [7, 4]], arrowDirection: 'up' },
+  // { id: 2, label: 'Left', cells: [[3, 0], [4, 0]], arrowDirection: 'right' },
+  // { id: 3, label: 'Right', cells: [[3, 7], [4, 7]], arrowDirection: 'left' },
+];
 
 // =============================================================================
 // SYMBOLS
@@ -95,6 +113,84 @@ function createEmptyGrid(): Grid {
 
 function cloneGrid(grid: Grid): Grid {
   return grid.map(row => [...row]);
+}
+
+// =============================================================================
+// FLOOD FILL / REACHABILITY UTILITIES
+// =============================================================================
+
+function computeReachableCells(grid: Grid, entrySpot: EntrySpot): Set<string> {
+  const reachable = new Set<string>();
+  const queue: [number, number][] = [];
+
+  // Seed BFS from all entry cells that are empty
+  for (const [r, c] of entrySpot.cells) {
+    const key = `${r},${c}`;
+    if (r >= 0 && r < BOARD_SIZE && c >= 0 && c < BOARD_SIZE && grid[r][c] === null && !reachable.has(key)) {
+      reachable.add(key);
+      queue.push([r, c]);
+    }
+  }
+
+  // BFS through adjacent empty cells
+  const dirs: [number, number][] = [[-1, 0], [1, 0], [0, -1], [0, 1]];
+  while (queue.length > 0) {
+    const [cr, cc] = queue.shift()!;
+    for (const [dr, dc] of dirs) {
+      const nr = cr + dr;
+      const nc = cc + dc;
+      if (nr < 0 || nr >= BOARD_SIZE || nc < 0 || nc >= BOARD_SIZE) continue;
+      const key = `${nr},${nc}`;
+      if (grid[nr][nc] === null && !reachable.has(key)) {
+        reachable.add(key);
+        queue.push([nr, nc]);
+      }
+    }
+  }
+
+  return reachable;
+}
+
+function isTilePlacementReachable(
+  reachableSet: Set<string>,
+  row: number,
+  col: number,
+  rotation: Rotation,
+): boolean {
+  const [rowOffset, colOffset] = getSecondCellOffset(rotation);
+  const row2 = row + rowOffset;
+  const col2 = col + colOffset;
+  return reachableSet.has(`${row},${col}`) && reachableSet.has(`${row2},${col2}`);
+}
+
+function canPlaceTileWithEntry(
+  grid: Grid,
+  row: number,
+  col: number,
+  rotation: Rotation,
+  reachableCells: Set<string> | null,
+): boolean {
+  if (!reachableCells) return false;
+  if (!canPlaceTile(grid, row, col, rotation)) return false;
+  return isTilePlacementReachable(reachableCells, row, col, rotation);
+}
+
+// Check if any entry spot has valid placements on the grid
+function anyEntryHasValidPlacement(grid: Grid): boolean {
+  for (const entry of ENTRY_SPOTS) {
+    const reachable = computeReachableCells(grid, entry);
+    if (reachable.size < 2) continue;
+    // Check if any placement works in any rotation
+    for (const cellKey of reachable) {
+      const [r, c] = cellKey.split(',').map(Number);
+      for (let rot = 0; rot < 4; rot++) {
+        if (canPlaceTileWithEntry(grid, r, c, rot as Rotation, reachable)) {
+          return true;
+        }
+      }
+    }
+  }
+  return false;
 }
 
 // =============================================================================
@@ -222,7 +318,12 @@ interface GameState {
   highlightColor: 'gold' | 'red' | 'blue';
   scorePopups: ScorePopup[];
   pendingPhase2: { cells: Set<string>; popups: ScorePopup[] } | null;
+  entrySpots: EntrySpot[];
+  selectedEntry: number | null;
+  reachableCells: Set<string> | null;
 
+  selectEntry: (index: number) => void;
+  deselectEntry: () => void;
   startPlacement: (row: number, col: number) => void;
   movePlacement: (row: number, col: number) => void;
   rotatePlacedTile: () => void;
@@ -274,16 +375,44 @@ function createInitialState() {
     highlightColor: 'gold' as 'gold' | 'red' | 'blue',
     scorePopups: [] as ScorePopup[],
     pendingPhase2: null as { cells: Set<string>; popups: ScorePopup[] } | null,
+    entrySpots: ENTRY_SPOTS,
+    selectedEntry: null as number | null,
+    reachableCells: null as Set<string> | null,
   };
 }
 
 const useGameStore = create<GameState>((set, get) => ({
   ...createInitialState(),
 
+  selectEntry: (index: number) => {
+    const { phase, grid } = get();
+    if (phase !== 'placing') return;
+    const entry = ENTRY_SPOTS[index];
+    if (!entry) return;
+    const reachable = computeReachableCells(grid, entry);
+    set({
+      selectedEntry: index,
+      reachableCells: reachable,
+      placementMode: 'idle',
+      placedPosition: null,
+      holdReady: false,
+    });
+  },
+
+  deselectEntry: () => {
+    set({
+      selectedEntry: null,
+      reachableCells: null,
+      placementMode: 'idle',
+      placedPosition: null,
+      holdReady: false,
+    });
+  },
+
   startPlacement: (row: number, col: number) => {
-    const { phase, currentTile, rotation, grid } = get();
+    const { phase, currentTile, rotation, grid, reachableCells } = get();
     if (phase !== 'placing' || !currentTile) return;
-    if (!canPlaceTile(grid, row, col, rotation)) return;
+    if (!canPlaceTileWithEntry(grid, row, col, rotation, reachableCells)) return;
 
     set({
       placementMode: 'placed',
@@ -292,21 +421,21 @@ const useGameStore = create<GameState>((set, get) => ({
   },
 
   movePlacement: (row: number, col: number) => {
-    const { phase, currentTile, rotation, grid, placementMode } = get();
+    const { phase, currentTile, rotation, grid, placementMode, reachableCells } = get();
     if (phase !== 'placing' || !currentTile || placementMode !== 'placed') return;
-    if (!canPlaceTile(grid, row, col, rotation)) return;
+    if (!canPlaceTileWithEntry(grid, row, col, rotation, reachableCells)) return;
 
     set({ placedPosition: { row, col } });
   },
 
   rotatePlacedTile: () => {
-    const { placementMode, placedPosition, rotation, grid } = get();
+    const { placementMode, placedPosition, rotation, grid, reachableCells } = get();
     if (placementMode !== 'placed' || !placedPosition) return;
 
     // Try each rotation until we find a valid one
     for (let i = 1; i <= 4; i++) {
       const newRotation = ((rotation + i) % 4) as Rotation;
-      if (canPlaceTile(grid, placedPosition.row, placedPosition.col, newRotation)) {
+      if (canPlaceTileWithEntry(grid, placedPosition.row, placedPosition.col, newRotation, reachableCells)) {
         set({ rotation: newRotation });
         return;
       }
@@ -314,11 +443,11 @@ const useGameStore = create<GameState>((set, get) => ({
   },
 
   confirmPlacement: () => {
-    const { phase, currentTile, rotation, grid, tileQueue, placementMode, placedPosition } = get();
+    const { phase, currentTile, rotation, grid, tileQueue, placementMode, placedPosition, reachableCells } = get();
     if (phase !== 'placing' || !currentTile || placementMode !== 'placed' || !placedPosition) return;
 
     const { row, col } = placedPosition;
-    if (!canPlaceTile(grid, row, col, rotation)) return;
+    if (!canPlaceTileWithEntry(grid, row, col, rotation, reachableCells)) return;
 
     const [rowOffset, colOffset] = getSecondCellOffset(rotation);
     const row2 = row + rowOffset;
@@ -347,17 +476,40 @@ const useGameStore = create<GameState>((set, get) => ({
         placementMode: 'idle',
         placedPosition: null,
         holdReady: false,
+        selectedEntry: null,
+        reachableCells: null,
       });
     } else {
-      set({
-        grid: newGrid,
-        tileQueue: newQueue,
-        currentTile: nextTile,
-        score: newTotalScore,
-        placementMode: 'idle',
-        placedPosition: null,
-        holdReady: false,
-      });
+      // Check if any entry has valid placements on the new grid
+      const stuck = !anyEntryHasValidPlacement(newGrid);
+      if (stuck) {
+        // Skip to respinning early
+        set({
+          grid: newGrid,
+          tileQueue: newQueue,
+          currentTile: nextTile,
+          score: newTotalScore,
+          scoreBeforeRespins: newTotalScore,
+          phase: 'respinning',
+          placementMode: 'idle',
+          placedPosition: null,
+          holdReady: false,
+          selectedEntry: null,
+          reachableCells: null,
+        });
+      } else {
+        set({
+          grid: newGrid,
+          tileQueue: newQueue,
+          currentTile: nextTile,
+          score: newTotalScore,
+          placementMode: 'idle',
+          placedPosition: null,
+          holdReady: false,
+          selectedEntry: null,
+          reachableCells: null,
+        });
+      }
     }
 
     // Trigger match animation for matches involving newly placed cells
@@ -368,11 +520,24 @@ const useGameStore = create<GameState>((set, get) => ({
   },
 
   cancelPlacement: () => {
-    set({
-      placementMode: 'idle',
-      placedPosition: null,
-      holdReady: false,
-    });
+    const { placementMode } = get();
+    if (placementMode === 'placed') {
+      // Cancel placement but keep entry selected
+      set({
+        placementMode: 'idle',
+        placedPosition: null,
+        holdReady: false,
+      });
+    } else {
+      // In idle with entry selected — deselect entry
+      set({
+        selectedEntry: null,
+        reachableCells: null,
+        placementMode: 'idle',
+        placedPosition: null,
+        holdReady: false,
+      });
+    }
   },
 
   setHoldReady: (ready: boolean) => {
@@ -556,6 +721,8 @@ function AnimatedCell({
   isPlaced,
   isHoldReady,
   isMatching,
+  isReachable,
+  isEntryCell,
   highlightColor,
   previewSymbol,
   onMatchAnimationComplete,
@@ -566,6 +733,8 @@ function AnimatedCell({
   isPlaced?: boolean;
   isHoldReady?: boolean;
   isMatching?: boolean;
+  isReachable?: boolean;
+  isEntryCell?: 'down' | 'up' | 'left' | 'right' | null;
   highlightColor?: 'gold' | 'red' | 'blue';
   previewSymbol?: Symbol;
   onMatchAnimationComplete?: () => void;
@@ -615,6 +784,8 @@ function AnimatedCell({
 
   const displaySymbol = isPreview ? previewSymbol : symbol;
 
+  const ENTRY_ARROW: Record<string, string> = { down: '▼', up: '▲', left: '◀', right: '▶' };
+
   return (
     <Animated.View
       style={[
@@ -623,6 +794,7 @@ function AnimatedCell({
         isPreview && !isPlaced && styles.previewCell,
         isPreview && isPlaced && !isHoldReady && styles.placedCell,
         isPreview && isPlaced && isHoldReady && styles.holdReadyCell,
+        isEmpty && isReachable && !isPreview && styles.reachableCell,
         { transform: [{ scale: scaleAnim }], overflow: 'hidden' },
       ]}
     >
@@ -634,9 +806,15 @@ function AnimatedCell({
         ]}
         pointerEvents="none"
       />
-      <Text style={[styles.cellText, styles.cellTextAbove, isPreview && !isPlaced && styles.previewCellText]}>
-        {displaySymbol ? SYMBOL_DISPLAY[displaySymbol] : ''}
-      </Text>
+      {isEntryCell && isEmpty && !isPreview ? (
+        <Text style={[styles.cellText, styles.cellTextAbove, styles.entryCellArrow]}>
+          {ENTRY_ARROW[isEntryCell]}
+        </Text>
+      ) : (
+        <Text style={[styles.cellText, styles.cellTextAbove, isPreview && !isPlaced && styles.previewCellText]}>
+          {displaySymbol ? SYMBOL_DISPLAY[displaySymbol] : ''}
+        </Text>
+      )}
     </Animated.View>
   );
 }
@@ -711,6 +889,42 @@ function ScorePopup({
 }
 
 // =============================================================================
+// ENTRY SPOT BUTTON COMPONENT
+// =============================================================================
+
+function EntrySpotButton({
+  entry,
+  isSelected,
+  isBlocked,
+  onPress,
+}: {
+  entry: EntrySpot;
+  isSelected: boolean;
+  isBlocked: boolean;
+  onPress: () => void;
+}) {
+  const arrow = entry.arrowDirection === 'down' ? '▼' : '▲';
+  return (
+    <Pressable
+      style={[
+        styles.entrySpotButton,
+        isSelected && styles.entrySpotButtonSelected,
+        isBlocked && styles.entrySpotButtonBlocked,
+      ]}
+      onPress={onPress}
+      disabled={isBlocked}
+    >
+      <Text style={[
+        styles.entrySpotButtonText,
+        isBlocked && styles.entrySpotButtonTextBlocked,
+      ]}>
+        {arrow}
+      </Text>
+    </Pressable>
+  );
+}
+
+// =============================================================================
 // GESTURE GRID COMPONENT
 // =============================================================================
 
@@ -737,6 +951,11 @@ function GestureGrid() {
     matchingCells,
     highlightColor,
     scorePopups,
+    selectedEntry,
+    reachableCells,
+    entrySpots,
+    selectEntry,
+    deselectEntry,
     startPlacement,
     movePlacement,
     rotatePlacedTile,
@@ -753,14 +972,15 @@ function GestureGrid() {
   useEffect(() => {
     if (Platform.OS !== 'web') return;
 
-    const findFirstValidCell = (grid: Grid, rotation: Rotation): { row: number; col: number } | null => {
+    const findFirstValidCell = (grid: Grid, rotation: Rotation, reachable: Set<string> | null): { row: number; col: number } | null => {
+      if (!reachable) return null;
       // Start from center, spiral outward
       const center = Math.floor(BOARD_SIZE / 2);
       for (let dist = 0; dist < BOARD_SIZE; dist++) {
         for (let row = center - dist; row <= center + dist; row++) {
           for (let col = center - dist; col <= center + dist; col++) {
             if (row < 0 || row >= BOARD_SIZE || col < 0 || col >= BOARD_SIZE) continue;
-            if (canPlaceTile(grid, row, col, rotation)) return { row, col };
+            if (canPlaceTileWithEntry(grid, row, col, rotation, reachable)) return { row, col };
           }
         }
       }
@@ -771,12 +991,41 @@ function GestureGrid() {
       const state = useGameStore.getState();
       if (state.phase !== 'placing' || !state.currentTile) return;
 
-      // Idle mode: Enter/Space places tile at first valid cell
-      if (state.placementMode === 'idle') {
-        if (e.key === 'Enter' || e.key === ' ') {
+      // No entry selected: 1/2 keys select entry, all other keys ignored
+      if (state.selectedEntry === null) {
+        if (e.key === '1') {
           e.preventDefault();
-          const cell = findFirstValidCell(state.grid, state.rotation);
-          if (cell) state.startPlacement(cell.row, cell.col);
+          state.selectEntry(0);
+        } else if (e.key === '2') {
+          e.preventDefault();
+          state.selectEntry(1);
+        }
+        return;
+      }
+
+      // Entry selected, idle mode
+      if (state.placementMode === 'idle') {
+        switch (e.key) {
+          case '1':
+            e.preventDefault();
+            state.selectEntry(0);
+            break;
+          case '2':
+            e.preventDefault();
+            state.selectEntry(1);
+            break;
+          case 'Enter':
+          case ' ':
+            e.preventDefault();
+            {
+              const cell = findFirstValidCell(state.grid, state.rotation, state.reachableCells);
+              if (cell) state.startPlacement(cell.row, cell.col);
+            }
+            break;
+          case 'Escape':
+            e.preventDefault();
+            state.deselectEntry();
+            break;
         }
         return;
       }
@@ -788,25 +1037,25 @@ function GestureGrid() {
       switch (e.key) {
         case 'ArrowUp':
           e.preventDefault();
-          if (canPlaceTile(state.grid, row - 1, col, state.rotation)) {
+          if (canPlaceTileWithEntry(state.grid, row - 1, col, state.rotation, state.reachableCells)) {
             state.movePlacement(row - 1, col);
           }
           break;
         case 'ArrowDown':
           e.preventDefault();
-          if (canPlaceTile(state.grid, row + 1, col, state.rotation)) {
+          if (canPlaceTileWithEntry(state.grid, row + 1, col, state.rotation, state.reachableCells)) {
             state.movePlacement(row + 1, col);
           }
           break;
         case 'ArrowLeft':
           e.preventDefault();
-          if (canPlaceTile(state.grid, row, col - 1, state.rotation)) {
+          if (canPlaceTileWithEntry(state.grid, row, col - 1, state.rotation, state.reachableCells)) {
             state.movePlacement(row, col - 1);
           }
           break;
         case 'ArrowRight':
           e.preventDefault();
-          if (canPlaceTile(state.grid, row, col + 1, state.rotation)) {
+          if (canPlaceTileWithEntry(state.grid, row, col + 1, state.rotation, state.reachableCells)) {
             state.movePlacement(row, col + 1);
           }
           break;
@@ -860,13 +1109,14 @@ function GestureGrid() {
   const tapGesture = Gesture.Tap()
     .onEnd((event) => {
       if (phase !== 'placing' || !currentTile) return;
+      if (selectedEntry === null) return; // Must select entry first
 
       const cell = getCellFromPosition(event.x, event.y);
       if (!cell) return;
 
       if (placementMode === 'idle') {
         // First tap - place tile
-        if (canPlaceTile(grid, cell.row, cell.col, rotation)) {
+        if (canPlaceTileWithEntry(grid, cell.row, cell.col, rotation, reachableCells)) {
           Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
           startPlacement(cell.row, cell.col);
         }
@@ -883,7 +1133,7 @@ function GestureGrid() {
       if (phase !== 'placing' || placementMode !== 'placed') return;
 
       const cell = getCellFromPosition(event.x, event.y);
-      if (cell && canPlaceTile(grid, cell.row, cell.col, rotation)) {
+      if (cell && canPlaceTileWithEntry(grid, cell.row, cell.col, rotation, reachableCells)) {
         if (!placedPosition || placedPosition.row !== cell.row || placedPosition.col !== cell.col) {
           Haptics.selectionAsync();
           movePlacement(cell.row, cell.col);
@@ -933,32 +1183,74 @@ function GestureGrid() {
     return { isPreview: false };
   };
 
+  // Build entry cell lookup: "row,col" -> arrowDirection
+  const entryCellMap = new Map<string, 'down' | 'up' | 'left' | 'right'>();
+  for (const entry of entrySpots) {
+    for (const [r, c] of entry.cells) {
+      entryCellMap.set(`${r},${c}`, entry.arrowDirection);
+    }
+  }
+
+  // Check which entries are blocked (for button state)
+  const entryBlocked = useMemo(() => entrySpots.map(entry => {
+    const reachable = computeReachableCells(grid, entry);
+    if (reachable.size < 2) return true;
+    for (const cellKey of reachable) {
+      const [r, c] = cellKey.split(',').map(Number);
+      for (let rot = 0; rot < 4; rot++) {
+        if (canPlaceTileWithEntry(grid, r, c, rot as Rotation, reachable)) return false;
+      }
+    }
+    return true;
+  }), [grid, entrySpots]);
+
   return (
-    <GestureDetector gesture={composedGesture}>
-      <View style={styles.grid}>
-        {grid.map((row, rowIndex) => (
-          <View key={`row-${rowIndex}`} style={styles.row}>
-            {row.map((cell, colIndex) => {
-              const { isPreview, previewSymbol } = getPreviewInfo(rowIndex, colIndex);
-              const cellKey = `${rowIndex},${colIndex}`;
-              const isMatching = matchingCells.has(cellKey);
-              return (
-                <AnimatedCell
-                  key={`cell-${rowIndex}-${colIndex}-${animationKey}`}
-                  symbol={cell}
-                  isEmpty={cell === null}
-                  isPreview={isPreview}
-                  isPlaced={placementMode === 'placed'}
-                  isHoldReady={holdReady}
-                  isMatching={isMatching}
-                  highlightColor={isMatching ? highlightColor : undefined}
-                  previewSymbol={previewSymbol}
-                  onMatchAnimationComplete={() => handleMatchAnimationComplete(cellKey)}
-                />
-              );
-            })}
-          </View>
-        ))}
+    <View>
+      {/* Top entry spot buttons */}
+      {phase === 'placing' && currentTile && (
+        <View style={styles.entrySpotRow}>
+          {entrySpots
+            .filter(e => e.arrowDirection === 'down')
+            .map(entry => (
+              <EntrySpotButton
+                key={entry.id}
+                entry={entry}
+                isSelected={selectedEntry === entry.id}
+                isBlocked={entryBlocked[entry.id]}
+                onPress={() => selectEntry(entry.id)}
+              />
+            ))}
+        </View>
+      )}
+      <GestureDetector gesture={composedGesture}>
+        <View style={styles.grid}>
+          {grid.map((row, rowIndex) => (
+            <View key={`row-${rowIndex}`} style={styles.row}>
+              {row.map((cell, colIndex) => {
+                const { isPreview, previewSymbol } = getPreviewInfo(rowIndex, colIndex);
+                const cellKey = `${rowIndex},${colIndex}`;
+                const isMatching = matchingCells.has(cellKey);
+                const isReachable = reachableCells?.has(cellKey) ?? false;
+                const entryCellDir = entryCellMap.get(cellKey) ?? null;
+                return (
+                  <AnimatedCell
+                    key={`cell-${rowIndex}-${colIndex}-${animationKey}`}
+                    symbol={cell}
+                    isEmpty={cell === null}
+                    isPreview={isPreview}
+                    isPlaced={placementMode === 'placed'}
+                    isHoldReady={holdReady}
+                    isMatching={isMatching}
+                    isReachable={isReachable}
+                    isEntryCell={entryCellDir}
+                    highlightColor={isMatching ? highlightColor : undefined}
+                    previewSymbol={previewSymbol}
+                    onMatchAnimationComplete={() => handleMatchAnimationComplete(cellKey)}
+                  />
+                );
+              })}
+            </View>
+          ))}
         {/* Score popups */}
         {scorePopups.map(popup => (
           <ScorePopup
@@ -970,8 +1262,25 @@ function GestureGrid() {
             onComplete={() => removeScorePopup(popup.id)}
           />
         ))}
-      </View>
-    </GestureDetector>
+        </View>
+      </GestureDetector>
+      {/* Bottom entry spot buttons */}
+      {phase === 'placing' && currentTile && (
+        <View style={styles.entrySpotRow}>
+          {entrySpots
+            .filter(e => e.arrowDirection === 'up')
+            .map(entry => (
+              <EntrySpotButton
+                key={entry.id}
+                entry={entry}
+                isSelected={selectedEntry === entry.id}
+                isBlocked={entryBlocked[entry.id]}
+                onPress={() => selectEntry(entry.id)}
+              />
+            ))}
+        </View>
+      )}
+    </View>
   );
 }
 
@@ -1011,6 +1320,11 @@ function HelpPanel() {
         Your score equals the total of all matches currently on the grid. It's recalculated after every move — not additive.
       </Text>
 
+      <Text style={styles.helpHeading}>Entry Points</Text>
+      <Text style={styles.helpBody}>
+        Before placing each tile, choose an entry point (top or bottom arrows). You can only place tiles in empty cells reachable from that entry. Earlier placements may block paths, creating a spatial puzzle.
+      </Text>
+
       <Text style={styles.helpHeading}>Respins</Text>
       <Text style={styles.helpBody}>
         After all tiles are placed, you get {RESPINS_PER_LEVEL} respins. Each respin re-randomizes every filled cell in a row or column. Respins can create new matches but also break existing ones. Your score is locked to the best total seen — it can never go down.
@@ -1032,6 +1346,7 @@ export default function App() {
     phase,
     result,
     placementMode,
+    selectedEntry,
     respinLine,
     resetGame,
   } = useGameStore();
@@ -1198,11 +1513,18 @@ export default function App() {
                     </View>
                   )}
                   <Text style={styles.infoText}>Tiles left: {tilesRemaining}</Text>
-                  {placementMode === 'idle' && (
+                  {placementMode === 'idle' && selectedEntry === null && (
                     <Text style={styles.hintText}>
                       {Platform.OS === 'web'
-                        ? 'Click or press Enter to place tile'
-                        : 'Tap grid to place tile'}
+                        ? 'Press 1 or 2 to select an entry point'
+                        : 'Tap an entry point arrow'}
+                    </Text>
+                  )}
+                  {placementMode === 'idle' && selectedEntry !== null && (
+                    <Text style={styles.hintText}>
+                      {Platform.OS === 'web'
+                        ? 'Click highlighted area to place tile | Esc: change entry'
+                        : 'Tap highlighted area to place tile'}
                     </Text>
                   )}
                   {placementMode === 'placed' && (
@@ -1516,5 +1838,45 @@ const styles = StyleSheet.create({
     color: '#ccc',
     fontSize: 12,
     lineHeight: 18,
+  },
+  entrySpotRow: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    gap: 8,
+    paddingVertical: 4,
+  },
+  entrySpotButton: {
+    width: CELL_SIZE * 2 + CELL_MARGIN * 4,
+    height: CELL_SIZE,
+    backgroundColor: '#5c6bc0',
+    borderRadius: 6,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  entrySpotButtonSelected: {
+    backgroundColor: '#ffc107',
+  },
+  entrySpotButtonBlocked: {
+    backgroundColor: '#3d3d5c',
+    opacity: 0.4,
+  },
+  entrySpotButtonText: {
+    fontSize: 18,
+    color: '#fff',
+    fontWeight: 'bold',
+  },
+  entrySpotButtonTextBlocked: {
+    color: '#666',
+  },
+  reachableCell: {
+    borderWidth: 1,
+    borderColor: 'rgba(92, 107, 192, 0.6)',
+    borderStyle: 'dashed',
+    backgroundColor: 'rgba(92, 107, 192, 0.15)',
+  },
+  entryCellArrow: {
+    fontSize: CELL_SIZE < 36 ? 10 : 12,
+    color: '#5c6bc0',
+    opacity: 0.7,
   },
 });
