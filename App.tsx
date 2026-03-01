@@ -962,6 +962,13 @@ const useGameStore = create<GameState>((set, get) => ({
         result: newScore >= get().levelConfig.threshold ? 'win' : 'lose',
         ...animState,
       });
+      // Notify run store
+      const finalState = get();
+      if (finalState.result === 'win') {
+        useRunStore.getState().completeLevel(finalState.score, finalState.levelConfig.threshold, 0);
+      } else {
+        useRunStore.getState().failLevel(finalState.score);
+      }
     } else {
       set({
         grid: newGrid,
@@ -973,6 +980,173 @@ const useGameStore = create<GameState>((set, get) => ({
   },
 
   resetGame: (config?: LevelConfig) => set(createInitialState(config ?? LEVEL_CONFIGS[0])),
+}));
+
+// =============================================================================
+// RUN STATE (ROGUELIKE META-LAYER)
+// =============================================================================
+
+type RunPhase = 'title' | 'levelPreview' | 'playing' | 'reward' | 'shop' | 'victory' | 'gameOver';
+
+interface Relic {
+  id: string;
+  name: string;
+  description: string;
+  emoji: string;
+  category: 'scoring' | 'resource' | 'placement' | 'defensive';
+}
+
+interface ShopItem {
+  id: string;
+  name: string;
+  description: string;
+  emoji: string;
+  cost: number;
+  type: 'relic' | 'respins' | 'intel' | 'tileReroll' | 'entryUnlock';
+  relic?: Relic;
+}
+
+const ALL_RELICS: Relic[] = [
+  { id: 'lucky7s', name: 'Lucky 7s', description: 'Seven symbols score 2x', emoji: '7\uFE0F\u20E3', category: 'scoring' },
+  { id: 'comboKing', name: 'Combo King', description: '4+ matches get extra multiplier', emoji: '\uD83D\uDC51', category: 'scoring' },
+  { id: 'greed', name: 'Greed', description: 'Surplus coins x1.5', emoji: '\uD83D\uDCB0', category: 'scoring' },
+  { id: 'extraSpin', name: 'Extra Spin', description: '+1 respin per level', emoji: '\uD83D\uDD04', category: 'resource' },
+  { id: 'crystalBall', name: 'Crystal Ball', description: 'See 2 tiles ahead', emoji: '\uD83D\uDD2E', category: 'resource' },
+  { id: 'wideEntry', name: 'Wide Entry', description: 'Entry spots span 3 columns', emoji: '\uD83D\uDEAA', category: 'resource' },
+  { id: 'wildcard', name: 'Wildcard', description: 'Every 5th tile has a wild symbol', emoji: '\uD83C\uDCCF', category: 'placement' },
+  { id: 'rotateFree', name: 'Rotate Free', description: 'Auto-rotate to best fit', emoji: '\uD83D\uDD03', category: 'placement' },
+  { id: 'pathfinder', name: 'Pathfinder', description: 'BFS passes through 1 filled cell', emoji: '\uD83E\uDDED', category: 'placement' },
+  { id: 'safetyNet', name: 'Safety Net', description: 'Survive one failed level', emoji: '\uD83D\uDEE1\uFE0F', category: 'defensive' },
+  { id: 'overflow', name: 'Overflow', description: 'Excess score = bonus coins', emoji: '\uD83D\uDCC8', category: 'defensive' },
+];
+
+interface RunState {
+  runPhase: RunPhase;
+  currentLevel: number;
+  coins: number;
+  totalCoinsEarned: number;
+  relics: Relic[];
+  levelScore: number;
+  levelRespinsLeft: number;
+  rewardChoices: Relic[];
+  shopItems: ShopItem[];
+
+  startRun: () => void;
+  startLevel: () => void;
+  completeLevel: (score: number, threshold: number, respinsLeft: number) => void;
+  failLevel: (score: number) => void;
+  pickRelic: (relic: Relic) => void;
+  buyShopItem: (itemId: string) => void;
+  skipShop: () => void;
+  advanceFromReward: () => void;
+}
+
+const useRunStore = create<RunState>((set, get) => ({
+  runPhase: 'title',
+  currentLevel: 1,
+  coins: 0,
+  totalCoinsEarned: 0,
+  relics: [],
+  levelScore: 0,
+  levelRespinsLeft: 0,
+  rewardChoices: [],
+  shopItems: [],
+
+  startRun: () => {
+    set({
+      runPhase: 'levelPreview',
+      currentLevel: 1,
+      coins: 0,
+      totalCoinsEarned: 0,
+      relics: [],
+      levelScore: 0,
+      levelRespinsLeft: 0,
+      rewardChoices: [],
+      shopItems: [],
+    });
+  },
+
+  startLevel: () => {
+    const { currentLevel } = get();
+    const config = LEVEL_CONFIGS[currentLevel - 1];
+    useGameStore.getState().resetGame(config);
+    set({ runPhase: 'playing' });
+  },
+
+  completeLevel: (score: number, threshold: number, respinsLeft: number) => {
+    const { relics } = get();
+    const hasGreed = relics.some(r => r.id === 'greed');
+    const surplus = Math.max(0, score - threshold);
+    const respinBonus = respinsLeft * 200;
+    const baseCoins = 50 + surplus + respinBonus;
+    const earnedCoins = hasGreed ? Math.floor(baseCoins * 1.5) : baseCoins;
+
+    // Generate 3 relic choices (ones player doesn't own)
+    const owned = new Set(relics.map(r => r.id));
+    const available = ALL_RELICS.filter(r => !owned.has(r.id));
+    const shuffled = [...available].sort(() => Math.random() - 0.5);
+    const choices = shuffled.slice(0, 3);
+
+    set(state => ({
+      runPhase: 'reward',
+      coins: state.coins + earnedCoins,
+      totalCoinsEarned: state.totalCoinsEarned + earnedCoins,
+      levelScore: score,
+      levelRespinsLeft: respinsLeft,
+      rewardChoices: choices,
+    }));
+  },
+
+  failLevel: (score: number) => {
+    const { relics } = get();
+    const safetyNetIndex = relics.findIndex(r => r.id === 'safetyNet');
+    if (safetyNetIndex >= 0) {
+      // Consume safety net, retry level
+      const newRelics = [...relics];
+      newRelics.splice(safetyNetIndex, 1);
+      set({ relics: newRelics, runPhase: 'levelPreview' });
+    } else {
+      set({ runPhase: 'gameOver', levelScore: score });
+    }
+  },
+
+  pickRelic: (relic: Relic) => {
+    set(state => ({ relics: [...state.relics, relic] }));
+    get().advanceFromReward();
+  },
+
+  advanceFromReward: () => {
+    const { currentLevel } = get();
+    if (currentLevel >= 10) {
+      set({ runPhase: 'victory' });
+      return;
+    }
+    // Shop after levels 3, 6, 9
+    if (currentLevel === 3 || currentLevel === 6 || currentLevel === 9) {
+      // Generate shop items (stub — will be fleshed out in Task 12)
+      set({ runPhase: 'shop', shopItems: [] });
+    } else {
+      set({ currentLevel: currentLevel + 1, runPhase: 'levelPreview' });
+    }
+  },
+
+  buyShopItem: (itemId: string) => {
+    const { shopItems, coins } = get();
+    const item = shopItems.find(i => i.id === itemId);
+    if (!item || coins < item.cost) return;
+    set(state => ({
+      coins: state.coins - item.cost,
+      shopItems: state.shopItems.filter(i => i.id !== itemId),
+      ...(item.relic ? { relics: [...state.relics, item.relic] } : {}),
+    }));
+  },
+
+  skipShop: () => {
+    set(state => ({
+      currentLevel: state.currentLevel + 1,
+      runPhase: 'levelPreview',
+    }));
+  },
 }));
 
 // =============================================================================
@@ -1832,7 +2006,7 @@ export default function App() {
                     {result === 'win' ? 'You Win!' : 'Game Over'}
                   </Text>
                   <Text style={styles.finalScore}>Final Score: {score}</Text>
-                  <Pressable style={styles.restartButton} onPress={() => resetGame()}>
+                  <Pressable style={styles.restartButton} onPress={() => useRunStore.getState().startRun()}>
                     <Text style={styles.buttonText}>Play Again</Text>
                   </Pressable>
                 </View>
