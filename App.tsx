@@ -8,6 +8,7 @@ import {
   Animated,
   Dimensions,
   Platform,
+  ScrollView,
 } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { create } from 'zustand';
@@ -1783,10 +1784,300 @@ function HelpPanel() {
 }
 
 // =============================================================================
+// TITLE SCREEN
+// =============================================================================
+
+function TitleScreen() {
+  return (
+    <GestureHandlerRootView style={styles.container}>
+      <SafeAreaView style={styles.container}>
+        <StatusBar style="light" />
+        <View style={styles.screenContainer}>
+          <Text style={[styles.screenTitle, { fontSize: 48 }]}>Slominoes</Text>
+          <Text style={styles.screenSubtitle}>A Roguelike Puzzle</Text>
+          <Pressable style={styles.startButton} onPress={() => useRunStore.getState().startRun()}>
+            <Text style={styles.startButtonText}>New Run</Text>
+          </Pressable>
+        </View>
+      </SafeAreaView>
+    </GestureHandlerRootView>
+  );
+}
+
+// =============================================================================
+// LEVEL PREVIEW SCREEN
+// =============================================================================
+
+function LevelPreviewScreen() {
+  const { currentLevel, coins, relics } = useRunStore();
+  const config = LEVEL_CONFIGS[currentLevel - 1];
+  const entrySpots = getEntrySpots(config.entrySpotCount);
+
+  // Build a set of entry cells for highlighting
+  const entryCellSet = useMemo(() => {
+    const set = new Set<string>();
+    for (const entry of entrySpots) {
+      for (const [r, c] of entry.cells) {
+        set.add(`${r},${c}`);
+      }
+    }
+    return set;
+  }, [entrySpots]);
+
+  // Build wall set from obstacles
+  const wallSet = useMemo(() => {
+    const set = new Set<string>();
+    for (const obs of config.obstacles) {
+      if (obs.symbol === 'wall') set.add(`${obs.row},${obs.col}`);
+    }
+    return set;
+  }, [config.obstacles]);
+
+  return (
+    <GestureHandlerRootView style={styles.container}>
+      <SafeAreaView style={styles.container}>
+        <StatusBar style="light" />
+        <ScrollView contentContainerStyle={styles.screenContainer}>
+          <Text style={styles.screenTitle}>Level {currentLevel}</Text>
+          <View style={styles.statsRow}>
+            <View style={styles.statBadge}>
+              <Text style={styles.statText}>Threshold: {config.threshold}</Text>
+            </View>
+            <View style={styles.statBadge}>
+              <Text style={styles.statText}>Respins: {config.respins}</Text>
+            </View>
+            <View style={styles.statBadge}>
+              <Text style={styles.statText}>Symbols: {config.symbolCount}</Text>
+            </View>
+          </View>
+
+          {/* Mini board preview */}
+          <View style={styles.miniGrid}>
+            {Array.from({ length: BOARD_SIZE }).map((_, row) => (
+              <View key={row} style={styles.miniRow}>
+                {Array.from({ length: BOARD_SIZE }).map((_, col) => {
+                  const key = `${row},${col}`;
+                  const isMasked = config.boardMask ? !config.boardMask[row][col] : false;
+                  const isWall = wallSet.has(key);
+                  const isEntry = entryCellSet.has(key);
+
+                  let cellStyle = styles.miniCellOpen;
+                  if (isMasked) cellStyle = styles.miniCellMasked;
+                  else if (isWall) cellStyle = styles.miniCellWall;
+                  else if (isEntry) cellStyle = styles.miniCellEntry;
+
+                  return <View key={col} style={[styles.miniCell, cellStyle]} />;
+                })}
+              </View>
+            ))}
+          </View>
+
+          {/* Run info */}
+          <Text style={styles.coinText}>Coins: {coins}</Text>
+          {relics.length > 0 && (
+            <View style={styles.relicRow}>
+              {relics.map(r => (
+                <Text key={r.id} style={{ fontSize: 20 }}>{r.emoji}</Text>
+              ))}
+            </View>
+          )}
+
+          <Pressable style={styles.startButton} onPress={() => useRunStore.getState().startLevel()}>
+            <Text style={styles.startButtonText}>Start Level</Text>
+          </Pressable>
+        </ScrollView>
+      </SafeAreaView>
+    </GestureHandlerRootView>
+  );
+}
+
+// =============================================================================
+// REWARD SCREEN
+// =============================================================================
+
+function RewardScreen() {
+  const { currentLevel, levelScore, levelRespinsLeft, rewardChoices, coins, relics } = useRunStore();
+  const config = LEVEL_CONFIGS[currentLevel - 1];
+  const surplus = Math.max(0, levelScore - config.threshold);
+  const respinBonus = levelRespinsLeft * 200;
+  const totalEarned = 50 + surplus + respinBonus;
+
+  return (
+    <GestureHandlerRootView style={styles.container}>
+      <SafeAreaView style={styles.container}>
+        <StatusBar style="light" />
+        <ScrollView contentContainerStyle={styles.screenContainer}>
+          <Text style={styles.screenTitle}>Level {currentLevel} Complete!</Text>
+
+          <Text style={styles.sectionHeading}>Score Breakdown</Text>
+          <View style={styles.breakdownRow}>
+            <Text style={styles.breakdownLabel}>Score</Text>
+            <Text style={styles.breakdownValue}>{levelScore}</Text>
+          </View>
+          <View style={styles.breakdownRow}>
+            <Text style={styles.breakdownLabel}>Threshold</Text>
+            <Text style={styles.breakdownValue}>{config.threshold}</Text>
+          </View>
+          <View style={styles.breakdownRow}>
+            <Text style={styles.breakdownLabel}>Surplus</Text>
+            <Text style={styles.breakdownValue}>+{surplus} coins</Text>
+          </View>
+          <View style={styles.breakdownRow}>
+            <Text style={styles.breakdownLabel}>Unused respins ({levelRespinsLeft} x 200)</Text>
+            <Text style={styles.breakdownValue}>+{respinBonus} coins</Text>
+          </View>
+          <View style={[styles.breakdownRow, { marginTop: 4, borderTopWidth: 1, borderTopColor: '#444', paddingTop: 4 }]}>
+            <Text style={[styles.breakdownLabel, { color: '#ffd700' }]}>Total earned</Text>
+            <Text style={[styles.breakdownValue, { color: '#ffd700' }]}>+{totalEarned} coins</Text>
+          </View>
+
+          {rewardChoices.length > 0 ? (
+            <>
+              <Text style={styles.sectionHeading}>Choose a Relic:</Text>
+              <View style={styles.relicCardsRow}>
+                {rewardChoices.map(relic => (
+                  <Pressable
+                    key={relic.id}
+                    style={styles.relicCard}
+                    onPress={() => useRunStore.getState().pickRelic(relic)}
+                  >
+                    <Text style={styles.relicEmoji}>{relic.emoji}</Text>
+                    <Text style={styles.relicName}>{relic.name}</Text>
+                    <Text style={styles.relicDesc}>{relic.description}</Text>
+                  </Pressable>
+                ))}
+              </View>
+            </>
+          ) : (
+            <>
+              <Text style={[styles.sectionHeading, { marginTop: 24 }]}>All relics collected!</Text>
+              <Pressable style={styles.startButton} onPress={() => useRunStore.getState().advanceFromReward()}>
+                <Text style={styles.startButtonText}>Continue</Text>
+              </Pressable>
+            </>
+          )}
+        </ScrollView>
+      </SafeAreaView>
+    </GestureHandlerRootView>
+  );
+}
+
+// =============================================================================
+// SHOP PLACEHOLDER SCREEN
+// =============================================================================
+
+function ShopScreen() {
+  return (
+    <GestureHandlerRootView style={styles.container}>
+      <SafeAreaView style={styles.container}>
+        <StatusBar style="light" />
+        <View style={styles.screenContainer}>
+          <Text style={styles.screenTitle}>Shop</Text>
+          <Text style={styles.screenSubtitle}>Shop coming soon</Text>
+          <Pressable style={styles.startButton} onPress={() => useRunStore.getState().skipShop()}>
+            <Text style={styles.startButtonText}>Continue</Text>
+          </Pressable>
+        </View>
+      </SafeAreaView>
+    </GestureHandlerRootView>
+  );
+}
+
+// =============================================================================
+// GAME OVER SCREEN
+// =============================================================================
+
+function GameOverScreen() {
+  const { currentLevel, levelScore, relics, totalCoinsEarned } = useRunStore();
+
+  return (
+    <GestureHandlerRootView style={styles.container}>
+      <SafeAreaView style={styles.container}>
+        <StatusBar style="light" />
+        <View style={styles.screenContainer}>
+          <Text style={[styles.screenTitle, { color: '#f44336' }]}>Run Over</Text>
+          <Text style={styles.screenSubtitle}>Reached Level {currentLevel} / 10</Text>
+          <Text style={[styles.statText, { fontSize: 18, marginBottom: 12 }]}>Score: {levelScore}</Text>
+
+          <Text style={styles.sectionHeading}>Relics Collected</Text>
+          {relics.length > 0 ? (
+            <View style={styles.relicRow}>
+              {relics.map(r => (
+                <Text key={r.id} style={{ fontSize: 24 }}>{r.emoji}</Text>
+              ))}
+            </View>
+          ) : (
+            <Text style={{ color: '#888', marginBottom: 8 }}>None</Text>
+          )}
+
+          <Text style={styles.coinText}>Total coins earned: {totalCoinsEarned}</Text>
+
+          <Pressable style={[styles.startButton, { marginTop: 16 }]} onPress={() => useRunStore.getState().startRun()}>
+            <Text style={styles.startButtonText}>Run Again</Text>
+          </Pressable>
+        </View>
+      </SafeAreaView>
+    </GestureHandlerRootView>
+  );
+}
+
+// =============================================================================
+// VICTORY SCREEN
+// =============================================================================
+
+function VictoryScreen() {
+  const { relics, totalCoinsEarned } = useRunStore();
+
+  return (
+    <GestureHandlerRootView style={styles.container}>
+      <SafeAreaView style={styles.container}>
+        <StatusBar style="light" />
+        <View style={styles.screenContainer}>
+          <Text style={[styles.screenTitle, { color: '#4caf50', fontSize: 48 }]}>Victory!</Text>
+          <Text style={styles.screenSubtitle}>All 10 levels complete!</Text>
+
+          <Text style={styles.coinText}>Total coins earned: {totalCoinsEarned}</Text>
+
+          <Text style={styles.sectionHeading}>Relics Collected</Text>
+          {relics.length > 0 ? (
+            <View style={styles.relicRow}>
+              {relics.map(r => (
+                <Text key={r.id} style={{ fontSize: 24 }}>{r.emoji}</Text>
+              ))}
+            </View>
+          ) : (
+            <Text style={{ color: '#888', marginBottom: 8 }}>None</Text>
+          )}
+
+          <Pressable style={[styles.startButton, { marginTop: 16 }]} onPress={() => useRunStore.getState().startRun()}>
+            <Text style={styles.startButtonText}>Play Again</Text>
+          </Pressable>
+        </View>
+      </SafeAreaView>
+    </GestureHandlerRootView>
+  );
+}
+
+// =============================================================================
 // MAIN APP COMPONENT
 // =============================================================================
 
 export default function App() {
+  const runPhase = useRunStore(s => s.runPhase);
+
+  // Route to non-playing screens
+  if (runPhase === 'title') return <TitleScreen />;
+  if (runPhase === 'levelPreview') return <LevelPreviewScreen />;
+  if (runPhase === 'reward') return <RewardScreen />;
+  if (runPhase === 'shop') return <ShopScreen />;
+  if (runPhase === 'victory') return <VictoryScreen />;
+  if (runPhase === 'gameOver') return <GameOverScreen />;
+
+  // runPhase === 'playing' — render normal game UI
+  return <PlayingScreen />;
+}
+
+function PlayingScreen() {
   const {
     levelConfig,
     currentTile,
@@ -2331,5 +2622,143 @@ const styles = StyleSheet.create({
     fontSize: CELL_SIZE < 36 ? 10 : 12,
     color: '#5c6bc0',
     opacity: 0.7,
+  },
+
+  // =========================================================================
+  // Screen styles (title, preview, reward, game over, victory)
+  // =========================================================================
+  screenContainer: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 24,
+  },
+  screenTitle: {
+    fontSize: 36,
+    fontWeight: 'bold',
+    color: '#ffd700',
+    marginBottom: 8,
+  },
+  screenSubtitle: {
+    fontSize: 16,
+    color: '#888',
+    marginBottom: 32,
+  },
+  startButton: {
+    backgroundColor: '#5c6bc0',
+    paddingHorizontal: 32,
+    paddingVertical: 14,
+    borderRadius: 10,
+  },
+  startButtonText: {
+    color: '#fff',
+    fontSize: 18,
+    fontWeight: '600',
+  },
+  statsRow: {
+    flexDirection: 'row',
+    gap: 16,
+    marginBottom: 16,
+    flexWrap: 'wrap',
+    justifyContent: 'center',
+  },
+  statBadge: {
+    backgroundColor: '#2d2d44',
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+  },
+  statText: {
+    color: '#fff',
+    fontSize: 14,
+  },
+  miniGrid: {
+    flexDirection: 'column',
+    gap: 1,
+    marginVertical: 16,
+  },
+  miniRow: {
+    flexDirection: 'row',
+    gap: 1,
+  },
+  miniCell: {
+    width: 20,
+    height: 20,
+    borderRadius: 2,
+  },
+  miniCellOpen: {
+    backgroundColor: '#3d3d5c',
+  },
+  miniCellWall: {
+    backgroundColor: '#2a2a3e',
+  },
+  miniCellMasked: {
+    backgroundColor: 'transparent',
+  },
+  miniCellEntry: {
+    backgroundColor: '#5c6bc0',
+  },
+  relicCardsRow: {
+    flexDirection: 'row',
+    gap: 12,
+    marginTop: 16,
+    flexWrap: 'wrap',
+    justifyContent: 'center',
+  },
+  relicCard: {
+    backgroundColor: '#2d2d44',
+    borderRadius: 10,
+    padding: 16,
+    alignItems: 'center',
+    width: 140,
+  },
+  relicEmoji: {
+    fontSize: 32,
+    marginBottom: 8,
+  },
+  relicName: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#fff',
+    marginBottom: 4,
+    textAlign: 'center',
+  },
+  relicDesc: {
+    fontSize: 11,
+    color: '#aaa',
+    textAlign: 'center',
+  },
+  coinText: {
+    fontSize: 16,
+    color: '#ffd700',
+    marginBottom: 8,
+  },
+  sectionHeading: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: '#fff',
+    marginTop: 16,
+    marginBottom: 8,
+  },
+  breakdownRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    width: 260,
+    marginBottom: 4,
+  },
+  breakdownLabel: {
+    fontSize: 14,
+    color: '#aaa',
+  },
+  breakdownValue: {
+    fontSize: 14,
+    color: '#fff',
+    fontWeight: '600',
+  },
+  relicRow: {
+    flexDirection: 'row',
+    gap: 4,
+    marginBottom: 8,
+    flexWrap: 'wrap',
   },
 });
