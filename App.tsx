@@ -56,6 +56,210 @@ const ENTRY_SPOTS: EntrySpot[] = [
 ];
 
 // =============================================================================
+// LEVEL CONFIGS
+// =============================================================================
+
+interface ObstacleCell {
+  row: number;
+  col: number;
+  symbol: Symbol | 'wall';
+}
+
+interface LevelConfig {
+  level: number;
+  threshold: number;
+  respins: number;
+  tilesPerLevel: number;
+  symbolCount: number;
+  obstacles: ObstacleCell[];
+  entrySpotCount: number;
+  boardMask: boolean[][] | null;
+}
+
+const LEVEL_CONFIGS: LevelConfig[] = [
+  // Level 1 — gentle intro, lower threshold, full board
+  {
+    level: 1,
+    threshold: 2500,
+    respins: 4,
+    tilesPerLevel: 15,
+    symbolCount: 5,
+    obstacles: [],
+    entrySpotCount: 2,
+    boardMask: null,
+  },
+  // Level 2 — introduce walls
+  {
+    level: 2,
+    threshold: 3000,
+    respins: 4,
+    tilesPerLevel: 15,
+    symbolCount: 5,
+    obstacles: [
+      { row: 3, col: 2, symbol: 'wall' },
+      { row: 4, col: 5, symbol: 'wall' },
+    ],
+    entrySpotCount: 2,
+    boardMask: null,
+  },
+  // Level 3 — corner-ish walls
+  {
+    level: 3,
+    threshold: 3500,
+    respins: 4,
+    tilesPerLevel: 15,
+    symbolCount: 5,
+    obstacles: [
+      { row: 1, col: 1, symbol: 'wall' },
+      { row: 1, col: 6, symbol: 'wall' },
+      { row: 6, col: 1, symbol: 'wall' },
+      { row: 6, col: 6, symbol: 'wall' },
+    ],
+    entrySpotCount: 2,
+    boardMask: null,
+  },
+  // Level 4 — corners + center, fewer respins, more symbols
+  {
+    level: 4,
+    threshold: 4000,
+    respins: 3,
+    tilesPerLevel: 15,
+    symbolCount: 6,
+    obstacles: [
+      { row: 1, col: 1, symbol: 'wall' },
+      { row: 1, col: 6, symbol: 'wall' },
+      { row: 6, col: 1, symbol: 'wall' },
+      { row: 6, col: 6, symbol: 'wall' },
+      { row: 3, col: 3, symbol: 'wall' },
+      { row: 4, col: 4, symbol: 'wall' },
+    ],
+    entrySpotCount: 2,
+    boardMask: null,
+  },
+  // Level 5 — scattered walls
+  {
+    level: 5,
+    threshold: 4500,
+    respins: 3,
+    tilesPerLevel: 15,
+    symbolCount: 6,
+    obstacles: [
+      { row: 0, col: 1, symbol: 'wall' },
+      { row: 1, col: 5, symbol: 'wall' },
+      { row: 2, col: 2, symbol: 'wall' },
+      { row: 3, col: 6, symbol: 'wall' },
+      { row: 4, col: 1, symbol: 'wall' },
+      { row: 5, col: 5, symbol: 'wall' },
+      { row: 6, col: 2, symbol: 'wall' },
+      { row: 7, col: 6, symbol: 'wall' },
+    ],
+    entrySpotCount: 2,
+    boardMask: null,
+  },
+  // Level 6 — cross-shaped board, no obstacles
+  {
+    level: 6,
+    threshold: 5000,
+    respins: 3,
+    tilesPerLevel: 15,
+    symbolCount: 6,
+    obstacles: [],
+    entrySpotCount: 2,
+    boardMask: (() => {
+      const mask = Array.from({ length: 8 }, () => Array(8).fill(true) as boolean[]);
+      // Cut 3 cells from each corner
+      // Top-left
+      mask[0][0] = false; mask[0][1] = false; mask[1][0] = false;
+      // Top-right
+      mask[0][6] = false; mask[0][7] = false; mask[1][7] = false;
+      // Bottom-left
+      mask[6][0] = false; mask[7][0] = false; mask[7][1] = false;
+      // Bottom-right
+      mask[6][7] = false; mask[7][6] = false; mask[7][7] = false;
+      return mask;
+    })(),
+  },
+  // Level 7 — scattered walls, more symbols, fewer respins
+  {
+    level: 7,
+    threshold: 6000,
+    respins: 2,
+    tilesPerLevel: 15,
+    symbolCount: 7,
+    obstacles: [
+      { row: 0, col: 2, symbol: 'wall' },
+      { row: 1, col: 5, symbol: 'wall' },
+      { row: 2, col: 0, symbol: 'wall' },
+      { row: 2, col: 7, symbol: 'wall' },
+      { row: 3, col: 3, symbol: 'wall' },
+      { row: 4, col: 4, symbol: 'wall' },
+      { row: 5, col: 1, symbol: 'wall' },
+      { row: 5, col: 6, symbol: 'wall' },
+      { row: 6, col: 3, symbol: 'wall' },
+      { row: 7, col: 5, symbol: 'wall' },
+    ],
+    entrySpotCount: 2,
+    boardMask: null,
+  },
+  // Level 8 — L-shaped board (top-right quadrant cut), single entry
+  {
+    level: 8,
+    threshold: 7000,
+    respins: 2,
+    tilesPerLevel: 15,
+    symbolCount: 7,
+    obstacles: [],
+    entrySpotCount: 1,
+    boardMask: (() => {
+      const mask = Array.from({ length: 8 }, () => Array(8).fill(true) as boolean[]);
+      // Block top-right quadrant: rows 0-3, cols 4-7
+      for (let r = 0; r < 4; r++) {
+        for (let c = 4; c < 8; c++) {
+          mask[r][c] = false;
+        }
+      }
+      return mask;
+    })(),
+  },
+  // Level 9 — full board with 4 walls, tough threshold
+  {
+    level: 9,
+    threshold: 8000,
+    respins: 2,
+    tilesPerLevel: 15,
+    symbolCount: 7,
+    obstacles: [
+      { row: 2, col: 2, symbol: 'wall' },
+      { row: 2, col: 5, symbol: 'wall' },
+      { row: 5, col: 2, symbol: 'wall' },
+      { row: 5, col: 5, symbol: 'wall' },
+    ],
+    entrySpotCount: 2,
+    boardMask: null,
+  },
+  // Level 10 — final gauntlet: corners + center block, single entry
+  {
+    level: 10,
+    threshold: 9500,
+    respins: 2,
+    tilesPerLevel: 15,
+    symbolCount: 7,
+    obstacles: [
+      { row: 1, col: 1, symbol: 'wall' },
+      { row: 1, col: 6, symbol: 'wall' },
+      { row: 6, col: 1, symbol: 'wall' },
+      { row: 6, col: 6, symbol: 'wall' },
+      { row: 3, col: 3, symbol: 'wall' },
+      { row: 3, col: 4, symbol: 'wall' },
+      { row: 4, col: 3, symbol: 'wall' },
+      { row: 4, col: 4, symbol: 'wall' },
+    ],
+    entrySpotCount: 1,
+    boardMask: null,
+  },
+];
+
+// =============================================================================
 // SYMBOLS
 // =============================================================================
 
