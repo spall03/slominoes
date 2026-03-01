@@ -1,26 +1,28 @@
 # Working
 
 ## Current Task
-Two-phase diff animation for respins — shipped.
+Roguelike feature — Task 2 complete. Next: Task 3 (make grid setup configurable).
 
 ## Progress
-- [x] Added matchKey utility for diffing matches by cell coords
-- [x] Added highlightColor and pendingPhase2 state fields
-- [x] Respin now diffs before/after matches, shows red blink (broken) then blue blink (new)
-- [x] ScorePopup supports negative scores (red, drift down) and positive (green, drift up)
-- [x] AnimatedCell accepts highlightColor prop (red/blue/gold)
-- [x] Removed text-based match breakdown panel (superseded by visual diff)
-- [x] Fixed keyboard handler that called respinLine inside setState updater
-- [x] Consolidated set() calls in respinLine for atomic state updates
-- [x] Deployed to GitHub Pages
+- [x] Task 1: Added LevelConfig type and LEVEL_CONFIGS constant (10 levels with escalating difficulty)
+- [x] Task 2: Made symbol pool and tile count configurable via parameters
+- [ ] Task 3: Make grid setup configurable (obstacles + board mask + wall symbol)
+- [ ] Task 4: Make entry spots and createInitialState config-driven
+- [ ] Task 5-6: Add RunState store and wire game completion
+- [ ] Task 7-11: Between-level screens
+- [ ] Task 12: Shop screen
+- [ ] Task 13: Hook relic effects into game logic
+- [ ] Task 14-16: HUD, styling polish, and playtest
 
 ## Next Steps
-- None pending
+- Task 3: Make grid setup configurable (obstacles + board mask + wall symbol)
 
 ## Recent Decisions
-- Animation state set atomically with grid mutation in single set() call (avoids React batching issues)
-- Keyboard respin uses ref for cursor value instead of setState updater (avoids "Cannot update during render" error)
-- Placement-phase gold animation unchanged; respin uses red (broken) → blue (new) sequence
+- LevelConfig includes boardMask (boolean[][] | null) for shaped boards
+- ObstacleCell uses Symbol | 'wall' for obstacle types
+- Board shapes: cross (level 6, corners cut), L-shaped (level 8, top-right quadrant cut)
+- Obstacles placed away from entry spots (top: row 0 cols 3-4, bottom: row 7 cols 3-4)
+- IIFEs used for boardMask arrays to keep the constant clean
 
 ## Blockers/Notes
 - expo-haptics has web shim (no-ops on desktop)

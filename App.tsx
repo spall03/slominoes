@@ -283,8 +283,9 @@ const SYMBOL_DISPLAY: Record<Symbol, string> = {
   seven: '7️⃣',
 };
 
-function getRandomSymbol(): Symbol {
-  return SYMBOLS[Math.floor(Math.random() * SYMBOLS.length)];
+function getRandomSymbol(symbolCount: number = SYMBOLS.length): Symbol {
+  const count = Math.min(symbolCount, SYMBOLS.length);
+  return SYMBOLS[Math.floor(Math.random() * count)];
 }
 
 // =============================================================================
@@ -297,12 +298,14 @@ interface Tile {
   symbolB: Symbol;
 }
 
-function generateTile(id: string): Tile {
-  return { id, symbolA: getRandomSymbol(), symbolB: getRandomSymbol() };
+function generateTile(id: string, symbolCount: number = SYMBOLS.length): Tile {
+  return { id, symbolA: getRandomSymbol(symbolCount), symbolB: getRandomSymbol(symbolCount) };
 }
 
-function generateTileQueue(): Tile[] {
-  return Array.from({ length: TILES_PER_LEVEL }, (_, i) => generateTile(`tile-${i}`));
+function generateTileQueue(tilesPerLevel: number = TILES_PER_LEVEL, symbolCount: number = SYMBOLS.length): Tile[] {
+  return Array.from({ length: tilesPerLevel }, (_, i) =>
+    generateTile(`tile-${i}`, symbolCount)
+  );
 }
 
 // =============================================================================
