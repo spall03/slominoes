@@ -1,13 +1,13 @@
 # Working
 
 ## Current Task
-Roguelike feature — Task 2 complete. Next: Task 3 (make grid setup configurable).
+Roguelike feature — Task 4 complete. Next: Task 5-6 (add RunState store and wire game completion).
 
 ## Progress
 - [x] Task 1: Added LevelConfig type and LEVEL_CONFIGS constant (10 levels with escalating difficulty)
 - [x] Task 2: Made symbol pool and tile count configurable via parameters
-- [ ] Task 3: Make grid setup configurable (obstacles + board mask + wall symbol)
-- [ ] Task 4: Make entry spots and createInitialState config-driven
+- [x] Task 3: Added wall symbol, createGridFromConfig, updated matching/respins for obstacles
+- [x] Task 4: Made entry spots and createInitialState config-driven
 - [ ] Task 5-6: Add RunState store and wire game completion
 - [ ] Task 7-11: Between-level screens
 - [ ] Task 12: Shop screen
@@ -15,7 +15,7 @@ Roguelike feature — Task 2 complete. Next: Task 3 (make grid setup configurabl
 - [ ] Task 14-16: HUD, styling polish, and playtest
 
 ## Next Steps
-- Task 3: Make grid setup configurable (obstacles + board mask + wall symbol)
+- Task 5-6: Add RunState store and wire game completion
 
 ## Recent Decisions
 - LevelConfig includes boardMask (boolean[][] | null) for shaped boards

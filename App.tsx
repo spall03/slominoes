@@ -55,6 +55,18 @@ const ENTRY_SPOTS: EntrySpot[] = [
   // { id: 3, label: 'Right', cells: [[3, 7], [4, 7]], arrowDirection: 'left' },
 ];
 
+function getEntrySpots(count: number): EntrySpot[] {
+  const all: EntrySpot[] = [
+    { id: 0, label: 'Top', cells: [[0, 3], [0, 4]], arrowDirection: 'down' },
+    { id: 1, label: 'Bottom', cells: [[7, 3], [7, 4]], arrowDirection: 'up' },
+    { id: 2, label: 'Left', cells: [[3, 0], [4, 0]], arrowDirection: 'right' },
+    { id: 3, label: 'Right', cells: [[3, 7], [4, 7]], arrowDirection: 'left' },
+  ];
+  if (count <= 1) return [all[0]];
+  if (count === 2) return [all[0], all[1]];
+  return all;
+}
+
 // =============================================================================
 // LEVEL CONFIGS
 // =============================================================================
@@ -411,8 +423,8 @@ function canPlaceTileWithEntry(
 }
 
 // Check if any entry spot has valid placements on the grid
-function anyEntryHasValidPlacement(grid: Grid): boolean {
-  for (const entry of ENTRY_SPOTS) {
+function anyEntryHasValidPlacement(grid: Grid, entrySpots: EntrySpot[]): boolean {
+  for (const entry of entrySpots) {
     const reachable = computeReachableCells(grid, entry);
     if (reachable.size < 2) continue;
     // Check if any placement works in any rotation
@@ -537,6 +549,7 @@ interface ScorePopup {
 }
 
 interface GameState {
+  levelConfig: LevelConfig;
   grid: Grid;
   tileQueue: Tile[];
   currentTile: Tile | null;
@@ -569,7 +582,7 @@ interface GameState {
   clearMatchAnimation: () => void;
   removeScorePopup: (id: string) => void;
   respinLine: (type: 'row' | 'col', index: number) => void;
-  resetGame: () => void;
+  resetGame: (config?: LevelConfig) => void;
 }
 
 function canPlaceTile(
@@ -591,14 +604,16 @@ function canPlaceTile(
   return true;
 }
 
-function createInitialState() {
-  const queue = generateTileQueue();
+function createInitialState(config: LevelConfig = LEVEL_CONFIGS[0]) {
+  const queue = generateTileQueue(config.tilesPerLevel, config.symbolCount);
+  const spots = getEntrySpots(config.entrySpotCount);
   return {
-    grid: createEmptyGrid(),
+    levelConfig: config,
+    grid: createGridFromConfig(config),
     tileQueue: queue.slice(1),
     currentTile: queue[0] ?? null,
     rotation: 0 as Rotation,
-    respinsRemaining: RESPINS_PER_LEVEL,
+    respinsRemaining: config.respins,
     score: 0,
     scoreBeforeRespins: 0,
     phase: 'placing' as GamePhase,
@@ -610,7 +625,7 @@ function createInitialState() {
     highlightColor: 'gold' as 'gold' | 'red' | 'blue',
     scorePopups: [] as ScorePopup[],
     pendingPhase2: null as { cells: Set<string>; popups: ScorePopup[] } | null,
-    entrySpots: ENTRY_SPOTS,
+    entrySpots: spots,
     selectedEntry: null as number | null,
     reachableCells: null as Set<string> | null,
   };
@@ -620,9 +635,9 @@ const useGameStore = create<GameState>((set, get) => ({
   ...createInitialState(),
 
   selectEntry: (index: number) => {
-    const { phase, grid } = get();
+    const { phase, grid, entrySpots } = get();
     if (phase !== 'placing') return;
-    const entry = ENTRY_SPOTS[index];
+    const entry = entrySpots[index];
     if (!entry) return;
     const reachable = computeReachableCells(grid, entry);
     set({
@@ -731,7 +746,7 @@ const useGameStore = create<GameState>((set, get) => ({
       });
     } else {
       // Check if any entry has valid placements on the new grid
-      const stuck = !anyEntryHasValidPlacement(newGrid);
+      const stuck = !anyEntryHasValidPlacement(newGrid, get().entrySpots);
       if (stuck) {
         // Skip to respinning early
         set({
@@ -870,13 +885,13 @@ const useGameStore = create<GameState>((set, get) => ({
     if (type === 'row') {
       for (let col = 0; col < BOARD_SIZE; col++) {
         if (newGrid[index][col] !== null && newGrid[index][col] !== 'wall') {
-          newGrid[index][col] = getRandomSymbol();
+          newGrid[index][col] = getRandomSymbol(get().levelConfig.symbolCount);
         }
       }
     } else {
       for (let row = 0; row < BOARD_SIZE; row++) {
         if (newGrid[row][index] !== null && newGrid[row][index] !== 'wall') {
-          newGrid[row][index] = getRandomSymbol();
+          newGrid[row][index] = getRandomSymbol(get().levelConfig.symbolCount);
         }
       }
     }
@@ -944,7 +959,7 @@ const useGameStore = create<GameState>((set, get) => ({
         respinsRemaining: 0,
         score: newScore,
         phase: 'ended',
-        result: newScore >= WIN_THRESHOLD ? 'win' : 'lose',
+        result: newScore >= get().levelConfig.threshold ? 'win' : 'lose',
         ...animState,
       });
     } else {
@@ -957,7 +972,7 @@ const useGameStore = create<GameState>((set, get) => ({
     }
   },
 
-  resetGame: () => set(createInitialState()),
+  resetGame: (config?: LevelConfig) => set(createInitialState(config ?? LEVEL_CONFIGS[0])),
 }));
 
 // =============================================================================
@@ -1226,7 +1241,9 @@ function GestureGrid() {
     const findFirstValidCell = (grid: Grid, reachable: Set<string> | null, entryIndex: number | null): { row: number; col: number } | null => {
       if (!reachable || entryIndex === null) return null;
       // Start searching from the selected entry's cells, spiral outward
-      const entry = ENTRY_SPOTS[entryIndex];
+      const state = useGameStore.getState();
+      const entry = state.entrySpots[entryIndex];
+      if (!entry) return null;
       const [startRow, startCol] = entry.cells[0];
       for (let dist = 0; dist < BOARD_SIZE; dist++) {
         for (let row = startRow - dist; row <= startRow + dist; row++) {
@@ -1546,11 +1563,12 @@ function GestureGrid() {
 // =============================================================================
 
 function HelpPanel() {
+  const { levelConfig } = useGameStore();
   return (
     <View style={styles.helpPanel}>
       <Text style={styles.helpHeading}>Goal</Text>
       <Text style={styles.helpBody}>
-        Score {WIN_THRESHOLD}+ points by placing {TILES_PER_LEVEL} domino tiles on an 8x8 grid, then using {RESPINS_PER_LEVEL} respins to improve your matches.
+        Score {levelConfig.threshold}+ points by placing {levelConfig.tilesPerLevel} domino tiles on an 8x8 grid, then using {levelConfig.respins} respins to improve your matches.
       </Text>
 
       <Text style={styles.helpHeading}>Matching</Text>
@@ -1584,7 +1602,7 @@ function HelpPanel() {
 
       <Text style={styles.helpHeading}>Respins</Text>
       <Text style={styles.helpBody}>
-        After all tiles are placed, you get {RESPINS_PER_LEVEL} respins. Each respin re-randomizes every filled cell in a row or column. Respins can create new matches but also break existing ones. Your score is locked to the best total seen — it can never go down.
+        After all tiles are placed, you get {levelConfig.respins} respins. Each respin re-randomizes every filled cell in a row or column. Respins can create new matches but also break existing ones. Your score is locked to the best total seen — it can never go down.
       </Text>
     </View>
   );
@@ -1596,6 +1614,7 @@ function HelpPanel() {
 
 export default function App() {
   const {
+    levelConfig,
     currentTile,
     tileQueue,
     respinsRemaining,
@@ -1676,7 +1695,7 @@ export default function App() {
           <Text style={styles.title}>Slot Dominoes</Text>
           <View style={styles.scoreRow}>
             <Text style={styles.scoreText}>Score: {score}</Text>
-            <Text style={styles.goalText}>Goal: {WIN_THRESHOLD}</Text>
+            <Text style={styles.goalText}>Goal: {levelConfig.threshold}</Text>
           </View>
         </View>
 
@@ -1813,7 +1832,7 @@ export default function App() {
                     {result === 'win' ? 'You Win!' : 'Game Over'}
                   </Text>
                   <Text style={styles.finalScore}>Final Score: {score}</Text>
-                  <Pressable style={styles.restartButton} onPress={resetGame}>
+                  <Pressable style={styles.restartButton} onPress={() => resetGame()}>
                     <Text style={styles.buttonText}>Play Again</Text>
                   </Pressable>
                 </View>
