@@ -298,9 +298,18 @@ const SYMBOL_DISPLAY: Record<Symbol, string> = {
   wall: '🧱',
 };
 
+const SYMBOL_WEIGHTS: number[] = [5, 4, 3, 2, 1]; // cherry, lemon, bar, bell, seven
+
 function getRandomSymbol(symbolCount: number = SYMBOLS.length): Symbol {
   const count = Math.min(symbolCount, SYMBOLS.length);
-  return SYMBOLS[Math.floor(Math.random() * count)];
+  let totalWeight = 0;
+  for (let i = 0; i < count; i++) totalWeight += SYMBOL_WEIGHTS[i];
+  let roll = Math.random() * totalWeight;
+  for (let i = 0; i < count; i++) {
+    roll -= SYMBOL_WEIGHTS[i];
+    if (roll <= 0) return SYMBOLS[i];
+  }
+  return SYMBOLS[count - 1];
 }
 
 // =============================================================================
