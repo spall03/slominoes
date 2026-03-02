@@ -1046,7 +1046,7 @@ const ALL_RELICS: Relic[] = [
   { id: 'rotateFree', name: 'Rotate Free', description: 'Auto-rotate to best fit', emoji: '\uD83D\uDD03', category: 'placement' },
   { id: 'pathfinder', name: 'Pathfinder', description: 'BFS passes through 1 filled cell', emoji: '\uD83E\uDDED', category: 'placement' },
   { id: 'safetyNet', name: 'Safety Net', description: 'Survive one failed level', emoji: '\uD83D\uDEE1\uFE0F', category: 'defensive' },
-  { id: 'overflow', name: 'Overflow', description: 'Excess score = bonus coins', emoji: '\uD83D\uDCC8', category: 'defensive' },
+  { id: 'overflow', name: 'Overflow', description: 'Surplus coins x2', emoji: '\uD83D\uDCC8', category: 'defensive' },
 ];
 
 // TODO: Wildcard, Rotate Free, Pathfinder — relic effects not yet implemented (complex logic, follow-up task)
