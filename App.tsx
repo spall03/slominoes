@@ -1843,7 +1843,7 @@ function TitleScreen() {
         <StatusBar style="light" />
         <View style={styles.screenContainer}>
           <Text style={[styles.screenTitle, { fontSize: 48 }]}>Slominoes</Text>
-          <Text style={styles.screenSubtitle}>A Roguelike Puzzle</Text>
+          <Text style={styles.screenSubtitle}>A Puzzle Game</Text>
           <Pressable style={styles.startButton} onPress={() => useRunStore.getState().startRun()}>
             <Text style={styles.startButtonText}>New Run</Text>
           </Pressable>
@@ -1858,12 +1858,11 @@ function TitleScreen() {
 // =============================================================================
 
 function LevelPreviewScreen() {
-  const { currentLevel, coins, relics } = useRunStore();
-  const config = LEVEL_CONFIGS[currentLevel - 1];
-  const wideEntry = relics.some(r => r.id === 'wideEntry');
-  const entrySpots = getEntrySpots(config.entrySpotCount, wideEntry);
+  const { currentLevel, levelConfig } = useRunStore();
+  if (!levelConfig) return null;
+  const config = levelConfig;
+  const entrySpots = getEntrySpots(config.entrySpotCount);
 
-  // Build a set of entry cells for highlighting
   const entryCellSet = useMemo(() => {
     const set = new Set<string>();
     for (const entry of entrySpots) {
@@ -1874,7 +1873,6 @@ function LevelPreviewScreen() {
     return set;
   }, [entrySpots]);
 
-  // Build wall set from obstacles
   const wallSet = useMemo(() => {
     const set = new Set<string>();
     for (const obs of config.obstacles) {
@@ -1896,9 +1894,6 @@ function LevelPreviewScreen() {
             <View style={styles.statBadge}>
               <Text style={styles.statText}>Respins: {config.respins}</Text>
             </View>
-            <View style={styles.statBadge}>
-              <Text style={styles.statText}>Symbols: {config.symbolCount}</Text>
-            </View>
           </View>
 
           {/* Mini board preview */}
@@ -1907,13 +1902,11 @@ function LevelPreviewScreen() {
               <View key={row} style={styles.miniRow}>
                 {Array.from({ length: BOARD_SIZE }).map((_, col) => {
                   const key = `${row},${col}`;
-                  const isMasked = config.boardMask ? !config.boardMask[row][col] : false;
                   const isWall = wallSet.has(key);
                   const isEntry = entryCellSet.has(key);
 
                   let cellStyle = styles.miniCellOpen;
-                  if (isMasked) cellStyle = styles.miniCellMasked;
-                  else if (isWall) cellStyle = styles.miniCellWall;
+                  if (isWall) cellStyle = styles.miniCellWall;
                   else if (isEntry) cellStyle = styles.miniCellEntry;
 
                   return <View key={col} style={[styles.miniCell, cellStyle]} />;
@@ -1921,16 +1914,6 @@ function LevelPreviewScreen() {
               </View>
             ))}
           </View>
-
-          {/* Run info */}
-          <Text style={styles.coinText}>Coins: {coins}</Text>
-          {relics.length > 0 && (
-            <View style={styles.relicRow}>
-              {relics.map(r => (
-                <Text key={r.id} style={{ fontSize: 20 }}>{r.emoji}</Text>
-              ))}
-            </View>
-          )}
 
           <Pressable style={styles.startButton} onPress={() => useRunStore.getState().startLevel()}>
             <Text style={styles.startButtonText}>Start Level</Text>
@@ -2069,32 +2052,25 @@ function ShopScreen() {
 // =============================================================================
 
 function GameOverScreen() {
-  const { currentLevel, levelScore, relics, totalCoinsEarned } = useRunStore();
+  const { currentLevel, levelScore } = useRunStore();
+  const won = currentLevel >= NUM_LEVELS && levelScore >= 0;
 
   return (
     <GestureHandlerRootView style={styles.container}>
       <SafeAreaView style={styles.container}>
         <StatusBar style="light" />
         <View style={styles.screenContainer}>
-          <Text style={[styles.screenTitle, { color: '#f44336' }]}>Run Over</Text>
-          <Text style={styles.screenSubtitle}>Reached Level {currentLevel} / 10</Text>
-          <Text style={[styles.statText, { fontSize: 18, marginBottom: 12 }]}>Score: {levelScore}</Text>
-
-          <Text style={styles.sectionHeading}>Relics Collected</Text>
-          {relics.length > 0 ? (
-            <View style={styles.relicRow}>
-              {relics.map(r => (
-                <Text key={r.id} style={{ fontSize: 24 }}>{r.emoji}</Text>
-              ))}
-            </View>
-          ) : (
-            <Text style={{ color: '#888', marginBottom: 8 }}>None</Text>
-          )}
-
-          <Text style={styles.coinText}>Total coins earned: {totalCoinsEarned}</Text>
-
+          <Text style={[styles.screenTitle, { color: won ? '#4caf50' : '#f44336' }]}>
+            {won ? 'Victory!' : 'Run Over'}
+          </Text>
+          <Text style={styles.screenSubtitle}>
+            {won ? `All ${NUM_LEVELS} levels complete!` : `Reached Level ${currentLevel} / ${NUM_LEVELS}`}
+          </Text>
+          <Text style={[styles.statText, { fontSize: 18, marginBottom: 12 }]}>
+            Score: {levelScore}
+          </Text>
           <Pressable style={[styles.startButton, { marginTop: 16 }]} onPress={() => useRunStore.getState().startRun()}>
-            <Text style={styles.startButtonText}>Run Again</Text>
+            <Text style={styles.startButtonText}>Play Again</Text>
           </Pressable>
         </View>
       </SafeAreaView>
@@ -2146,15 +2122,11 @@ function VictoryScreen() {
 export default function App() {
   const runPhase = useRunStore(s => s.runPhase);
 
-  // Route to non-playing screens
   if (runPhase === 'title') return <TitleScreen />;
   if (runPhase === 'levelPreview') return <LevelPreviewScreen />;
-  if (runPhase === 'reward') return <RewardScreen />;
-  if (runPhase === 'shop') return <ShopScreen />;
-  if (runPhase === 'victory') return <VictoryScreen />;
   if (runPhase === 'gameOver') return <GameOverScreen />;
 
-  // runPhase === 'playing' — render normal game UI
+  // runPhase === 'playing'
   return <PlayingScreen />;
 }
 
@@ -2174,7 +2146,7 @@ function PlayingScreen() {
     resetGame,
   } = useGameStore();
 
-  const { currentLevel, coins, relics } = useRunStore();
+  const { currentLevel } = useRunStore();
 
   const tilesRemaining = tileQueue.length + (currentTile ? 1 : 0);
   const entryKeyHint = entrySpots.length > 2 ? '1-4' : '1 or 2';
@@ -2253,16 +2225,8 @@ function PlayingScreen() {
             <Text style={styles.goalText}>Goal: {levelConfig.threshold}</Text>
           </View>
           <View style={styles.hudRow}>
-            <Text style={styles.hudText}>Level {currentLevel} / 10</Text>
-            <Text style={styles.hudText}>{'💰'} {coins}</Text>
+            <Text style={styles.hudText}>Level {currentLevel} / {NUM_LEVELS}</Text>
           </View>
-          {relics.length > 0 && (
-            <View style={styles.hudRelicRow}>
-              {relics.map(r => (
-                <Text key={r.id} style={styles.hudRelicEmoji}>{r.emoji}</Text>
-              ))}
-            </View>
-          )}
         </View>
 
         <View style={Platform.OS === 'web' && _screenWidth >= 700 ? styles.mainRow : undefined}>
@@ -2391,7 +2355,7 @@ function PlayingScreen() {
                     onPress={() => useGameStore.getState().skipRespins()}
                   >
                     <Text style={styles.buttonText}>
-                      Skip Respins ({respinsRemaining} x 200 = {respinsRemaining * 200} coins)
+                      Skip Respins
                     </Text>
                   </Pressable>
                 </View>
