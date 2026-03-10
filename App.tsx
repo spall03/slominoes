@@ -1057,8 +1057,9 @@ const useGameStore = create<GameState>((set, get) => ({
 // RUN STATE (ROGUELIKE META-LAYER)
 // =============================================================================
 
-type RunPhase = 'title' | 'levelPreview' | 'playing' | 'reward' | 'shop' | 'victory' | 'gameOver';
+type RunPhase = 'title' | 'levelPreview' | 'playing' | 'gameOver';
 
+/* --- DORMANT: relics and shop system ---
 interface Relic {
   id: string;
   name: string;
@@ -1078,241 +1079,92 @@ interface ShopItem {
 }
 
 const ALL_RELICS: Relic[] = [
-  { id: 'lucky7s', name: 'Lucky 7s', description: 'Seven symbols score 2x', emoji: '7\uFE0F\u20E3', category: 'scoring' },
-  { id: 'comboKing', name: 'Combo King', description: '4+ matches get extra multiplier', emoji: '\uD83D\uDC51', category: 'scoring' },
-  { id: 'greed', name: 'Greed', description: 'Surplus coins x1.5', emoji: '\uD83D\uDCB0', category: 'scoring' },
-  { id: 'extraSpin', name: 'Extra Spin', description: '+1 respin per level', emoji: '\uD83D\uDD04', category: 'resource' },
-  { id: 'crystalBall', name: 'Crystal Ball', description: 'See 2 tiles ahead', emoji: '\uD83D\uDD2E', category: 'resource' },
-  { id: 'wideEntry', name: 'Wide Entry', description: 'Entry spots span 3 columns', emoji: '\uD83D\uDEAA', category: 'resource' },
-  { id: 'wildcard', name: 'Wildcard', description: 'Every 5th tile has a wild symbol', emoji: '\uD83C\uDCCF', category: 'placement' },
-  { id: 'rotateFree', name: 'Rotate Free', description: 'Auto-rotate to best fit', emoji: '\uD83D\uDD03', category: 'placement' },
-  { id: 'pathfinder', name: 'Pathfinder', description: 'BFS passes through 1 filled cell', emoji: '\uD83E\uDDED', category: 'placement' },
-  { id: 'safetyNet', name: 'Safety Net', description: 'Survive one failed level', emoji: '\uD83D\uDEE1\uFE0F', category: 'defensive' },
-  { id: 'overflow', name: 'Overflow', description: 'Surplus coins x2', emoji: '\uD83D\uDCC8', category: 'defensive' },
+  { id: 'lucky7s', name: 'Lucky 7s', description: 'Seven symbols score 2x', emoji: '7️⃣', category: 'scoring' },
+  { id: 'comboKing', name: 'Combo King', description: '4+ matches get extra multiplier', emoji: '👑', category: 'scoring' },
+  { id: 'greed', name: 'Greed', description: 'Surplus coins x1.5', emoji: '💰', category: 'scoring' },
+  { id: 'extraSpin', name: 'Extra Spin', description: '+1 respin per level', emoji: '🔄', category: 'resource' },
+  { id: 'crystalBall', name: 'Crystal Ball', description: 'See 2 tiles ahead', emoji: '🔮', category: 'resource' },
+  { id: 'wideEntry', name: 'Wide Entry', description: 'Entry spots span 3 columns', emoji: '🚪', category: 'resource' },
+  { id: 'wildcard', name: 'Wildcard', description: 'Every 5th tile has a wild symbol', emoji: '🃏', category: 'placement' },
+  { id: 'rotateFree', name: 'Rotate Free', description: 'Auto-rotate to best fit', emoji: '🔃', category: 'placement' },
+  { id: 'pathfinder', name: 'Pathfinder', description: 'BFS passes through 1 filled cell', emoji: '🧭', category: 'placement' },
+  { id: 'safetyNet', name: 'Safety Net', description: 'Survive one failed level', emoji: '🛡️', category: 'defensive' },
+  { id: 'overflow', name: 'Overflow', description: 'Surplus coins x2', emoji: '📈', category: 'defensive' },
 ];
 
-// TODO: Wildcard, Rotate Free, Pathfinder — relic effects not yet implemented (complex logic, follow-up task)
-
-/** Check if the player currently owns a relic by id. Safe to call from any function at runtime. */
 function hasRelic(id: string): boolean {
   return useRunStore.getState().relics.some(r => r.id === id);
 }
 
-// =============================================================================
-// SHOP ITEM GENERATION
-// =============================================================================
-
 function generateShopItems(shopVisit: number, ownedRelicIds: Set<string>): ShopItem[] {
-  const priceScale = 1 + (shopVisit - 1) * 0.5; // visits 1, 2, 3 → 1x, 1.5x, 2x
+  const priceScale = 1 + (shopVisit - 1) * 0.5;
   const items: ShopItem[] = [];
-
-  // Always offer extra respins
-  items.push({
-    id: 'shop-respins',
-    name: 'Extra Respins',
-    description: '+2 respins next level',
-    emoji: '🔄',
-    cost: Math.round(300 * priceScale),
-    type: 'respins',
-  });
-
-  // Offer a relic if available
+  items.push({ id: 'shop-respins', name: 'Extra Respins', description: '+2 respins next level', emoji: '🔄', cost: Math.round(300 * priceScale), type: 'respins' });
   const availableRelics = ALL_RELICS.filter(r => !ownedRelicIds.has(r.id));
   if (availableRelics.length > 0) {
     const relic = availableRelics[Math.floor(Math.random() * availableRelics.length)];
-    items.push({
-      id: `shop-relic-${relic.id}`,
-      name: relic.name,
-      description: relic.description,
-      emoji: relic.emoji,
-      cost: Math.round(1000 * priceScale),
-      type: 'relic',
-      relic,
-    });
+    items.push({ id: `shop-relic-${relic.id}`, name: relic.name, description: relic.description, emoji: relic.emoji, cost: Math.round(1000 * priceScale), type: 'relic', relic });
   }
-
-  // Tile reroll
-  items.push({
-    id: 'shop-reroll',
-    name: 'Tile Reroll',
-    description: 'Discard & redraw tile once next level',
-    emoji: '🎲',
-    cost: Math.round(400 * priceScale),
-    type: 'tileReroll',
-  });
-
-  // Entry unlock
-  items.push({
-    id: 'shop-entry',
-    name: 'Extra Entries',
-    description: 'Add left/right entry points next level',
-    emoji: '🚪',
-    cost: Math.round(500 * priceScale),
-    type: 'entryUnlock',
-  });
-
+  items.push({ id: 'shop-reroll', name: 'Tile Reroll', description: 'Discard & redraw tile once next level', emoji: '🎲', cost: Math.round(400 * priceScale), type: 'tileReroll' });
+  items.push({ id: 'shop-entry', name: 'Extra Entries', description: 'Add left/right entry points next level', emoji: '🚪', cost: Math.round(500 * priceScale), type: 'entryUnlock' });
   return items;
 }
+--- END DORMANT ---*/
 
 interface RunState {
   runPhase: RunPhase;
   currentLevel: number;
-  coins: number;
-  totalCoinsEarned: number;
-  relics: Relic[];
   levelScore: number;
-  levelRespinsLeft: number;
-  rewardChoices: Relic[];
-  shopItems: ShopItem[];
-  bonusRespins: number;
-  hasTileReroll: boolean;
-  hasEntryUnlock: boolean;
+  levelConfig: LevelConfig | null;
 
   startRun: () => void;
   startLevel: () => void;
   completeLevel: (score: number, threshold: number, respinsLeft: number) => void;
   failLevel: (score: number) => void;
-  pickRelic: (relic: Relic) => void;
-  buyShopItem: (itemId: string) => void;
-  skipShop: () => void;
-  advanceFromReward: () => void;
 }
 
 const useRunStore = create<RunState>((set, get) => ({
   runPhase: 'title',
   currentLevel: 1,
-  coins: 0,
-  totalCoinsEarned: 0,
-  relics: [],
   levelScore: 0,
-  levelRespinsLeft: 0,
-  rewardChoices: [],
-  shopItems: [],
-  bonusRespins: 0,
-  hasTileReroll: false,
-  hasEntryUnlock: false,
+  levelConfig: null,
 
   startRun: () => {
+    const config = generateLevelConfig(1);
     set({
       runPhase: 'levelPreview',
       currentLevel: 1,
-      coins: 0,
-      totalCoinsEarned: 0,
-      relics: [],
       levelScore: 0,
-      levelRespinsLeft: 0,
-      rewardChoices: [],
-      shopItems: [],
-      bonusRespins: 0,
-      hasTileReroll: false,
-      hasEntryUnlock: false,
+      levelConfig: config,
     });
   },
 
   startLevel: () => {
-    const { currentLevel, bonusRespins, hasEntryUnlock, relics } = get();
-    const baseConfig = LEVEL_CONFIGS[currentLevel - 1];
-    const extraSpinRelics = relics.filter(r => r.id === 'extraSpin').length;
-    const config = {
-      ...baseConfig,
-      respins: baseConfig.respins + (bonusRespins || 0) + extraSpinRelics,
-      entrySpotCount: hasEntryUnlock ? 4 : baseConfig.entrySpotCount,
-    };
-    const wideEntry = relics.some(r => r.id === 'wideEntry');
-    useGameStore.getState().resetGame(config, wideEntry);
-    // Reset single-use shop bonuses
-    set({ runPhase: 'playing', bonusRespins: 0, hasTileReroll: false, hasEntryUnlock: false });
+    const { levelConfig } = get();
+    if (!levelConfig) return;
+    useGameStore.getState().resetGame(levelConfig);
+    set({ runPhase: 'playing' });
   },
 
-  completeLevel: (score: number, threshold: number, respinsLeft: number) => {
-    const { relics } = get();
-    const hasGreed = relics.some(r => r.id === 'greed');
-    const hasOverflow = relics.some(r => r.id === 'overflow');
-    const surplus = Math.max(0, score - threshold);
-    const adjustedSurplus = hasOverflow ? surplus * 2 : surplus;
-    const respinBonus = respinsLeft * 200;
-    const baseCoins = 50 + adjustedSurplus + respinBonus;
-    const earnedCoins = hasGreed ? Math.floor(baseCoins * 1.5) : baseCoins;
-
-    // Generate 3 relic choices (ones player doesn't own)
-    const owned = new Set(relics.map(r => r.id));
-    const available = ALL_RELICS.filter(r => !owned.has(r.id));
-    const shuffled = [...available].sort(() => Math.random() - 0.5);
-    const choices = shuffled.slice(0, 3);
-
-    set(state => ({
-      runPhase: 'reward',
-      coins: state.coins + earnedCoins,
-      totalCoinsEarned: state.totalCoinsEarned + earnedCoins,
+  completeLevel: (score: number, _threshold: number, _respinsLeft: number) => {
+    const { currentLevel } = get();
+    if (currentLevel >= NUM_LEVELS) {
+      // Final level beaten — show game over with success
+      set({ runPhase: 'gameOver', levelScore: score });
+      return;
+    }
+    const nextLevel = currentLevel + 1;
+    const config = generateLevelConfig(nextLevel);
+    set({
+      currentLevel: nextLevel,
+      levelConfig: config,
       levelScore: score,
-      levelRespinsLeft: respinsLeft,
-      rewardChoices: choices,
-    }));
+      runPhase: 'levelPreview',
+    });
   },
 
   failLevel: (score: number) => {
-    const { relics } = get();
-    const safetyNetIndex = relics.findIndex(r => r.id === 'safetyNet');
-    if (safetyNetIndex >= 0) {
-      // Consume safety net, retry level
-      const newRelics = [...relics];
-      newRelics.splice(safetyNetIndex, 1);
-      set({ relics: newRelics, runPhase: 'levelPreview' });
-    } else {
-      set({ runPhase: 'gameOver', levelScore: score });
-    }
-  },
-
-  pickRelic: (relic: Relic) => {
-    set(state => ({ relics: [...state.relics, relic] }));
-    get().advanceFromReward();
-  },
-
-  advanceFromReward: () => {
-    const { currentLevel, relics } = get();
-    if (currentLevel >= 10) {
-      set({ runPhase: 'victory' });
-      return;
-    }
-    // Shop after levels 3, 6, 9
-    if (currentLevel === 3 || currentLevel === 6 || currentLevel === 9) {
-      const shopVisit = Math.floor(currentLevel / 3); // 1, 2, 3
-      const ownedRelicIds = new Set(relics.map(r => r.id));
-      const items = generateShopItems(shopVisit, ownedRelicIds);
-      set({ runPhase: 'shop', shopItems: items });
-    } else {
-      set({ currentLevel: currentLevel + 1, runPhase: 'levelPreview' });
-    }
-  },
-
-  buyShopItem: (itemId: string) => {
-    const { shopItems, coins } = get();
-    const item = shopItems.find(i => i.id === itemId);
-    if (!item || coins < item.cost) return;
-
-    const updates: Partial<RunState> = {
-      coins: coins - item.cost,
-      shopItems: shopItems.filter(i => i.id !== itemId),
-    };
-
-    if (item.type === 'relic' && item.relic) {
-      updates.relics = [...get().relics, item.relic];
-    } else if (item.type === 'respins') {
-      updates.bonusRespins = (get().bonusRespins || 0) + 2;
-    } else if (item.type === 'tileReroll') {
-      updates.hasTileReroll = true;
-    } else if (item.type === 'entryUnlock') {
-      updates.hasEntryUnlock = true;
-    }
-
-    set(updates as any);
-  },
-
-  skipShop: () => {
-    set(state => ({
-      currentLevel: state.currentLevel + 1,
-      runPhase: 'levelPreview',
-    }));
+    set({ runPhase: 'gameOver', levelScore: score });
   },
 }));
 
