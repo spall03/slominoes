@@ -65,12 +65,12 @@ const ENTRY_SPOTS: EntrySpot[] = [
   // { id: 3, label: 'Right', cells: [[3, 7], [4, 7]], arrowDirection: 'left' },
 ];
 
-function getEntrySpots(count: number, wide: boolean = false): EntrySpot[] {
+function getEntrySpots(count: number): EntrySpot[] {
   const all: EntrySpot[] = [
-    { id: 0, label: 'Top', cells: wide ? [[0, 2], [0, 3], [0, 4]] : [[0, 3], [0, 4]], arrowDirection: 'down' },
-    { id: 1, label: 'Bottom', cells: wide ? [[7, 2], [7, 3], [7, 4]] : [[7, 3], [7, 4]], arrowDirection: 'up' },
-    { id: 2, label: 'Left', cells: wide ? [[2, 0], [3, 0], [4, 0]] : [[3, 0], [4, 0]], arrowDirection: 'right' },
-    { id: 3, label: 'Right', cells: wide ? [[2, 7], [3, 7], [4, 7]] : [[3, 7], [4, 7]], arrowDirection: 'left' },
+    { id: 0, label: 'Top', cells: [[0, 3], [0, 4]], arrowDirection: 'down' },
+    { id: 1, label: 'Bottom', cells: [[7, 3], [7, 4]], arrowDirection: 'up' },
+    { id: 2, label: 'Left', cells: [[3, 0], [4, 0]], arrowDirection: 'right' },
+    { id: 3, label: 'Right', cells: [[3, 7], [4, 7]], arrowDirection: 'left' },
   ];
   if (count <= 1) return [all[0]];
   if (count === 2) return [all[0], all[1]];
@@ -543,10 +543,8 @@ function findMatches(grid: Grid): Match[] {
       if (length >= MIN_MATCH_LENGTH) {
         const cells: [number, number][] = [];
         for (let i = 0; i < length; i++) cells.push([row, col + i]);
-        let multiplier = getLengthMultiplier(length);
-        if (length >= 4 && hasRelic('comboKing')) multiplier += 1;
-        let score = SYMBOL_VALUES[symbol] * length * multiplier;
-        if (symbol === 'seven' && hasRelic('lucky7s')) score *= 2;
+        const multiplier = getLengthMultiplier(length);
+        const score = SYMBOL_VALUES[symbol] * length * multiplier;
         matches.push({ cells, symbol, length, score });
       }
       col += length;
@@ -568,10 +566,8 @@ function findMatches(grid: Grid): Match[] {
       if (length >= MIN_MATCH_LENGTH) {
         const cells: [number, number][] = [];
         for (let i = 0; i < length; i++) cells.push([row + i, col]);
-        let multiplier = getLengthMultiplier(length);
-        if (length >= 4 && hasRelic('comboKing')) multiplier += 1;
-        let score = SYMBOL_VALUES[symbol] * length * multiplier;
-        if (symbol === 'seven' && hasRelic('lucky7s')) score *= 2;
+        const multiplier = getLengthMultiplier(length);
+        const score = SYMBOL_VALUES[symbol] * length * multiplier;
         matches.push({ cells, symbol, length, score });
       }
       row += length;
@@ -641,7 +637,7 @@ interface GameState {
   removeScorePopup: (id: string) => void;
   respinLine: (type: 'row' | 'col', index: number) => void;
   skipRespins: () => void;
-  resetGame: (config?: LevelConfig, wideEntry?: boolean) => void;
+  resetGame: (config?: LevelConfig) => void;
 }
 
 function canPlaceTile(
@@ -663,9 +659,9 @@ function canPlaceTile(
   return true;
 }
 
-function createInitialState(config: LevelConfig = LEVEL_CONFIGS[0], wideEntry: boolean = false) {
+function createInitialState(config: LevelConfig = generateLevelConfig(1)) {
   const queue = generateTileQueue(config.tilesPerLevel, config.symbolCount);
-  const spots = getEntrySpots(config.entrySpotCount, wideEntry);
+  const spots = getEntrySpots(config.entrySpotCount);
   return {
     levelConfig: config,
     grid: createGridFromConfig(config),
@@ -1050,7 +1046,7 @@ const useGameStore = create<GameState>((set, get) => ({
     }
   },
 
-  resetGame: (config?: LevelConfig, wideEntry?: boolean) => set(createInitialState(config ?? LEVEL_CONFIGS[0], wideEntry ?? false)),
+  resetGame: (config?: LevelConfig) => set(createInitialState(config ?? generateLevelConfig(1))),
 }));
 
 // =============================================================================
@@ -2354,19 +2350,6 @@ function PlayingScreen() {
                         </Text>
                         <Text style={styles.previewSymbol}>
                           {SYMBOL_DISPLAY[tileQueue[0].symbolB]}
-                        </Text>
-                      </View>
-                    </View>
-                  )}
-                  {placementMode === 'placed' && hasRelic('crystalBall') && tileQueue.length > 1 && (
-                    <View style={styles.tilePreview}>
-                      <Text style={styles.previewLabel}>After next:</Text>
-                      <View style={styles.tilePreviewBox}>
-                        <Text style={styles.previewSymbol}>
-                          {SYMBOL_DISPLAY[tileQueue[1].symbolA]}
-                        </Text>
-                        <Text style={styles.previewSymbol}>
-                          {SYMBOL_DISPLAY[tileQueue[1].symbolB]}
                         </Text>
                       </View>
                     </View>
