@@ -131,6 +131,7 @@ function generateLevelConfig(level: number): LevelConfig {
   };
 }
 
+/* --- DORMANT: hardcoded level configs replaced by generateLevelConfig ---
 const LEVEL_CONFIGS: LevelConfig[] = [
   // Level 1 — gentle intro, lower threshold, full board
   {
@@ -313,6 +314,7 @@ const LEVEL_CONFIGS: LevelConfig[] = [
     boardMask: null,
   },
 ];
+--- END DORMANT ---*/
 
 // =============================================================================
 // SYMBOLS
@@ -1924,6 +1926,7 @@ function LevelPreviewScreen() {
   );
 }
 
+/* --- DORMANT: reward, shop, and victory screens ---
 // =============================================================================
 // REWARD SCREEN
 // =============================================================================
@@ -2046,6 +2049,7 @@ function ShopScreen() {
     </GestureHandlerRootView>
   );
 }
+--- END DORMANT ---*/
 
 // =============================================================================
 // GAME OVER SCREEN
@@ -2078,10 +2082,7 @@ function GameOverScreen() {
   );
 }
 
-// =============================================================================
-// VICTORY SCREEN
-// =============================================================================
-
+/* --- DORMANT: separate victory screen (merged into GameOverScreen) ---
 function VictoryScreen() {
   const { relics, totalCoinsEarned } = useRunStore();
 
@@ -2114,6 +2115,7 @@ function VictoryScreen() {
     </GestureHandlerRootView>
   );
 }
+--- END DORMANT ---*/
 
 // =============================================================================
 // MAIN APP COMPONENT
