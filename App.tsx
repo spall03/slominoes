@@ -29,6 +29,15 @@ const RESPINS_PER_LEVEL = 5;
 const WIN_THRESHOLD = 3000;
 const MIN_MATCH_LENGTH = 3;
 
+// =============================================================================
+// PROCEDURAL LEVEL TUNING
+// =============================================================================
+
+const WALL_SCALAR = 1.5;          // walls per level (level * WALL_SCALAR)
+const SCORE_COEFFICIENT = 55;     // base points per playable cell
+const LEVEL_SCALAR_MAX = 1.5;     // level 10 threshold multiplier vs level 1
+const NUM_LEVELS = 10;
+
 const LENGTH_MULTIPLIERS: Record<number, number> = { 3: 1, 4: 2, 5: 3 };
 const MAX_LENGTH_MULTIPLIER = 4;
 
@@ -87,6 +96,39 @@ interface LevelConfig {
   obstacles: ObstacleCell[];
   entrySpotCount: number;
   boardMask: boolean[][] | null;
+}
+
+function generateLevelConfig(level: number): LevelConfig {
+  const wallCount = Math.floor(level * WALL_SCALAR);
+
+  // Place walls randomly, avoiding entry spot cells
+  const entryCells = new Set(['0,3', '0,4', '7,3', '7,4']);
+  const obstacles: ObstacleCell[] = [];
+  const usedPositions = new Set<string>();
+
+  while (obstacles.length < wallCount) {
+    const row = Math.floor(Math.random() * BOARD_SIZE);
+    const col = Math.floor(Math.random() * BOARD_SIZE);
+    const key = `${row},${col}`;
+    if (entryCells.has(key) || usedPositions.has(key)) continue;
+    usedPositions.add(key);
+    obstacles.push({ row, col, symbol: 'wall' });
+  }
+
+  const playableCells = 64 - wallCount;
+  const levelScalar = 1 + (level - 1) * ((LEVEL_SCALAR_MAX - 1) / (NUM_LEVELS - 1));
+  const threshold = Math.round(playableCells * SCORE_COEFFICIENT * levelScalar);
+
+  return {
+    level,
+    threshold,
+    respins: RESPINS_PER_LEVEL,
+    tilesPerLevel: TILES_PER_LEVEL,
+    symbolCount: 5,
+    obstacles,
+    entrySpotCount: 2,
+    boardMask: null,
+  };
 }
 
 const LEVEL_CONFIGS: LevelConfig[] = [
