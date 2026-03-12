@@ -2143,7 +2143,9 @@ function PlayingScreen() {
 
     const handleRespinKey = (e: KeyboardEvent) => {
       const state = useGameStore.getState();
-      if (state.phase !== 'respinning') return;
+      // Only handle respin keys during placing phase, in idle mode, with respins available
+      if (state.phase !== 'placing' || state.respinsRemaining <= 0) return;
+      if (state.placementMode === 'placed') return; // Arrow keys used for tile movement when placed
 
       switch (e.key) {
         case 'ArrowUp':
@@ -2176,15 +2178,10 @@ function PlayingScreen() {
             ? { type: 'col', index: c.index < BOARD_SIZE ? c.index : 0 }
             : { type: 'row', index: c.index < BOARD_SIZE ? c.index : 0 });
           break;
-        case 'Enter':
-        case ' ':
+        case 'r':
+        case 'R':
           e.preventDefault();
           state.respinLine(respinCursorRef.current.type, respinCursorRef.current.index);
-          break;
-        case 's':
-        case 'S':
-          e.preventDefault();
-          state.skipRespins();
           break;
       }
     };
