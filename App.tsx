@@ -2215,7 +2215,7 @@ function PlayingScreen() {
               <View style={styles.gridWithRows}>
                 <View>
                   {/* Column respin buttons */}
-                  {phase === 'respinning' && (
+                  {phase === 'placing' && respinsRemaining > 0 && (
                     <View style={styles.colButtons}>
                       {Array.from({ length: BOARD_SIZE }).map((_, col) => (
                         <Pressable
@@ -2235,7 +2235,7 @@ function PlayingScreen() {
                 </View>
 
                 {/* Row respin buttons */}
-                {phase === 'respinning' && (
+                {phase === 'placing' && respinsRemaining > 0 && (
                   <View style={styles.rowButtons}>
                     {Array.from({ length: BOARD_SIZE }).map((_, row) => (
                       <Pressable
@@ -2321,22 +2321,12 @@ function PlayingScreen() {
                 </>
               )}
 
-              {phase === 'respinning' && (
-                <View>
-                  <Text style={styles.infoText}>
-                    {Platform.OS === 'web'
-                      ? `Respins: ${respinsRemaining} | Arrows: select | Tab: row/col | Enter: pull | S: skip`
-                      : `Respins: ${respinsRemaining} | Tap row/column arrows to respin`}
-                  </Text>
-                  <Pressable
-                    style={[styles.restartButton, { marginTop: 8, backgroundColor: '#5c6bc0' }]}
-                    onPress={() => useGameStore.getState().skipRespins()}
-                  >
-                    <Text style={styles.buttonText}>
-                      Skip Respins
-                    </Text>
-                  </Pressable>
-                </View>
+              {phase === 'placing' && respinsRemaining > 0 && (
+                <Text style={styles.infoText}>
+                  {Platform.OS === 'web'
+                    ? `Respins: ${respinsRemaining} | Arrows: select row/col | R: respin | Tab: toggle row/col`
+                    : `Respins: ${respinsRemaining} | Tap row/column arrows to respin`}
+                </Text>
               )}
 
               {phase === 'ended' && (
