@@ -593,7 +593,7 @@ function matchKey(m: Match): string {
 // GAME STATE (ZUSTAND)
 // =============================================================================
 
-type GamePhase = 'placing' | 'respinning' | 'ended';
+type GamePhase = 'placing' | 'ended';
 type GameResult = 'win' | 'lose' | null;
 type PlacementMode = 'idle' | 'placed';
 
@@ -612,7 +612,6 @@ interface GameState {
   rotation: Rotation;
   respinsRemaining: number;
   score: number;
-  scoreBeforeRespins: number;
   phase: GamePhase;
   result: GameResult;
   placementMode: PlacementMode;
@@ -638,7 +637,6 @@ interface GameState {
   clearMatchAnimation: () => void;
   removeScorePopup: (id: string) => void;
   respinLine: (type: 'row' | 'col', index: number) => void;
-  skipRespins: () => void;
   resetGame: (config?: LevelConfig) => void;
 }
 
@@ -672,7 +670,6 @@ function createInitialState(config: LevelConfig = generateLevelConfig(1)) {
     rotation: 0 as Rotation,
     respinsRemaining: config.respins,
     score: 0,
-    scoreBeforeRespins: 0,
     phase: 'placing' as GamePhase,
     result: null as GameResult,
     placementMode: 'idle' as PlacementMode,
@@ -788,37 +785,49 @@ const useGameStore = create<GameState>((set, get) => ({
     const isComplete = nextTile === null;
 
     if (isComplete) {
+      const result = newTotalScore >= get().levelConfig.threshold ? 'win' : 'lose';
       set({
         grid: newGrid,
         tileQueue: [],
         currentTile: null,
         score: newTotalScore,
-        scoreBeforeRespins: newTotalScore,
-        phase: 'respinning',
+        phase: 'ended',
+        result,
         placementMode: 'idle',
         placedPosition: null,
         holdReady: false,
         selectedEntry: null,
         reachableCells: null,
       });
+      if (result === 'win') {
+        useRunStore.getState().completeLevel(newTotalScore, get().levelConfig.threshold, get().respinsRemaining);
+      } else {
+        useRunStore.getState().failLevel(newTotalScore);
+      }
     } else {
       // Check if any entry has valid placements on the new grid
       const stuck = !anyEntryHasValidPlacement(newGrid, get().entrySpots);
       if (stuck) {
-        // Skip to respinning early
+        // No valid placements remaining — end the game
+        const result = newTotalScore >= get().levelConfig.threshold ? 'win' : 'lose';
         set({
           grid: newGrid,
           tileQueue: newQueue,
           currentTile: nextTile,
           score: newTotalScore,
-          scoreBeforeRespins: newTotalScore,
-          phase: 'respinning',
+          phase: 'ended',
+          result,
           placementMode: 'idle',
           placedPosition: null,
           holdReady: false,
           selectedEntry: null,
           reachableCells: null,
         });
+        if (result === 'win') {
+          useRunStore.getState().completeLevel(newTotalScore, get().levelConfig.threshold, get().respinsRemaining);
+        } else {
+          useRunStore.getState().failLevel(newTotalScore);
+        }
       } else {
         set({
           grid: newGrid,
@@ -931,7 +940,7 @@ const useGameStore = create<GameState>((set, get) => ({
 
   respinLine: (type: 'row' | 'col', index: number) => {
     const { phase, respinsRemaining, grid, score, matchingCells } = get();
-    if (phase !== 'respinning' || respinsRemaining <= 0) return;
+    if (phase !== 'placing' || respinsRemaining <= 0) return;
     if (index < 0 || index >= BOARD_SIZE) return;
     if (matchingCells.size > 0) return; // Block respins during animation
 
@@ -956,7 +965,7 @@ const useGameStore = create<GameState>((set, get) => ({
     const newRespins = respinsRemaining - 1;
     const matchesAfter = findMatches(newGrid);
     const gridScore = matchesAfter.reduce((sum, m) => sum + m.score, 0);
-    const newScore = Math.max(score, gridScore);
+    const newScore = gridScore;
 
     // Diff matches: broken = before only, new = after only
     const beforeKeys = new Set(matchesBefore.map(matchKey));
@@ -1010,42 +1019,12 @@ const useGameStore = create<GameState>((set, get) => ({
     }
 
     // Single atomic set() — grid + score + animation state together
-    if (newRespins === 0) {
-      set({
-        grid: newGrid,
-        respinsRemaining: 0,
-        score: newScore,
-        phase: 'ended',
-        result: newScore >= get().levelConfig.threshold ? 'win' : 'lose',
-        ...animState,
-      });
-      // Notify run store
-      const finalState = get();
-      if (finalState.result === 'win') {
-        useRunStore.getState().completeLevel(finalState.score, finalState.levelConfig.threshold, 0);
-      } else {
-        useRunStore.getState().failLevel(finalState.score);
-      }
-    } else {
-      set({
-        grid: newGrid,
-        respinsRemaining: newRespins,
-        score: newScore,
-        ...animState,
-      });
-    }
-  },
-
-  skipRespins: () => {
-    const { phase, respinsRemaining, score, levelConfig } = get();
-    if (phase !== 'respinning') return;
-    const result = score >= levelConfig.threshold ? 'win' : 'lose';
-    set({ phase: 'ended', result });
-    if (result === 'win') {
-      useRunStore.getState().completeLevel(score, levelConfig.threshold, respinsRemaining);
-    } else {
-      useRunStore.getState().failLevel(score);
-    }
+    set({
+      grid: newGrid,
+      respinsRemaining: newRespins,
+      score: newScore,
+      ...animState,
+    });
   },
 
   resetGame: (config?: LevelConfig) => set(createInitialState(config ?? generateLevelConfig(1))),
