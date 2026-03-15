@@ -2489,7 +2489,7 @@ const styles = StyleSheet.create({
   },
   rowButtons: {
     marginLeft: 4,
-    alignSelf: 'flex-end',
+    paddingVertical: GRID_PADDING,
   },
   respinButton: {
     width: CELL_SIZE,
