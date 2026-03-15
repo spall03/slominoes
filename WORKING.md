@@ -13,6 +13,10 @@ Mid-game respins — completed implementation.
 - [x] Live scoring (no ratcheting) — respins are genuine risk/reward
 - [x] Removed skipRespins action and UI
 - [x] Respin keyboard controls work during placing phase (R key to fire)
+- [x] Fixed respin button alignment (row + column buttons)
+- [x] Built simulation tool (simulate.ts) for data-driven difficulty tuning
+- [x] Tuned constants: SCORE_COEFFICIENT=30, LEVEL_SCALAR_MAX=2.2, TILES_PER_LEVEL=16
+- [x] Fixed mobile UI: controls (tiles left, respins) no longer pushed off screen
 
 ## Next Steps
 - Playtest mid-game respins for balance

@@ -2207,9 +2207,9 @@ function PlayingScreen() {
           </View>
         </View>
 
-        <View style={Platform.OS === 'web' && _screenWidth >= 700 ? styles.mainRow : undefined}>
+        <View style={Platform.OS === 'web' && _screenWidth >= 700 ? styles.mainRow : styles.mobileMain}>
           {/* Left column: grid + controls */}
-          <View style={Platform.OS === 'web' && _screenWidth >= 700 ? styles.mainColumn : undefined}>
+          <View style={Platform.OS === 'web' && _screenWidth >= 700 ? styles.mainColumn : styles.mobileColumn}>
             {/* Grid */}
             <View style={styles.gridContainer}>
               {/* Column respin buttons */}
@@ -2383,16 +2383,24 @@ const styles = StyleSheet.create({
   mainColumn: {
     alignItems: 'center',
   },
+  mobileMain: {
+    flex: 1,
+  },
+  mobileColumn: {
+    flex: 1,
+    alignItems: 'center',
+  },
   header: {
     padding: 16,
     alignItems: 'center',
-    paddingTop: Platform.OS === 'web' ? 8 : 48,
+    paddingTop: Platform.OS === 'web' ? 8 : 4,
+    paddingBottom: 8,
   },
   title: {
-    fontSize: 28,
+    fontSize: 24,
     fontWeight: 'bold',
     color: '#ffd700',
-    marginBottom: 8,
+    marginBottom: 4,
   },
   scoreRow: {
     flexDirection: 'row',
