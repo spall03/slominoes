@@ -2282,79 +2282,88 @@ function PlayingScreen() {
                 )}
               </View>
 
-              {/* Confirm / Cancel buttons when tile is placed */}
-              {phase === 'placing' && placementMode === 'placed' && (
-                <View style={styles.placementButtons}>
-                  <Pressable style={styles.confirmButton} onPress={useGameStore.getState().confirmPlacement}>
-                    <Text style={styles.buttonText}>Confirm</Text>
-                  </Pressable>
-                  <Pressable style={styles.cancelButton} onPress={useGameStore.getState().cancelPlacement}>
-                    <Text style={styles.buttonText}>Cancel</Text>
-                  </Pressable>
-                </View>
-              )}
             </View>
 
             {/* Controls */}
             <View style={styles.controls}>
-              {phase === 'placing' && currentTile && (
+              {phase === 'placing' && currentTile && !respinMode && (
                 <>
-                  {placementMode === 'idle' && (
-                    <View style={styles.tilePreview}>
-                      <Text style={styles.previewLabel}>Current tile:</Text>
-                      <View style={styles.tilePreviewBox}>
-                        <Text style={styles.previewSymbol}>
-                          {SYMBOL_DISPLAY[currentTile.symbolA]}
-                        </Text>
-                        <Text style={styles.previewSymbol}>
-                          {SYMBOL_DISPLAY[currentTile.symbolB]}
-                        </Text>
+                  {/* Bottom bar: tile preview + count + respin toggle */}
+                  {placementMode !== 'placed' ? (
+                    <View style={styles.bottomBar}>
+                      <View style={styles.bottomBarTile}>
+                        <View style={styles.tilePreviewBox}>
+                          <Text style={styles.previewSymbol}>
+                            {SYMBOL_DISPLAY[currentTile.symbolA]}
+                          </Text>
+                          <Text style={styles.previewSymbol}>
+                            {SYMBOL_DISPLAY[currentTile.symbolB]}
+                          </Text>
+                        </View>
+                        <Text style={styles.bottomBarMeta}>{tilesRemaining} left</Text>
                       </View>
+                      {isMobile && respinsRemaining > 0 && (
+                        <Pressable
+                          style={styles.respinToggle}
+                          onPress={() => setRespinMode(true)}
+                        >
+                          <Text style={styles.respinToggleText}>Respin</Text>
+                        </Pressable>
+                      )}
+                    </View>
+                  ) : (
+                    <View style={styles.placementButtons}>
+                      <Pressable style={styles.confirmButton} onPress={useGameStore.getState().confirmPlacement}>
+                        <Text style={styles.buttonText}>Confirm</Text>
+                      </Pressable>
+                      <Pressable style={styles.cancelButton} onPress={useGameStore.getState().cancelPlacement}>
+                        <Text style={styles.buttonText}>Cancel</Text>
+                      </Pressable>
                     </View>
                   )}
-                  {placementMode === 'placed' && tileQueue.length > 0 && (
-                    <View style={styles.tilePreview}>
-                      <Text style={styles.previewLabel}>Next tile:</Text>
-                      <View style={styles.tilePreviewBox}>
-                        <Text style={styles.previewSymbol}>
-                          {SYMBOL_DISPLAY[tileQueue[0].symbolA]}
-                        </Text>
-                        <Text style={styles.previewSymbol}>
-                          {SYMBOL_DISPLAY[tileQueue[0].symbolB]}
-                        </Text>
-                      </View>
-                    </View>
-                  )}
-                  <Text style={styles.infoText}>Tiles left: {tilesRemaining}</Text>
+
+                  {/* Hint text */}
                   {placementMode === 'idle' && selectedEntry === null && (
                     <Text style={styles.hintText}>
-                      {Platform.OS === 'web'
-                        ? `Press ${entryKeyHint} to select an entry point`
-                        : 'Tap an entry point arrow'}
+                      {isMobile
+                        ? 'Tap an entry point arrow'
+                        : `Press ${entryKeyHint} to select an entry point`}
                     </Text>
                   )}
                   {placementMode === 'idle' && selectedEntry !== null && (
                     <Text style={styles.hintText}>
-                      {Platform.OS === 'web'
-                        ? 'Click highlighted area to place tile | Esc: change entry'
-                        : 'Tap highlighted area to place tile'}
+                      {isMobile
+                        ? 'Tap highlighted area to place tile'
+                        : 'Click highlighted area to place tile | Esc: change entry'}
                     </Text>
                   )}
                   {placementMode === 'placed' && (
                     <Text style={styles.hintText}>
-                      {Platform.OS === 'web'
-                        ? 'Arrows: move | R: rotate | Enter: confirm | Esc: cancel'
-                        : 'Tap to rotate | Drag to move | Hold to confirm'}
+                      {isMobile
+                        ? 'Drag to move \u00b7 Tap to rotate \u00b7 Hold to confirm'
+                        : 'Arrows: move | R: rotate | Enter: confirm | Esc: cancel'}
                     </Text>
                   )}
                 </>
               )}
 
-              {phase === 'placing' && respinsRemaining > 0 && (
+              {/* Respin mode controls */}
+              {phase === 'placing' && respinMode && (
+                <View style={styles.bottomBar}>
+                  <Text style={styles.hintTextRespin}>Tap a row or column to respin</Text>
+                  <Pressable
+                    style={styles.respinToggleActive}
+                    onPress={() => setRespinMode(false)}
+                  >
+                    <Text style={styles.respinToggleActiveText}>Done</Text>
+                  </Pressable>
+                </View>
+              )}
+
+              {/* Desktop respin info (not shown on mobile) */}
+              {!isMobile && phase === 'placing' && respinsRemaining > 0 && !respinMode && (
                 <Text style={styles.infoText}>
-                  {Platform.OS === 'web'
-                    ? `Respins: ${respinsRemaining} | Arrows: select row/col | R: respin | Tab: toggle row/col`
-                    : `Respins: ${respinsRemaining} | Tap row/column arrows to respin`}
+                  Respins: {respinsRemaining} | Arrows: select row/col | R: respin | Tab: toggle row/col
                 </Text>
               )}
 
@@ -2375,15 +2384,13 @@ function PlayingScreen() {
                 </View>
               )}
 
-              {/* Help toggle (mobile only — on web the panel is always visible to the right) */}
-              {(Platform.OS !== 'web' || _screenWidth < 700) && (
-                <>
-                  <Pressable onPress={() => setShowHelp(h => !h)} style={styles.helpToggle}>
-                    <Text style={styles.helpToggleText}>{showHelp ? 'Hide rules' : 'How to play'}</Text>
-                  </Pressable>
-                  {showHelp && <HelpPanel />}
-                </>
+              {/* Help: icon on mobile, panel on desktop */}
+              {isMobile && (
+                <Pressable onPress={() => setShowHelp(h => !h)} style={styles.helpIcon}>
+                  <Text style={styles.helpIconText}>{showHelp ? '\u2715' : '\u24d8'}</Text>
+                </Pressable>
               )}
+              {isMobile && showHelp && <HelpPanel />}
             </View>
           </View>
 
@@ -2556,6 +2563,61 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#e74c6f44',
     borderRadius: 12,
+  },
+  bottomBar: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    width: '100%',
+    paddingHorizontal: 8,
+    marginBottom: 4,
+  },
+  bottomBarTile: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  bottomBarMeta: {
+    color: '#555',
+    fontSize: 13,
+  },
+  respinToggle: {
+    backgroundColor: '#e74c6f22',
+    borderWidth: 1,
+    borderColor: '#e74c6f44',
+    borderRadius: 6,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+  },
+  respinToggleText: {
+    color: '#e74c6f',
+    fontSize: 13,
+    fontWeight: '600',
+  },
+  respinToggleActive: {
+    backgroundColor: '#e74c6f',
+    borderRadius: 6,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+  },
+  respinToggleActiveText: {
+    color: '#fff',
+    fontSize: 13,
+    fontWeight: '600',
+  },
+  hintTextRespin: {
+    color: '#e74c6f',
+    fontSize: 13,
+  },
+  helpIcon: {
+    position: 'absolute',
+    top: 0,
+    right: 8,
+    padding: 4,
+  },
+  helpIconText: {
+    fontSize: 18,
+    color: '#888',
   },
   controls: {
     flex: 1,
