@@ -2212,27 +2212,25 @@ function PlayingScreen() {
           <View style={Platform.OS === 'web' && _screenWidth >= 700 ? styles.mainColumn : undefined}>
             {/* Grid */}
             <View style={styles.gridContainer}>
-              <View style={styles.gridWithRows}>
-                <View>
-                  {/* Column respin buttons */}
-                  {phase === 'placing' && respinsRemaining > 0 && (
-                    <View style={styles.colButtons}>
-                      {Array.from({ length: BOARD_SIZE }).map((_, col) => (
-                        <Pressable
-                          key={`col-${col}`}
-                          style={[
-                            styles.respinButton,
-                            respinCursor.type === 'col' && respinCursor.index === col && styles.respinButtonSelected,
-                          ]}
-                          onPress={() => respinLine('col', col)}
-                        >
-                          <Text style={styles.respinButtonText}>v</Text>
-                        </Pressable>
-                      ))}
-                    </View>
-                  )}
-                  <GestureGrid />
+              {/* Column respin buttons */}
+              {phase === 'placing' && respinsRemaining > 0 && (
+                <View style={styles.colButtons}>
+                  {Array.from({ length: BOARD_SIZE }).map((_, col) => (
+                    <Pressable
+                      key={`col-${col}`}
+                      style={[
+                        styles.respinButton,
+                        respinCursor.type === 'col' && respinCursor.index === col && styles.respinButtonSelected,
+                      ]}
+                      onPress={() => respinLine('col', col)}
+                    >
+                      <Text style={styles.respinButtonText}>v</Text>
+                    </Pressable>
+                  ))}
                 </View>
+              )}
+              <View style={styles.gridWithRows}>
+                <GestureGrid />
 
                 {/* Row respin buttons */}
                 {phase === 'placing' && respinsRemaining > 0 && (
