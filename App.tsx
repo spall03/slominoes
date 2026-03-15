@@ -24,7 +24,7 @@ import * as Haptics from 'expo-haptics';
 // =============================================================================
 
 const BOARD_SIZE = 8;
-const TILES_PER_LEVEL = 15;
+const TILES_PER_LEVEL = 16;
 const RESPINS_PER_LEVEL = 5;
 const WIN_THRESHOLD = 3000;
 const MIN_MATCH_LENGTH = 3;
@@ -34,8 +34,8 @@ const MIN_MATCH_LENGTH = 3;
 // =============================================================================
 
 const WALL_SCALAR = 1.5;          // walls per level (level * WALL_SCALAR)
-const SCORE_COEFFICIENT = 32;     // base points per playable cell
-const LEVEL_SCALAR_MAX = 2.5;     // level 10 threshold multiplier vs level 1
+const SCORE_COEFFICIENT = 30;     // base points per playable cell
+const LEVEL_SCALAR_MAX = 2.2;     // level 10 threshold multiplier vs level 1
 const NUM_LEVELS = 10;
 
 const LENGTH_MULTIPLIERS: Record<number, number> = { 3: 1, 4: 2, 5: 3 };
