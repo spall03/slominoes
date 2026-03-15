@@ -1377,6 +1377,10 @@ const CELL_SIZE = _screenWidth < 500
   : 40;
 const CELL_TOTAL = CELL_SIZE + CELL_MARGIN * 2;
 
+const isMobile = Platform.OS !== 'web' || _screenWidth < 700;
+
+// Shared ref for respin mode — PlayingScreen sets, GestureGrid reads
+const respinModeRef = { current: false };
 
 function GestureGrid() {
   const {
@@ -2132,6 +2136,24 @@ function PlayingScreen() {
   const tilesRemaining = tileQueue.length + (currentTile ? 1 : 0);
   const entryKeyHint = entrySpots.length > 2 ? '1-4' : '1 or 2';
   const [showHelp, setShowHelp] = useState(false);
+  const [respinMode, setRespinMode] = useState(false);
+
+  // Auto-exit respin mode when respins run out
+  useEffect(() => {
+    if (respinMode && respinsRemaining === 0) {
+      setRespinMode(false);
+    }
+  }, [respinsRemaining, respinMode]);
+
+  // Exit respin mode when tile gets placed
+  useEffect(() => {
+    if (placementMode === 'placed') {
+      setRespinMode(false);
+    }
+  }, [placementMode]);
+
+  // Keep module-level ref in sync for GestureGrid
+  respinModeRef.current = respinMode;
 
   // Respin keyboard cursor (web only)
   const [respinCursor, setRespinCursor] = useState<{ type: 'row' | 'col'; index: number }>({ type: 'row', index: 0 });
@@ -2195,16 +2217,20 @@ function PlayingScreen() {
       <SafeAreaView style={styles.container}>
         <StatusBar style="light" />
 
-        {/* Header */}
-        <View style={styles.header}>
-          <Text style={styles.title}>Slominoes</Text>
-          <View style={styles.scoreRow}>
-            <Text style={styles.scoreText}>Score: {score}</Text>
-            <Text style={styles.goalText}>Goal: {levelConfig.threshold}</Text>
+        {/* Compact HUD */}
+        <View style={styles.compactHud}>
+          <Text style={styles.hudLevel}>L{currentLevel}</Text>
+          <View style={styles.hudScoreWrap}>
+            <Text style={styles.hudScore}>{score}</Text>
+            <Text style={styles.hudGoal}> / {levelConfig.threshold}</Text>
           </View>
-          <View style={styles.hudRow}>
-            <Text style={styles.hudText}>Level {currentLevel} / {NUM_LEVELS}</Text>
-          </View>
+          {respinsRemaining > 0 && (
+            <View style={[styles.respinBadge, respinMode && styles.respinBadgeActive]}>
+              <Text style={[styles.respinBadgeText, respinMode && styles.respinBadgeTextActive]}>
+                🎲 {respinsRemaining}
+              </Text>
+            </View>
+          )}
         </View>
 
         <View style={Platform.OS === 'web' && _screenWidth >= 700 ? styles.mainRow : styles.mobileMain}>
@@ -2878,5 +2904,47 @@ const styles = StyleSheet.create({
   },
   hudRelicEmoji: {
     fontSize: 14,
+  },
+  compactHud: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingVertical: Platform.OS === 'web' ? 8 : 4,
+  },
+  hudLevel: {
+    color: '#ffd700',
+    fontWeight: 'bold',
+    fontSize: 16,
+  },
+  hudScoreWrap: {
+    flexDirection: 'row',
+    alignItems: 'baseline',
+  },
+  hudScore: {
+    color: '#fff',
+    fontSize: 18,
+    fontWeight: '600',
+  },
+  hudGoal: {
+    color: '#555',
+    fontSize: 16,
+  },
+  respinBadge: {
+    backgroundColor: '#4a4a70',
+    borderRadius: 10,
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+  },
+  respinBadgeActive: {
+    backgroundColor: '#e74c6f',
+  },
+  respinBadgeText: {
+    color: '#fff',
+    fontSize: 12,
+  },
+  respinBadgeTextActive: {
+    color: '#fff',
+    fontWeight: 'bold',
   },
 });
