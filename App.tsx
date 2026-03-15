@@ -1656,11 +1656,12 @@ function GestureGrid() {
   const leftEntries = entrySpots.filter(e => e.arrowDirection === 'right');
   const rightEntries = entrySpots.filter(e => e.arrowDirection === 'left');
   const hasSideEntries = phase === 'placing' && currentTile && (leftEntries.length > 0 || rightEntries.length > 0);
+  const hideEntries = isMobile && respinModeRef.current;
 
   return (
     <View>
       {/* Top entry spot buttons */}
-      {phase === 'placing' && currentTile && (
+      {!hideEntries && phase === 'placing' && currentTile && (
         <View style={styles.entrySpotRow}>
           {entrySpots
             .filter(e => e.arrowDirection === 'down')
@@ -1677,7 +1678,7 @@ function GestureGrid() {
       )}
       <View style={{ flexDirection: 'row', alignItems: 'center' }}>
         {/* Left entry spot buttons */}
-        {hasSideEntries && (
+        {!hideEntries && hasSideEntries && (
           <View style={styles.entrySpotCol}>
             {leftEntries.map(entry => (
               <EntrySpotButton
@@ -1733,7 +1734,7 @@ function GestureGrid() {
           </View>
         </GestureDetector>
         {/* Right entry spot buttons */}
-        {hasSideEntries && (
+        {!hideEntries && hasSideEntries && (
           <View style={styles.entrySpotCol}>
             {rightEntries.map(entry => (
               <EntrySpotButton
@@ -1748,7 +1749,7 @@ function GestureGrid() {
         )}
       </View>
       {/* Bottom entry spot buttons */}
-      {phase === 'placing' && currentTile && (
+      {!hideEntries && phase === 'placing' && currentTile && (
         <View style={styles.entrySpotRow}>
           {entrySpots
             .filter(e => e.arrowDirection === 'up')
@@ -2237,9 +2238,9 @@ function PlayingScreen() {
           {/* Left column: grid + controls */}
           <View style={Platform.OS === 'web' && _screenWidth >= 700 ? styles.mainColumn : styles.mobileColumn}>
             {/* Grid */}
-            <View style={styles.gridContainer}>
+            <View style={[styles.gridContainer, respinMode && styles.gridContainerRespin]}>
               {/* Column respin buttons */}
-              {phase === 'placing' && respinsRemaining > 0 && (
+              {phase === 'placing' && respinsRemaining > 0 && (!isMobile || respinMode) && (
                 <View style={styles.colButtons}>
                   {Array.from({ length: BOARD_SIZE }).map((_, col) => (
                     <Pressable
@@ -2247,8 +2248,10 @@ function PlayingScreen() {
                       style={[
                         styles.respinButton,
                         respinCursor.type === 'col' && respinCursor.index === col && styles.respinButtonSelected,
+                        placementMode === 'placed' && styles.respinButtonDisabled,
                       ]}
-                      onPress={() => respinLine('col', col)}
+                      onPress={() => placementMode !== 'placed' && respinLine('col', col)}
+                      disabled={placementMode === 'placed'}
                     >
                       <Text style={styles.respinButtonText}>v</Text>
                     </Pressable>
@@ -2259,7 +2262,7 @@ function PlayingScreen() {
                 <GestureGrid />
 
                 {/* Row respin buttons */}
-                {phase === 'placing' && respinsRemaining > 0 && (
+                {phase === 'placing' && respinsRemaining > 0 && (!isMobile || respinMode) && (
                   <View style={styles.rowButtons}>
                     {Array.from({ length: BOARD_SIZE }).map((_, row) => (
                       <Pressable
@@ -2267,8 +2270,10 @@ function PlayingScreen() {
                         style={[
                           styles.respinButton,
                           respinCursor.type === 'row' && respinCursor.index === row && styles.respinButtonSelected,
+                          placementMode === 'placed' && styles.respinButtonDisabled,
                         ]}
-                        onPress={() => respinLine('row', row)}
+                        onPress={() => placementMode !== 'placed' && respinLine('row', row)}
+                        disabled={placementMode === 'placed'}
                       >
                         <Text style={styles.respinButtonText}>{'>'}</Text>
                       </Pressable>
@@ -2543,6 +2548,14 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontSize: 16,
     fontWeight: 'bold',
+  },
+  respinButtonDisabled: {
+    opacity: 0.3,
+  },
+  gridContainerRespin: {
+    borderWidth: 1,
+    borderColor: '#e74c6f44',
+    borderRadius: 12,
   },
   controls: {
     flex: 1,
