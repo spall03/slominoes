@@ -2415,6 +2415,8 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     marginBottom: 4,
     paddingHorizontal: GRID_PADDING,
+    width: GRID_PADDING * 2 + BOARD_SIZE * CELL_TOTAL,
+    alignSelf: 'flex-start',
   },
   gridWithRows: {
     flexDirection: 'row',
