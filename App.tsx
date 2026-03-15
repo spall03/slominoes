@@ -2292,11 +2292,11 @@ function PlayingScreen() {
                   {placementMode !== 'placed' ? (
                     <View style={styles.bottomBar}>
                       <View style={styles.bottomBarTile}>
-                        <View style={styles.tilePreviewBox}>
-                          <Text style={styles.previewSymbol}>
+                        <View style={styles.tilePreviewBoxSmall}>
+                          <Text style={styles.previewSymbolSmall}>
                             {SYMBOL_DISPLAY[currentTile.symbolA]}
                           </Text>
-                          <Text style={styles.previewSymbol}>
+                          <Text style={styles.previewSymbolSmall}>
                             {SYMBOL_DISPLAY[currentTile.symbolB]}
                           </Text>
                         </View>
@@ -2427,31 +2427,6 @@ const styles = StyleSheet.create({
   mobileColumn: {
     flex: 1,
     alignItems: 'center',
-  },
-  header: {
-    padding: 16,
-    alignItems: 'center',
-    paddingTop: Platform.OS === 'web' ? 8 : 4,
-    paddingBottom: 8,
-  },
-  title: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    color: '#ffd700',
-    marginBottom: 4,
-  },
-  scoreRow: {
-    flexDirection: 'row',
-    gap: 24,
-  },
-  scoreText: {
-    fontSize: 18,
-    color: '#fff',
-    fontWeight: '600',
-  },
-  goalText: {
-    fontSize: 18,
-    color: '#888',
   },
   gridContainer: {
     alignItems: 'center',
@@ -2624,16 +2599,6 @@ const styles = StyleSheet.create({
     padding: 16,
     alignItems: 'center',
   },
-  tilePreview: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-    marginBottom: 16,
-  },
-  previewLabel: {
-    fontSize: 16,
-    color: '#888',
-  },
   tilePreviewBox: {
     flexDirection: 'row',
     backgroundColor: '#4a4a70',
@@ -2646,6 +2611,16 @@ const styles = StyleSheet.create({
   },
   previewSymbol: {
     fontSize: 28,
+  },
+  tilePreviewBoxSmall: {
+    flexDirection: 'row',
+    backgroundColor: '#4a4a70',
+    borderRadius: 4,
+    padding: 4,
+    gap: 2,
+  },
+  previewSymbolSmall: {
+    fontSize: 20,
   },
   buttonText: {
     color: '#fff',
@@ -2703,18 +2678,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: 24,
     paddingVertical: 10,
     borderRadius: 10,
-  },
-  helpToggle: {
-    marginTop: 16,
-    paddingVertical: 6,
-    paddingHorizontal: 16,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: '#555',
-  },
-  helpToggleText: {
-    color: '#aaa',
-    fontSize: 13,
   },
   helpPanel: {
     marginTop: 12,
@@ -2961,25 +2924,6 @@ const styles = StyleSheet.create({
   // =========================================================================
   // HUD styles (playing screen header)
   // =========================================================================
-  hudRow: {
-    flexDirection: 'row',
-    gap: 16,
-    alignItems: 'center',
-    marginTop: 4,
-  },
-  hudText: {
-    fontSize: 14,
-    color: '#aaa',
-  },
-  hudRelicRow: {
-    flexDirection: 'row',
-    gap: 2,
-    flexWrap: 'wrap',
-    marginTop: 4,
-  },
-  hudRelicEmoji: {
-    fontSize: 14,
-  },
   compactHud: {
     flexDirection: 'row',
     justifyContent: 'space-between',

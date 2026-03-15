@@ -17,6 +17,7 @@ Mid-game respins — completed implementation.
 - [x] Built simulation tool (simulate.ts) for data-driven difficulty tuning
 - [x] Tuned constants: SCORE_COEFFICIENT=30, LEVEL_SCALAR_MAX=2.2, TILES_PER_LEVEL=16
 - [x] Fixed mobile UI: controls (tiles left, respins) no longer pushed off screen
+- [x] Progressive disclosure UI: compact HUD, bottom bar, respin mode toggle
 
 ## Next Steps
 - Playtest mid-game respins for balance
