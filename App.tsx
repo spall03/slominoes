@@ -1377,6 +1377,10 @@ const CELL_SIZE = _screenWidth < 500
   : 40;
 const CELL_TOTAL = CELL_SIZE + CELL_MARGIN * 2;
 
+const isMobile = Platform.OS !== 'web' || _screenWidth < 700;
+
+// Shared ref for respin mode — PlayingScreen sets, GestureGrid reads
+const respinModeRef = { current: false };
 
 function GestureGrid() {
   const {
@@ -1652,11 +1656,12 @@ function GestureGrid() {
   const leftEntries = entrySpots.filter(e => e.arrowDirection === 'right');
   const rightEntries = entrySpots.filter(e => e.arrowDirection === 'left');
   const hasSideEntries = phase === 'placing' && currentTile && (leftEntries.length > 0 || rightEntries.length > 0);
+  const hideEntries = isMobile && respinModeRef.current;
 
   return (
     <View>
       {/* Top entry spot buttons */}
-      {phase === 'placing' && currentTile && (
+      {!hideEntries && phase === 'placing' && currentTile && (
         <View style={styles.entrySpotRow}>
           {entrySpots
             .filter(e => e.arrowDirection === 'down')
@@ -1673,7 +1678,7 @@ function GestureGrid() {
       )}
       <View style={{ flexDirection: 'row', alignItems: 'center' }}>
         {/* Left entry spot buttons */}
-        {hasSideEntries && (
+        {!hideEntries && hasSideEntries && (
           <View style={styles.entrySpotCol}>
             {leftEntries.map(entry => (
               <EntrySpotButton
@@ -1729,7 +1734,7 @@ function GestureGrid() {
           </View>
         </GestureDetector>
         {/* Right entry spot buttons */}
-        {hasSideEntries && (
+        {!hideEntries && hasSideEntries && (
           <View style={styles.entrySpotCol}>
             {rightEntries.map(entry => (
               <EntrySpotButton
@@ -1744,7 +1749,7 @@ function GestureGrid() {
         )}
       </View>
       {/* Bottom entry spot buttons */}
-      {phase === 'placing' && currentTile && (
+      {!hideEntries && phase === 'placing' && currentTile && (
         <View style={styles.entrySpotRow}>
           {entrySpots
             .filter(e => e.arrowDirection === 'up')
@@ -2132,6 +2137,24 @@ function PlayingScreen() {
   const tilesRemaining = tileQueue.length + (currentTile ? 1 : 0);
   const entryKeyHint = entrySpots.length > 2 ? '1-4' : '1 or 2';
   const [showHelp, setShowHelp] = useState(false);
+  const [respinMode, setRespinMode] = useState(false);
+
+  // Auto-exit respin mode when respins run out
+  useEffect(() => {
+    if (respinMode && respinsRemaining === 0) {
+      setRespinMode(false);
+    }
+  }, [respinsRemaining, respinMode]);
+
+  // Exit respin mode when tile gets placed
+  useEffect(() => {
+    if (placementMode === 'placed') {
+      setRespinMode(false);
+    }
+  }, [placementMode]);
+
+  // Keep module-level ref in sync for GestureGrid
+  respinModeRef.current = respinMode;
 
   // Respin keyboard cursor (web only)
   const [respinCursor, setRespinCursor] = useState<{ type: 'row' | 'col'; index: number }>({ type: 'row', index: 0 });
@@ -2195,25 +2218,29 @@ function PlayingScreen() {
       <SafeAreaView style={styles.container}>
         <StatusBar style="light" />
 
-        {/* Header */}
-        <View style={styles.header}>
-          <Text style={styles.title}>Slominoes</Text>
-          <View style={styles.scoreRow}>
-            <Text style={styles.scoreText}>Score: {score}</Text>
-            <Text style={styles.goalText}>Goal: {levelConfig.threshold}</Text>
+        {/* Compact HUD */}
+        <View style={styles.compactHud}>
+          <Text style={styles.hudLevel}>L{currentLevel}</Text>
+          <View style={styles.hudScoreWrap}>
+            <Text style={styles.hudScore}>{score}</Text>
+            <Text style={styles.hudGoal}> / {levelConfig.threshold}</Text>
           </View>
-          <View style={styles.hudRow}>
-            <Text style={styles.hudText}>Level {currentLevel} / {NUM_LEVELS}</Text>
-          </View>
+          {respinsRemaining > 0 && (
+            <View style={[styles.respinBadge, respinMode && styles.respinBadgeActive]}>
+              <Text style={[styles.respinBadgeText, respinMode && styles.respinBadgeTextActive]}>
+                🎲 {respinsRemaining}
+              </Text>
+            </View>
+          )}
         </View>
 
         <View style={Platform.OS === 'web' && _screenWidth >= 700 ? styles.mainRow : styles.mobileMain}>
           {/* Left column: grid + controls */}
           <View style={Platform.OS === 'web' && _screenWidth >= 700 ? styles.mainColumn : styles.mobileColumn}>
             {/* Grid */}
-            <View style={styles.gridContainer}>
+            <View style={[styles.gridContainer, respinMode && styles.gridContainerRespin]}>
               {/* Column respin buttons */}
-              {phase === 'placing' && respinsRemaining > 0 && (
+              {phase === 'placing' && respinsRemaining > 0 && (!isMobile || respinMode) && (
                 <View style={styles.colButtons}>
                   {Array.from({ length: BOARD_SIZE }).map((_, col) => (
                     <Pressable
@@ -2221,8 +2248,10 @@ function PlayingScreen() {
                       style={[
                         styles.respinButton,
                         respinCursor.type === 'col' && respinCursor.index === col && styles.respinButtonSelected,
+                        placementMode === 'placed' && styles.respinButtonDisabled,
                       ]}
-                      onPress={() => respinLine('col', col)}
+                      onPress={() => placementMode !== 'placed' && respinLine('col', col)}
+                      disabled={placementMode === 'placed'}
                     >
                       <Text style={styles.respinButtonText}>v</Text>
                     </Pressable>
@@ -2233,7 +2262,7 @@ function PlayingScreen() {
                 <GestureGrid />
 
                 {/* Row respin buttons */}
-                {phase === 'placing' && respinsRemaining > 0 && (
+                {phase === 'placing' && respinsRemaining > 0 && (!isMobile || respinMode) && (
                   <View style={styles.rowButtons}>
                     {Array.from({ length: BOARD_SIZE }).map((_, row) => (
                       <Pressable
@@ -2241,8 +2270,10 @@ function PlayingScreen() {
                         style={[
                           styles.respinButton,
                           respinCursor.type === 'row' && respinCursor.index === row && styles.respinButtonSelected,
+                          placementMode === 'placed' && styles.respinButtonDisabled,
                         ]}
-                        onPress={() => respinLine('row', row)}
+                        onPress={() => placementMode !== 'placed' && respinLine('row', row)}
+                        disabled={placementMode === 'placed'}
                       >
                         <Text style={styles.respinButtonText}>{'>'}</Text>
                       </Pressable>
@@ -2251,79 +2282,88 @@ function PlayingScreen() {
                 )}
               </View>
 
-              {/* Confirm / Cancel buttons when tile is placed */}
-              {phase === 'placing' && placementMode === 'placed' && (
-                <View style={styles.placementButtons}>
-                  <Pressable style={styles.confirmButton} onPress={useGameStore.getState().confirmPlacement}>
-                    <Text style={styles.buttonText}>Confirm</Text>
-                  </Pressable>
-                  <Pressable style={styles.cancelButton} onPress={useGameStore.getState().cancelPlacement}>
-                    <Text style={styles.buttonText}>Cancel</Text>
-                  </Pressable>
-                </View>
-              )}
             </View>
 
             {/* Controls */}
             <View style={styles.controls}>
-              {phase === 'placing' && currentTile && (
+              {phase === 'placing' && currentTile && !respinMode && (
                 <>
-                  {placementMode === 'idle' && (
-                    <View style={styles.tilePreview}>
-                      <Text style={styles.previewLabel}>Current tile:</Text>
-                      <View style={styles.tilePreviewBox}>
-                        <Text style={styles.previewSymbol}>
-                          {SYMBOL_DISPLAY[currentTile.symbolA]}
-                        </Text>
-                        <Text style={styles.previewSymbol}>
-                          {SYMBOL_DISPLAY[currentTile.symbolB]}
-                        </Text>
+                  {/* Bottom bar: tile preview + count + respin toggle */}
+                  {placementMode !== 'placed' ? (
+                    <View style={styles.bottomBar}>
+                      <View style={styles.bottomBarTile}>
+                        <View style={styles.tilePreviewBoxSmall}>
+                          <Text style={styles.previewSymbolSmall}>
+                            {SYMBOL_DISPLAY[currentTile.symbolA]}
+                          </Text>
+                          <Text style={styles.previewSymbolSmall}>
+                            {SYMBOL_DISPLAY[currentTile.symbolB]}
+                          </Text>
+                        </View>
+                        <Text style={styles.bottomBarMeta}>{tilesRemaining} left</Text>
                       </View>
+                      {isMobile && respinsRemaining > 0 && (
+                        <Pressable
+                          style={styles.respinToggle}
+                          onPress={() => setRespinMode(true)}
+                        >
+                          <Text style={styles.respinToggleText}>Respin</Text>
+                        </Pressable>
+                      )}
+                    </View>
+                  ) : (
+                    <View style={styles.placementButtons}>
+                      <Pressable style={styles.confirmButton} onPress={useGameStore.getState().confirmPlacement}>
+                        <Text style={styles.buttonText}>Confirm</Text>
+                      </Pressable>
+                      <Pressable style={styles.cancelButton} onPress={useGameStore.getState().cancelPlacement}>
+                        <Text style={styles.buttonText}>Cancel</Text>
+                      </Pressable>
                     </View>
                   )}
-                  {placementMode === 'placed' && tileQueue.length > 0 && (
-                    <View style={styles.tilePreview}>
-                      <Text style={styles.previewLabel}>Next tile:</Text>
-                      <View style={styles.tilePreviewBox}>
-                        <Text style={styles.previewSymbol}>
-                          {SYMBOL_DISPLAY[tileQueue[0].symbolA]}
-                        </Text>
-                        <Text style={styles.previewSymbol}>
-                          {SYMBOL_DISPLAY[tileQueue[0].symbolB]}
-                        </Text>
-                      </View>
-                    </View>
-                  )}
-                  <Text style={styles.infoText}>Tiles left: {tilesRemaining}</Text>
+
+                  {/* Hint text */}
                   {placementMode === 'idle' && selectedEntry === null && (
                     <Text style={styles.hintText}>
-                      {Platform.OS === 'web'
-                        ? `Press ${entryKeyHint} to select an entry point`
-                        : 'Tap an entry point arrow'}
+                      {isMobile
+                        ? 'Tap an entry point arrow'
+                        : `Press ${entryKeyHint} to select an entry point`}
                     </Text>
                   )}
                   {placementMode === 'idle' && selectedEntry !== null && (
                     <Text style={styles.hintText}>
-                      {Platform.OS === 'web'
-                        ? 'Click highlighted area to place tile | Esc: change entry'
-                        : 'Tap highlighted area to place tile'}
+                      {isMobile
+                        ? 'Tap highlighted area to place tile'
+                        : 'Click highlighted area to place tile | Esc: change entry'}
                     </Text>
                   )}
                   {placementMode === 'placed' && (
                     <Text style={styles.hintText}>
-                      {Platform.OS === 'web'
-                        ? 'Arrows: move | R: rotate | Enter: confirm | Esc: cancel'
-                        : 'Tap to rotate | Drag to move | Hold to confirm'}
+                      {isMobile
+                        ? 'Drag to move \u00b7 Tap to rotate \u00b7 Hold to confirm'
+                        : 'Arrows: move | R: rotate | Enter: confirm | Esc: cancel'}
                     </Text>
                   )}
                 </>
               )}
 
-              {phase === 'placing' && respinsRemaining > 0 && (
+              {/* Respin mode controls */}
+              {phase === 'placing' && respinMode && (
+                <View style={styles.bottomBar}>
+                  <Text style={styles.hintTextRespin}>Tap a row or column to respin</Text>
+                  <Pressable
+                    style={styles.respinToggleActive}
+                    onPress={() => setRespinMode(false)}
+                  >
+                    <Text style={styles.respinToggleActiveText}>Done</Text>
+                  </Pressable>
+                </View>
+              )}
+
+              {/* Desktop respin info (not shown on mobile) */}
+              {!isMobile && phase === 'placing' && respinsRemaining > 0 && !respinMode && (
                 <Text style={styles.infoText}>
-                  {Platform.OS === 'web'
-                    ? `Respins: ${respinsRemaining} | Arrows: select row/col | R: respin | Tab: toggle row/col`
-                    : `Respins: ${respinsRemaining} | Tap row/column arrows to respin`}
+                  Respins: {respinsRemaining} | Arrows: select row/col | R: respin | Tab: toggle row/col
                 </Text>
               )}
 
@@ -2344,15 +2384,13 @@ function PlayingScreen() {
                 </View>
               )}
 
-              {/* Help toggle (mobile only — on web the panel is always visible to the right) */}
-              {(Platform.OS !== 'web' || _screenWidth < 700) && (
-                <>
-                  <Pressable onPress={() => setShowHelp(h => !h)} style={styles.helpToggle}>
-                    <Text style={styles.helpToggleText}>{showHelp ? 'Hide rules' : 'How to play'}</Text>
-                  </Pressable>
-                  {showHelp && <HelpPanel />}
-                </>
+              {/* Help: icon on mobile, panel on desktop */}
+              {isMobile && (
+                <Pressable onPress={() => setShowHelp(h => !h)} style={styles.helpIcon}>
+                  <Text style={styles.helpIconText}>{showHelp ? '\u2715' : '\u24d8'}</Text>
+                </Pressable>
               )}
+              {isMobile && showHelp && <HelpPanel />}
             </View>
           </View>
 
@@ -2389,31 +2427,6 @@ const styles = StyleSheet.create({
   mobileColumn: {
     flex: 1,
     alignItems: 'center',
-  },
-  header: {
-    padding: 16,
-    alignItems: 'center',
-    paddingTop: Platform.OS === 'web' ? 8 : 4,
-    paddingBottom: 8,
-  },
-  title: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    color: '#ffd700',
-    marginBottom: 4,
-  },
-  scoreRow: {
-    flexDirection: 'row',
-    gap: 24,
-  },
-  scoreText: {
-    fontSize: 18,
-    color: '#fff',
-    fontWeight: '600',
-  },
-  goalText: {
-    fontSize: 18,
-    color: '#888',
   },
   gridContainer: {
     alignItems: 'center',
@@ -2518,20 +2531,73 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: 'bold',
   },
+  respinButtonDisabled: {
+    opacity: 0.3,
+  },
+  gridContainerRespin: {
+    borderWidth: 1,
+    borderColor: '#e74c6f44',
+    borderRadius: 12,
+  },
+  bottomBar: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    width: '100%',
+    paddingHorizontal: 8,
+    marginBottom: 4,
+  },
+  bottomBarTile: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  bottomBarMeta: {
+    color: '#555',
+    fontSize: 13,
+  },
+  respinToggle: {
+    backgroundColor: '#e74c6f22',
+    borderWidth: 1,
+    borderColor: '#e74c6f44',
+    borderRadius: 6,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+  },
+  respinToggleText: {
+    color: '#e74c6f',
+    fontSize: 13,
+    fontWeight: '600',
+  },
+  respinToggleActive: {
+    backgroundColor: '#e74c6f',
+    borderRadius: 6,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+  },
+  respinToggleActiveText: {
+    color: '#fff',
+    fontSize: 13,
+    fontWeight: '600',
+  },
+  hintTextRespin: {
+    color: '#e74c6f',
+    fontSize: 13,
+  },
+  helpIcon: {
+    position: 'absolute',
+    top: 0,
+    right: 8,
+    padding: 4,
+  },
+  helpIconText: {
+    fontSize: 18,
+    color: '#888',
+  },
   controls: {
     flex: 1,
     padding: 16,
     alignItems: 'center',
-  },
-  tilePreview: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-    marginBottom: 16,
-  },
-  previewLabel: {
-    fontSize: 16,
-    color: '#888',
   },
   tilePreviewBox: {
     flexDirection: 'row',
@@ -2545,6 +2611,16 @@ const styles = StyleSheet.create({
   },
   previewSymbol: {
     fontSize: 28,
+  },
+  tilePreviewBoxSmall: {
+    flexDirection: 'row',
+    backgroundColor: '#4a4a70',
+    borderRadius: 4,
+    padding: 4,
+    gap: 2,
+  },
+  previewSymbolSmall: {
+    fontSize: 20,
   },
   buttonText: {
     color: '#fff',
@@ -2602,18 +2678,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: 24,
     paddingVertical: 10,
     borderRadius: 10,
-  },
-  helpToggle: {
-    marginTop: 16,
-    paddingVertical: 6,
-    paddingHorizontal: 16,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: '#555',
-  },
-  helpToggleText: {
-    color: '#aaa',
-    fontSize: 13,
   },
   helpPanel: {
     marginTop: 12,
@@ -2860,23 +2924,46 @@ const styles = StyleSheet.create({
   // =========================================================================
   // HUD styles (playing screen header)
   // =========================================================================
-  hudRow: {
+  compactHud: {
     flexDirection: 'row',
-    gap: 16,
+    justifyContent: 'space-between',
     alignItems: 'center',
-    marginTop: 4,
+    paddingHorizontal: 16,
+    paddingVertical: Platform.OS === 'web' ? 8 : 4,
   },
-  hudText: {
-    fontSize: 14,
-    color: '#aaa',
+  hudLevel: {
+    color: '#ffd700',
+    fontWeight: 'bold',
+    fontSize: 16,
   },
-  hudRelicRow: {
+  hudScoreWrap: {
     flexDirection: 'row',
-    gap: 2,
-    flexWrap: 'wrap',
-    marginTop: 4,
+    alignItems: 'baseline',
   },
-  hudRelicEmoji: {
-    fontSize: 14,
+  hudScore: {
+    color: '#fff',
+    fontSize: 18,
+    fontWeight: '600',
+  },
+  hudGoal: {
+    color: '#555',
+    fontSize: 16,
+  },
+  respinBadge: {
+    backgroundColor: '#4a4a70',
+    borderRadius: 10,
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+  },
+  respinBadgeActive: {
+    backgroundColor: '#e74c6f',
+  },
+  respinBadgeText: {
+    color: '#fff',
+    fontSize: 12,
+  },
+  respinBadgeTextActive: {
+    color: '#fff',
+    fontWeight: 'bold',
   },
 });
