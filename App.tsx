@@ -1093,6 +1093,7 @@ interface RunState {
   currentLevel: number;
   levelScore: number;
   levelConfig: LevelConfig | null;
+  bonusRespins: number;
 
   startRun: () => void;
   startLevel: () => void;
@@ -1105,6 +1106,7 @@ const useRunStore = create<RunState>((set, get) => ({
   currentLevel: 1,
   levelScore: 0,
   levelConfig: null,
+  bonusRespins: 0,
 
   startRun: () => {
     const config = generateLevelConfig(1);
@@ -1113,21 +1115,32 @@ const useRunStore = create<RunState>((set, get) => ({
       currentLevel: 1,
       levelScore: 0,
       levelConfig: config,
+      bonusRespins: 0,
     });
   },
 
   startLevel: () => {
-    const { levelConfig } = get();
+    const { levelConfig, bonusRespins } = get();
     if (!levelConfig) return;
-    useGameStore.getState().resetGame(levelConfig);
+    const config = bonusRespins > 0
+      ? { ...levelConfig, respins: levelConfig.respins + bonusRespins }
+      : levelConfig;
+    useGameStore.getState().resetGame(config);
     set({ runPhase: 'playing' });
   },
 
-  completeLevel: (score: number, _threshold: number, _respinsLeft: number) => {
+  completeLevel: (score: number, threshold: number, _respinsLeft: number) => {
     const { currentLevel } = get();
+
+    // Calculate bonus respins for next level based on how much score exceeds threshold
+    const excessPct = (score - threshold) / threshold;
+    let bonus = 0;
+    if (excessPct >= 0.15) bonus = 3;
+    else if (excessPct >= 0.10) bonus = 2;
+    else if (excessPct >= 0.05) bonus = 1;
+
     if (currentLevel >= NUM_LEVELS) {
-      // Final level beaten — show game over with success
-      set({ runPhase: 'gameOver', levelScore: score });
+      set({ runPhase: 'gameOver', levelScore: score, bonusRespins: 0 });
       return;
     }
     const nextLevel = currentLevel + 1;
@@ -1136,6 +1149,7 @@ const useRunStore = create<RunState>((set, get) => ({
       currentLevel: nextLevel,
       levelConfig: config,
       levelScore: score,
+      bonusRespins: bonus,
       runPhase: 'levelPreview',
     });
   },
@@ -1844,7 +1858,7 @@ function TitleScreen() {
 // =============================================================================
 
 function LevelPreviewScreen() {
-  const { currentLevel, levelConfig } = useRunStore();
+  const { currentLevel, levelConfig, bonusRespins } = useRunStore();
   if (!levelConfig) return null;
   const config = levelConfig;
   const entrySpots = getEntrySpots(config.entrySpotCount);
@@ -1878,7 +1892,9 @@ function LevelPreviewScreen() {
               <Text style={styles.statText}>Threshold: {config.threshold}</Text>
             </View>
             <View style={styles.statBadge}>
-              <Text style={styles.statText}>Respins: {config.respins}</Text>
+              <Text style={styles.statText}>
+                Respins: {config.respins}{bonusRespins > 0 ? ` +${bonusRespins}` : ''}
+              </Text>
             </View>
           </View>
 
