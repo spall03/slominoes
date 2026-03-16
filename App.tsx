@@ -1129,15 +1129,15 @@ const useRunStore = create<RunState>((set, get) => ({
     set({ runPhase: 'playing' });
   },
 
-  completeLevel: (score: number, threshold: number, _respinsLeft: number) => {
+  completeLevel: (score: number, threshold: number, respinsLeft: number) => {
     const { currentLevel } = get();
 
-    // Calculate bonus respins for next level based on how much score exceeds threshold
+    // Carry over unused respins + bonus respins for exceeding threshold
     const excessPct = (score - threshold) / threshold;
-    let bonus = 0;
-    if (excessPct >= 0.15) bonus = 3;
-    else if (excessPct >= 0.10) bonus = 2;
-    else if (excessPct >= 0.05) bonus = 1;
+    let bonus = respinsLeft;
+    if (excessPct >= 0.15) bonus += 3;
+    else if (excessPct >= 0.10) bonus += 2;
+    else if (excessPct >= 0.05) bonus += 1;
 
     if (currentLevel >= NUM_LEVELS) {
       set({ runPhase: 'gameOver', levelScore: score, bonusRespins: 0 });
