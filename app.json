@@ -31,6 +31,9 @@
     },
     "experiments": {
       "baseUrl": "/slominoes"
-    }
+    },
+    "plugins": [
+      "expo-font"
+    ]
   }
 }
