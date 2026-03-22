@@ -1,42 +1,34 @@
 # Working
 
 ## Current Task
-Mid-game respins — completed implementation.
+Neon UI redesign — Task 4 of 8 complete, created neon-styled UI components.
 
 ## Progress
-- [x] Added generateLevelConfig() with WALL_SCALAR, SCORE_COEFFICIENT, LEVEL_SCALAR_MAX tuning knobs
-- [x] Simplified RunState to title/levelPreview/playing/gameOver only
-- [x] Removed relic effects from scoring
-- [x] Simplified all screens (no coins, relics, shop, reward)
-- [x] Marked dormant code with DORMANT comments for easy re-enablement
-- [x] Mid-game respins: removed respinning phase, respins available during placement
-- [x] Live scoring (no ratcheting) — respins are genuine risk/reward
-- [x] Removed skipRespins action and UI
-- [x] Respin keyboard controls work during placing phase (R key to fire)
-- [x] Fixed respin button alignment (row + column buttons)
-- [x] Built simulation tool (simulate.ts) for data-driven difficulty tuning
-- [x] Tuned constants: SCORE_COEFFICIENT=30, LEVEL_SCALAR_MAX=2.2, TILES_PER_LEVEL=16
-- [x] Fixed mobile UI: controls (tiles left, respins) no longer pushed off screen
-- [x] Progressive disclosure UI: compact HUD, bottom bar, respin mode toggle
+- [x] Task 1: Install dependencies & create file scaffolding (types.ts, constants.ts, theme.ts)
+- [x] Task 2: Create SVG symbol components (src/symbols/)
+- [x] Task 3: Extract game logic into src/ modules (grid.ts, level.ts, scoring.ts, store.ts)
+- [x] Task 4: Create UI components with neon styling (src/components/)
+- [ ] Task 5: Create screen components
+- [ ] Task 6: Rewrite App.tsx as thin root
+- [ ] Task 7: Add web glow effects & polish
+- [ ] Task 8: Clean up & delete old code
 
 ## Next Steps
-- Playtest mid-game respins for balance
-- Tune WALL_SCALAR, SCORE_COEFFICIENT, LEVEL_SCALAR_MAX
-- Consider smarter wall placement (clustering, avoid isolating regions)
-- Consider adding symbol count variation to difficulty budget
-- Re-enable features one at a time once board generation feels right
+- Task 5: Create screen components (TitleScreen, LevelPreview, PlayingScreen, GameOverScreen)
+- Task 6: Rewrite App.tsx to import from new modules
+- Task 7: Add web glow effects & polish
 
 ## Recent Decisions
-- Full 8x8 board always, no board masks — walls/carveouts only
-- Threshold derived from playable cell count (heuristic, not simulation)
-- All roguelike features (relics, coins, shop, reward) dormant but code preserved
-- Symbol weighting stays active
-- Respins usable during tile placement (not after)
-- Score recalculated live after every respin — can go down
-- Running out of respins doesn't end game — placing last tile does
-- Stuck (no valid placements) ends game immediately
+- Replaced emoji SYMBOL_DISPLAY with SVG SymbolIcon components in Cell, BottomBar, HelpPanel
+- Replaced text arrows with Arrow SVG component in Cell and EntrySpotButton
+- Applied neon theme colors from theme.ts to all cell states (empty, filled, wall, preview, placed, holdReady, reachable)
+- Highlight overlay colors: gold -> colors.gold, red -> colors.red, blue -> colors.cyan
+- Added fontFamily (fonts.regular/semiBold/bold) to all Text elements
+- HUD/BottomBar/HelpPanel have neon surface bg with border styling
+- Each component uses local StyleSheet.create()
+- Grid.tsx is the largest component — preserves exact gesture/keyboard logic from App.tsx
 
 ## Blockers/Notes
-- Dormant code: LEVEL_CONFIGS, ALL_RELICS, Relic/ShopItem types, RewardScreen, ShopScreen, VictoryScreen
-- hasTileReroll was never consumed in game logic (noted before, still dormant)
-- Wildcard, Rotate Free, Pathfinder relics were never implemented (still dormant)
+- App.tsx not modified yet — still has all original code, new modules are additive
+- Dormant code in App.tsx will be cleaned up in Task 8
+- TypeScript passes clean with no errors

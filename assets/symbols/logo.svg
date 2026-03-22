@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 360 64" width="360" height="64">
+  <defs>
+    <filter id="neon-logo" x="-15%" y="-40%" width="130%" height="180%">
+      <feGaussianBlur in="SourceGraphic" stdDeviation="3" result="blur"/>
+      <feColorMatrix in="blur" type="matrix"
+        values="0 0 0 0 0  0 0.8 0 0 0  0 0 1 0 0  0 0 0 0.8 0" result="glow"/>
+      <feMerge>
+        <feMergeNode in="glow"/>
+        <feMergeNode in="glow"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+  </defs>
+  <text filter="url(#neon-logo)" x="180" y="46" text-anchor="middle"
+    font-family="Space Grotesk, system-ui, sans-serif" font-size="42" font-weight="700"
+    fill="none" stroke="#00E5FF" stroke-width="1.5" letter-spacing="6">
+    SLOMINOES
+  </text>
+</svg>

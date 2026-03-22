@@ -1,0 +1,21 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 40 40" width="40" height="40">
+  <defs>
+    <filter id="neon-respin" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur in="SourceGraphic" stdDeviation="2" result="blur"/>
+      <feMerge>
+        <feMergeNode in="blur"/>
+        <feMergeNode in="blur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+  </defs>
+  <g filter="url(#neon-respin)" fill="none" stroke="#e74c6f" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+    <!-- vertical double arrow -->
+    <line x1="20" y1="8" x2="20" y2="32"/>
+    <polyline points="15,12 20,8 25,12"/>
+    <polyline points="15,28 20,32 25,28"/>
+    <!-- circular refresh hint -->
+    <path d="M12 14 A10 10 0 0 1 12 26"/>
+    <path d="M28 26 A10 10 0 0 1 28 14"/>
+  </g>
+</svg>

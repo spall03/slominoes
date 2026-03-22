@@ -1,0 +1,24 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64">
+  <defs>
+    <filter id="neon-cyan" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur in="SourceGraphic" stdDeviation="2.5" result="blur"/>
+      <feColorMatrix in="blur" type="matrix"
+        values="0 0 0 0 0  0 0.8 0 0 0  0 0 1 0 0  0 0 0 1 0" result="glow"/>
+      <feMerge>
+        <feMergeNode in="glow"/>
+        <feMergeNode in="glow"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+  </defs>
+  <g filter="url(#neon-cyan)" fill="none" stroke="#00E5FF" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
+    <!-- seven top bar -->
+    <path d="M18 14 L46 14"/>
+    <!-- seven diagonal -->
+    <path d="M46 14 L28 52"/>
+    <!-- cross bar -->
+    <path d="M24 34 L40 34"/>
+    <!-- serif/accent at top left -->
+    <path d="M18 14 L18 20"/>
+  </g>
+</svg>
