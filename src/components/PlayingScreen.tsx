@@ -36,6 +36,9 @@ export function PlayingScreen() {
     matchingCells,
   } = useGameStore();
 
+  const spinningCells = useGameStore(s => s.spinningCells);
+  const isSpinning = spinningCells.size > 0;
+
   const { currentLevel } = useRunStore();
 
   const tilesRemaining = tileQueue.length + (currentTile ? 1 : 0);
@@ -177,7 +180,7 @@ export function PlayingScreen() {
                         respinCursor.type === 'col' &&
                           respinCursor.index === col &&
                           styles.respinButtonSelected,
-                        placementMode === 'placed' &&
+                        (placementMode === 'placed' || isSpinning) &&
                           styles.respinButtonDisabled,
                       ]}
                       onPress={() =>
@@ -185,7 +188,8 @@ export function PlayingScreen() {
                       }
                       disabled={
                         placementMode === 'placed' ||
-                        matchingCells.size > 0
+                        matchingCells.size > 0 ||
+                        isSpinning
                       }
                     >
                       <RespinCol size={CELL_SIZE - 4} />
@@ -210,7 +214,7 @@ export function PlayingScreen() {
                           respinCursor.type === 'row' &&
                             respinCursor.index === row &&
                             styles.respinButtonSelected,
-                          placementMode === 'placed' &&
+                          (placementMode === 'placed' || isSpinning) &&
                             styles.respinButtonDisabled,
                         ]}
                         onPress={() =>
@@ -218,7 +222,8 @@ export function PlayingScreen() {
                         }
                         disabled={
                           placementMode === 'placed' ||
-                          matchingCells.size > 0
+                          matchingCells.size > 0 ||
+                          isSpinning
                         }
                       >
                         <RespinRow size={CELL_SIZE - 4} />
