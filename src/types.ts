@@ -54,3 +54,9 @@ export type GamePhase = 'placing' | 'ended';
 export type GameResult = 'win' | 'lose' | null;
 export type PlacementMode = 'idle' | 'placed';
 export type RunPhase = 'title' | 'levelPreview' | 'playing' | 'gameOver';
+
+export interface SpinCellInfo {
+  finalSymbol: Symbol;
+  cycles: number;
+  delay: number;
+}

@@ -13,6 +13,7 @@ import type {
   PlacementMode,
   RunPhase,
   Symbol,
+  SpinCellInfo,
 } from './types';
 import { BOARD_SIZE, NUM_LEVELS } from './constants';
 import {
@@ -41,6 +42,9 @@ import { findMatches, calculateScore, matchKey } from './scoring';
 
 export const respinModeRef = { current: false };
 
+const SPIN_STAGGER_MS = 80;
+const SPIN_BASE_CYCLES = 2;
+
 // =============================================================================
 // GAME STATE
 // =============================================================================
@@ -65,6 +69,10 @@ export interface GameState {
   entrySpots: EntrySpot[];
   selectedEntry: number | null;
   reachableCells: Set<string> | null;
+  spinningCells: Map<string, SpinCellInfo>;
+  pendingSpinGrid: Grid | null;
+  pendingSpinScore: number;
+  pendingSpinAnimState: Partial<GameState> | null;
 
   selectEntry: (index: number) => void;
   deselectEntry: () => void;
@@ -78,6 +86,7 @@ export interface GameState {
   clearMatchAnimation: () => void;
   removeScorePopup: (id: string) => void;
   respinLine: (type: 'row' | 'col', index: number) => void;
+  clearSpinAnimation: () => void;
   resetGame: (config?: LevelConfig) => void;
 }
 
@@ -104,6 +113,10 @@ export function createInitialState(config: LevelConfig = generateLevelConfig(1))
     entrySpots: spots,
     selectedEntry: null as number | null,
     reachableCells: null as Set<string> | null,
+    spinningCells: new Map<string, SpinCellInfo>(),
+    pendingSpinGrid: null as Grid | null,
+    pendingSpinScore: 0,
+    pendingSpinAnimState: null as Partial<GameState> | null,
   };
 }
 
@@ -361,25 +374,39 @@ export const useGameStore = create<GameState>((set, get) => ({
   },
 
   respinLine: (type: 'row' | 'col', index: number) => {
-    const { phase, respinsRemaining, grid, score, matchingCells } = get();
+    const { phase, respinsRemaining, grid, score, matchingCells, spinningCells } = get();
     if (phase !== 'placing' || respinsRemaining <= 0) return;
     if (index < 0 || index >= BOARD_SIZE) return;
     if (matchingCells.size > 0) return; // Block respins during animation
+    if (spinningCells.size > 0) return; // Block respins during active spin
 
     const matchesBefore = findMatches(grid);
 
     const newGrid = cloneGrid(grid);
+    const newSpinningCells = new Map<string, SpinCellInfo>();
 
     if (type === 'row') {
       for (let col = 0; col < BOARD_SIZE; col++) {
         if (newGrid[index][col] !== null && newGrid[index][col] !== 'wall') {
-          newGrid[index][col] = getRandomSymbol(get().levelConfig.symbolCount);
+          const newSymbol = getRandomSymbol(get().levelConfig.symbolCount);
+          newGrid[index][col] = newSymbol;
+          newSpinningCells.set(`${index},${col}`, {
+            finalSymbol: newSymbol,
+            cycles: SPIN_BASE_CYCLES + col,
+            delay: col * SPIN_STAGGER_MS,
+          });
         }
       }
     } else {
       for (let row = 0; row < BOARD_SIZE; row++) {
         if (newGrid[row][index] !== null && newGrid[row][index] !== 'wall') {
-          newGrid[row][index] = getRandomSymbol(get().levelConfig.symbolCount);
+          const newSymbol = getRandomSymbol(get().levelConfig.symbolCount);
+          newGrid[row][index] = newSymbol;
+          newSpinningCells.set(`${row},${index}`, {
+            finalSymbol: newSymbol,
+            cycles: SPIN_BASE_CYCLES + row,
+            delay: row * SPIN_STAGGER_MS,
+          });
         }
       }
     }
@@ -440,12 +467,27 @@ export const useGameStore = create<GameState>((set, get) => ({
       }
     }
 
-    // Single atomic set() — grid + score + animation state together
+    // Store pending results — grid/score/anim deferred until spin animation completes
     set({
-      grid: newGrid,
       respinsRemaining: newRespins,
-      score: newScore,
-      ...animState,
+      spinningCells: newSpinningCells,
+      pendingSpinGrid: newGrid,
+      pendingSpinScore: newScore,
+      pendingSpinAnimState: animState,
+    });
+  },
+
+  clearSpinAnimation: () => {
+    const { pendingSpinGrid, pendingSpinScore, pendingSpinAnimState } = get();
+    if (!pendingSpinGrid) return;
+    set({
+      grid: pendingSpinGrid,
+      score: pendingSpinScore,
+      spinningCells: new Map(),
+      pendingSpinGrid: null,
+      pendingSpinScore: 0,
+      pendingSpinAnimState: null,
+      ...(pendingSpinAnimState ?? {}),
     });
   },
 
