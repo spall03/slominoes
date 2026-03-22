@@ -11,6 +11,7 @@ import { BOARD_SIZE, CELL_SIZE, CELL_TOTAL, CELL_MARGIN, GRID_PADDING, isMobile 
 import { canPlaceTileWithEntry, computeReachableCells, getSecondCellOffset, getSymbolsForRotation } from '../grid';
 import { useGameStore, respinModeRef } from '../store';
 import { Cell } from './Cell';
+import { SpinCell } from './SpinCell';
 import { EntrySpotButton } from './EntrySpotButton';
 import { ScorePopup } from './ScorePopup';
 import type { Grid as GridType, Rotation, Symbol } from '../types';
@@ -40,6 +41,8 @@ export function Grid() {
     setHoldReady,
     clearMatchAnimation,
     removeScorePopup,
+    spinningCells,
+    clearSpinAnimation,
   } = useGameStore();
 
   const [animationKey, setAnimationKey] = useState(0);
@@ -69,6 +72,7 @@ export function Grid() {
 
     const handleKeyDown = (e: KeyboardEvent) => {
       const state = useGameStore.getState();
+      if (state.spinningCells?.size > 0) return;
       if (state.phase !== 'placing' || !state.currentTile) return;
 
       // No entry selected: 1-4 keys select entry, all other keys ignored
@@ -167,6 +171,23 @@ export function Grid() {
     }
   }, [clearMatchAnimation]);
 
+  const spinCompletedRef = useRef(new Set<string>());
+  const totalSpinCellsRef = useRef(0);
+
+  useEffect(() => {
+    if (spinningCells.size > 0) {
+      spinCompletedRef.current = new Set();
+      totalSpinCellsRef.current = spinningCells.size;
+    }
+  }, [spinningCells]);
+
+  const handleSpinCellComplete = useCallback((cellKey: string) => {
+    spinCompletedRef.current.add(cellKey);
+    if (spinCompletedRef.current.size >= totalSpinCellsRef.current) {
+      clearSpinAnimation();
+    }
+  }, [clearSpinAnimation]);
+
   // Track animating cells when matchingCells changes
   useEffect(() => {
     if (matchingCells.size > 0) {
@@ -187,6 +208,7 @@ export function Grid() {
 
   const tapGesture = Gesture.Tap()
     .onEnd((event) => {
+      if (useGameStore.getState().spinningCells.size > 0) return;
       if (phase !== 'placing' || !currentTile) return;
       if (selectedEntry === null) return;
 
@@ -329,6 +351,20 @@ export function Grid() {
                 {row.map((cell, colIndex) => {
                   const { isPreview, previewSymbol } = getPreviewInfo(rowIndex, colIndex);
                   const cellKey = `${rowIndex},${colIndex}`;
+                  const spinInfo = spinningCells.get(cellKey);
+
+                  if (spinInfo) {
+                    return (
+                      <SpinCell
+                        key={`spin-${rowIndex}-${colIndex}`}
+                        finalSymbol={spinInfo.finalSymbol}
+                        cycles={spinInfo.cycles}
+                        delay={spinInfo.delay}
+                        onComplete={() => handleSpinCellComplete(cellKey)}
+                      />
+                    );
+                  }
+
                   const isMatching = matchingCells.has(cellKey);
                   const isReachable = reachableCells?.has(cellKey) ?? false;
                   const entryCellDir = entryCellMap.get(cellKey) ?? null;
