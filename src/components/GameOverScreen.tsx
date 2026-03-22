@@ -1,13 +1,16 @@
 // src/components/GameOverScreen.tsx
 import React from 'react';
 import { View, Text, Pressable, StyleSheet } from 'react-native';
+import { LinearGradient } from 'expo-linear-gradient';
 import { colors, fonts } from '../theme';
 import { NUM_LEVELS } from '../constants';
 import { useRunStore } from '../store';
 
 export function GameOverScreen() {
-  const { currentLevel, levelScore } = useRunStore();
+  const { currentLevel, levelScore, levelConfig } = useRunStore();
   const won = currentLevel >= NUM_LEVELS && levelScore >= 0;
+  const threshold = levelConfig?.threshold ?? 0;
+  const progress = threshold > 0 ? Math.min(1, levelScore / threshold) : 1;
 
   return (
     <View style={styles.container}>
@@ -43,10 +46,26 @@ export function GameOverScreen() {
             {currentLevel} / {NUM_LEVELS}
           </Text>
         </View>
+        {threshold > 0 && (
+          <>
+            <View style={styles.progressLabelRow}>
+              <Text style={styles.statLabel}>THRESHOLD</Text>
+              <Text style={styles.progressPct}>{Math.round(progress * 100)}%</Text>
+            </View>
+            <View style={styles.progressTrack}>
+              <LinearGradient
+                colors={won ? [colors.cyan, colors.cyan] : [colors.pink, colors.cyan]}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 0 }}
+                style={[styles.progressFill, { width: `${Math.round(progress * 100)}%` } as any]}
+              />
+            </View>
+          </>
+        )}
       </View>
 
       <Pressable
-        style={styles.playAgainButton}
+        style={({ pressed }) => [styles.playAgainButton, pressed && styles.buttonPressed]}
         onPress={() => useRunStore.getState().startRun()}
       >
         <Text style={styles.playAgainText}>
@@ -55,7 +74,7 @@ export function GameOverScreen() {
       </Pressable>
 
       <Pressable
-        style={styles.mainMenuButton}
+        style={({ pressed }) => [styles.mainMenuButton, pressed && styles.buttonPressed]}
         onPress={() => useRunStore.getState().startRun()}
       >
         <Text style={styles.mainMenuText}>MAIN MENU</Text>
@@ -143,5 +162,32 @@ const styles = StyleSheet.create({
     fontSize: 14,
     letterSpacing: 2,
     textTransform: 'uppercase',
+  },
+  progressLabelRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginTop: 10,
+    marginBottom: 4,
+  },
+  progressPct: {
+    color: colors.textMuted,
+    fontFamily: fonts.regular,
+    fontSize: 11,
+  },
+  progressTrack: {
+    height: 6,
+    backgroundColor: colors.border,
+    borderRadius: 3,
+    overflow: 'hidden',
+    marginBottom: 4,
+  },
+  progressFill: {
+    height: '100%',
+    borderRadius: 3,
+    minWidth: 6,
+  },
+  buttonPressed: {
+    opacity: 0.7,
   },
 });

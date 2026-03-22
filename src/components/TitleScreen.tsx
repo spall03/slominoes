@@ -14,12 +14,14 @@ export function TitleScreen() {
         <Domino size={60} />
       </View>
       <Pressable
-        style={styles.newGameButton}
+        style={({ pressed }) => [styles.newGameButton, pressed && styles.buttonPressed]}
         onPress={() => useRunStore.getState().startRun()}
       >
         <Text style={styles.newGameText}>NEW GAME</Text>
       </Pressable>
-      <Pressable style={styles.howToPlayButton}>
+      <Pressable
+        style={({ pressed }) => [styles.howToPlayButton, pressed && styles.buttonPressed]}
+      >
         <Text style={styles.howToPlayText}>HOW TO PLAY</Text>
       </Pressable>
     </View>
@@ -68,5 +70,8 @@ const styles = StyleSheet.create({
     fontSize: 14,
     letterSpacing: 2,
     textTransform: 'uppercase',
+  },
+  buttonPressed: {
+    opacity: 0.7,
   },
 });

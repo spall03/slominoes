@@ -85,7 +85,7 @@ export function LevelPreviewScreen() {
       )}
 
       <Pressable
-        style={styles.startButton}
+        style={({ pressed }) => [styles.startButton, pressed && styles.buttonPressed]}
         onPress={() => useRunStore.getState().startLevel()}
       >
         <Text style={styles.startButtonText}>START LEVEL</Text>
@@ -187,5 +187,8 @@ const styles = StyleSheet.create({
     fontSize: 18,
     letterSpacing: 2,
     textTransform: 'uppercase',
+  },
+  buttonPressed: {
+    opacity: 0.7,
   },
 });

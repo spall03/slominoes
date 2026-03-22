@@ -245,13 +245,13 @@ export function PlayingScreen() {
                 ) : (
                   <View style={styles.placementButtons}>
                     <Pressable
-                      style={styles.confirmButton}
+                      style={({ pressed }) => [styles.confirmButton, pressed && styles.buttonPressed]}
                       onPress={useGameStore.getState().confirmPlacement}
                     >
                       <Text style={styles.confirmText}>CONFIRM</Text>
                     </Pressable>
                     <Pressable
-                      style={styles.cancelButton}
+                      style={({ pressed }) => [styles.cancelButton, pressed && styles.buttonPressed]}
                       onPress={useGameStore.getState().cancelPlacement}
                     >
                       <Text style={styles.cancelText}>CANCEL</Text>
@@ -333,7 +333,7 @@ export function PlayingScreen() {
                 </Text>
                 <Text style={styles.finalScore}>Final Score: {score}</Text>
                 <Pressable
-                  style={styles.restartButton}
+                  style={({ pressed }) => [styles.restartButton, pressed && styles.buttonPressed]}
                   onPress={() => useRunStore.getState().startRun()}
                 >
                   <Text style={styles.restartText}>PLAY AGAIN</Text>
@@ -549,5 +549,8 @@ const styles = StyleSheet.create({
     fontSize: 18,
     color: colors.textMuted,
     fontFamily: fonts.regular,
+  },
+  buttonPressed: {
+    opacity: 0.7,
   },
 });
