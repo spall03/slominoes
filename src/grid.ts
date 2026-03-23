@@ -159,7 +159,8 @@ export function allEmptyCells(grid: Grid, boardSize: number = BOARD_SIZE): Set<s
 }
 
 /**
- * Find all unlocked, filled neighbors of the given locked cells.
+ * Find all unlocked, filled cells connected to newly locked cells via BFS.
+ * Floods through all adjacent unlocked filled cells, not just immediate neighbors.
  */
 export function findUnlockedNeighbors(
   grid: Grid,
@@ -167,9 +168,11 @@ export function findUnlockedNeighbors(
   allLockedCells: Set<string>,
   boardSize: number = BOARD_SIZE,
 ): Set<string> {
-  const neighbors = new Set<string>();
+  const connected = new Set<string>();
+  const queue: [number, number][] = [];
   const dirs: [number, number][] = [[-1, 0], [1, 0], [0, -1], [0, 1]];
 
+  // Seed BFS from immediate neighbors of newly locked cells
   for (const cellKey of newlyLockedCells) {
     const [r, c] = cellKey.split(',').map(Number);
     for (const [dr, dc] of dirs) {
@@ -178,12 +181,32 @@ export function findUnlockedNeighbors(
       if (nr < 0 || nr >= boardSize || nc < 0 || nc >= boardSize) continue;
       const key = `${nr},${nc}`;
       if (allLockedCells.has(key)) continue;
+      if (connected.has(key)) continue;
       const cell = grid[nr][nc];
       if (cell !== null && cell !== 'wall') {
-        neighbors.add(key);
+        connected.add(key);
+        queue.push([nr, nc]);
       }
     }
   }
 
-  return neighbors;
+  // BFS: flood through all connected unlocked filled cells
+  while (queue.length > 0) {
+    const [cr, cc] = queue.shift()!;
+    for (const [dr, dc] of dirs) {
+      const nr = cr + dr;
+      const nc = cc + dc;
+      if (nr < 0 || nr >= boardSize || nc < 0 || nc >= boardSize) continue;
+      const key = `${nr},${nc}`;
+      if (allLockedCells.has(key)) continue;
+      if (connected.has(key)) continue;
+      const cell = grid[nr][nc];
+      if (cell !== null && cell !== 'wall') {
+        connected.add(key);
+        queue.push([nr, nc]);
+      }
+    }
+  }
+
+  return connected;
 }
