@@ -15,7 +15,7 @@ import type {
   Symbol,
   SpinCellInfo,
 } from './types';
-import { BOARD_SIZE, NUM_LEVELS } from './constants';
+import { BOARD_SIZE } from './constants';
 import { CONFIG } from './config';
 import {
   createEmptyGrid,
@@ -597,8 +597,9 @@ export const useRunStore = create<RunState>((set, get) => ({
 
   startRun: () => {
     const config = generateLevelConfig(1);
+    useGameStore.getState().resetGame(config);
     set({
-      runPhase: 'levelPreview',
+      runPhase: 'playing',
       currentLevel: 1,
       levelScore: 0,
       levelConfig: config,
@@ -616,29 +617,8 @@ export const useRunStore = create<RunState>((set, get) => ({
     set({ runPhase: 'playing' });
   },
 
-  completeLevel: (score: number, threshold: number, _respinsLeft: number) => {
-    const { currentLevel } = get();
-
-    // Calculate bonus respins for next level based on how much score exceeds threshold
-    const excessPct = (score - threshold) / threshold;
-    let bonus = 0;
-    if (excessPct >= 0.15) bonus = 3;
-    else if (excessPct >= 0.10) bonus = 2;
-    else if (excessPct >= 0.05) bonus = 1;
-
-    if (currentLevel >= NUM_LEVELS) {
-      set({ runPhase: 'gameOver', levelScore: score, bonusRespins: 0 });
-      return;
-    }
-    const nextLevel = currentLevel + 1;
-    const config = generateLevelConfig(nextLevel);
-    set({
-      currentLevel: nextLevel,
-      levelConfig: config,
-      levelScore: score,
-      bonusRespins: bonus,
-      runPhase: 'levelPreview',
-    });
+  completeLevel: (score: number, _threshold: number, _respinsLeft: number) => {
+    set({ runPhase: 'gameOver', levelScore: score });
   },
 
   failLevel: (score: number) => {

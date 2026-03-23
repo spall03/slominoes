@@ -1,37 +1,28 @@
 // src/level.ts
-import type { Symbol, EntrySpot, LevelConfig, Tile } from './types';
+import type { Symbol, EntrySpot, LevelConfig, ObstacleCell, Tile } from './types';
 import {
-  BOARD_SIZE,
-  WALL_SCALAR,
-  SCORE_COEFFICIENT,
-  LEVEL_SCALAR_MAX,
-  NUM_LEVELS,
-  RESPINS_PER_LEVEL,
-  TILES_PER_LEVEL,
   SYMBOLS,
   SYMBOL_WEIGHTS,
   LENGTH_MULTIPLIERS,
   MAX_LENGTH_MULTIPLIER,
   MIN_MATCH_LENGTH,
 } from './constants';
+import { CONFIG } from './config';
 
 // =============================================================================
 // ENTRY SPOTS
 // =============================================================================
 
-export const ENTRY_SPOTS: EntrySpot[] = [
-  { id: 0, label: 'Top', cells: [[0, 3], [0, 4]], arrowDirection: 'down' },
-  { id: 1, label: 'Bottom', cells: [[7, 3], [7, 4]], arrowDirection: 'up' },
-  // { id: 2, label: 'Left', cells: [[3, 0], [4, 0]], arrowDirection: 'right' },
-  // { id: 3, label: 'Right', cells: [[3, 7], [4, 7]], arrowDirection: 'left' },
-];
+export const ENTRY_SPOTS: EntrySpot[] = getEntrySpots(CONFIG.ENTRY_SPOT_COUNT);
 
 export function getEntrySpots(count: number): EntrySpot[] {
+  const size = CONFIG.BOARD_SIZE;
+  const mid = Math.floor(size / 2);
   const all: EntrySpot[] = [
-    { id: 0, label: 'Top', cells: [[0, 3], [0, 4]], arrowDirection: 'down' },
-    { id: 1, label: 'Bottom', cells: [[7, 3], [7, 4]], arrowDirection: 'up' },
-    { id: 2, label: 'Left', cells: [[3, 0], [4, 0]], arrowDirection: 'right' },
-    { id: 3, label: 'Right', cells: [[3, 7], [4, 7]], arrowDirection: 'left' },
+    { id: 0, label: 'Top', cells: [[0, mid - 1], [0, mid]], arrowDirection: 'down' },
+    { id: 1, label: 'Bottom', cells: [[size - 1, mid - 1], [size - 1, mid]], arrowDirection: 'up' },
+    { id: 2, label: 'Left', cells: [[mid - 1, 0], [mid, 0]], arrowDirection: 'right' },
+    { id: 3, label: 'Right', cells: [[mid - 1, size - 1], [mid, size - 1]], arrowDirection: 'left' },
   ];
   if (count <= 1) return [all[0]];
   if (count === 2) return [all[0], all[1]];
@@ -43,34 +34,34 @@ export function getEntrySpots(count: number): EntrySpot[] {
 // =============================================================================
 
 export function generateLevelConfig(level: number): LevelConfig {
-  const wallCount = Math.floor(level * WALL_SCALAR);
+  const boardSize = CONFIG.BOARD_SIZE;
+  const wallCount = CONFIG.WALL_COUNT;
+  const mid = Math.floor(boardSize / 2);
 
-  // Place walls randomly, avoiding entry spot cells
-  const entryCells = new Set(['0,3', '0,4', '7,3', '7,4']);
-  const obstacles: { row: number; col: number; symbol: Symbol | 'wall' }[] = [];
+  const entryCells = new Set([
+    `0,${mid - 1}`, `0,${mid}`,
+    `${boardSize - 1},${mid - 1}`, `${boardSize - 1},${mid}`,
+  ]);
+
+  const obstacles: ObstacleCell[] = [];
   const usedPositions = new Set<string>();
-
   while (obstacles.length < wallCount) {
-    const row = Math.floor(Math.random() * BOARD_SIZE);
-    const col = Math.floor(Math.random() * BOARD_SIZE);
+    const row = Math.floor(Math.random() * boardSize);
+    const col = Math.floor(Math.random() * boardSize);
     const key = `${row},${col}`;
     if (entryCells.has(key) || usedPositions.has(key)) continue;
     usedPositions.add(key);
     obstacles.push({ row, col, symbol: 'wall' });
   }
 
-  const playableCells = 64 - wallCount;
-  const levelScalar = 1 + (level - 1) * ((LEVEL_SCALAR_MAX - 1) / (NUM_LEVELS - 1));
-  const threshold = Math.round(playableCells * SCORE_COEFFICIENT * levelScalar);
-
   return {
     level,
-    threshold,
-    respins: RESPINS_PER_LEVEL,
-    tilesPerLevel: TILES_PER_LEVEL,
-    symbolCount: 5,
+    threshold: CONFIG.THRESHOLD,
+    respins: 0,
+    tilesPerLevel: CONFIG.TILES_PER_BATCH * CONFIG.NUM_BATCHES,
+    symbolCount: CONFIG.SYMBOL_COUNT,
     obstacles,
-    entrySpotCount: 2,
+    entrySpotCount: CONFIG.ENTRY_SPOT_COUNT,
     boardMask: null,
   };
 }
@@ -101,7 +92,7 @@ export function generateTile(id: string, symbolCount: number = SYMBOLS.length): 
   return { id, symbolA: getRandomSymbol(symbolCount), symbolB: getRandomSymbol(symbolCount) };
 }
 
-export function generateTileQueue(tilesPerLevel: number = TILES_PER_LEVEL, symbolCount: number = SYMBOLS.length): Tile[] {
+export function generateTileQueue(tilesPerLevel: number = CONFIG.TILES_PER_BATCH * CONFIG.NUM_BATCHES, symbolCount: number = SYMBOLS.length): Tile[] {
   return Array.from({ length: tilesPerLevel }, (_, i) =>
     generateTile(`tile-${i}`, symbolCount)
   );
