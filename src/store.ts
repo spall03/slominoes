@@ -29,6 +29,7 @@ import {
   canPlaceTileWithEntry,
   anyEntryHasValidPlacement,
   findUnlockedNeighbors,
+  allEmptyCells,
 } from './grid';
 import {
   generateLevelConfig,
@@ -125,8 +126,8 @@ export function createInitialState(config: LevelConfig = generateLevelConfig(1))
     scorePopups: [] as ScorePopup[],
     pendingPhase2: null as { cells: Set<string>; popups: ScorePopup[] } | null,
     entrySpots: spots,
-    selectedEntry: null as number | null,
-    reachableCells: null as Set<string> | null,
+    selectedEntry: 0 as number | null,
+    reachableCells: allEmptyCells(createGridFromConfig(config)) as Set<string> | null,
     spinningCells: new Map<string, SpinCellInfo>(),
     pendingGrid: null as Grid | null,
     pendingLockedCells: null as Set<string> | null,
@@ -242,11 +243,11 @@ export const useGameStore = create<GameState>((set, get) => ({
         placementMode: 'idle',
         placedPosition: null,
         holdReady: false,
-        selectedEntry: null,
+        selectedEntry: 0,
         reachableCells: null,
       });
     } else {
-      // More tiles in batch — advance to next tile
+      // More tiles in batch — advance to next tile, free placement on all empty cells
       set({
         grid: newGrid,
         batchQueue: newQueue,
@@ -254,8 +255,8 @@ export const useGameStore = create<GameState>((set, get) => ({
         placementMode: 'idle',
         placedPosition: null,
         holdReady: false,
-        selectedEntry: null,
-        reachableCells: null,
+        selectedEntry: 0,
+        reachableCells: allEmptyCells(newGrid),
       });
     }
   },
@@ -428,6 +429,8 @@ export const useGameStore = create<GameState>((set, get) => ({
           pendingLockedCells: null,
           pendingScore: 0,
           cascadeWave: 0,
+          selectedEntry: 0,
+          reachableCells: allEmptyCells(grid),
         });
       } else {
         // No more batches — game ends
@@ -512,6 +515,8 @@ export const useGameStore = create<GameState>((set, get) => ({
             cascadeWave: 0,
             matchingCells: matchCells,
             scorePopups: popups,
+            selectedEntry: 0,
+            reachableCells: allEmptyCells(grid),
           });
         } else {
           const result = updatedScore >= levelConfig.threshold ? 'win' : 'lose';
@@ -625,3 +630,9 @@ export const useRunStore = create<RunState>((set, get) => ({
     set({ runPhase: 'gameOver', levelScore: score });
   },
 }));
+
+// Debug: expose stores on window for testing
+if (typeof window !== 'undefined') {
+  (window as any).__GAME__ = useGameStore;
+  (window as any).__RUN__ = useRunStore;
+}

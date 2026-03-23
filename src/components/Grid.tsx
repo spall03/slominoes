@@ -310,7 +310,7 @@ export function Grid() {
   const leftEntries = entrySpots.filter(e => e.arrowDirection === 'right');
   const rightEntries = entrySpots.filter(e => e.arrowDirection === 'left');
   const hasSideEntries = phase === 'placing' && currentTile && (leftEntries.length > 0 || rightEntries.length > 0);
-  const hideEntries = isMobile && respinModeRef.current;
+  const hideEntries = true; // Free placement in prototype — no entry point selection
 
   return (
     <View>

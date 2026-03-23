@@ -141,18 +141,11 @@ export function PlayingScreen() {
                 )}
 
                 {/* Hint text */}
-                {placementMode === 'idle' && selectedEntry === null && (
+                {placementMode === 'idle' && (
                   <Text style={styles.hintText}>
                     {isMobile
-                      ? 'Tap an entry point arrow'
-                      : `Press ${entryKeyHint} to select an entry point`}
-                  </Text>
-                )}
-                {placementMode === 'idle' && selectedEntry !== null && (
-                  <Text style={styles.hintText}>
-                    {isMobile
-                      ? 'Tap highlighted area to place tile'
-                      : 'Click highlighted area to place tile | Esc: change entry'}
+                      ? 'Tap any empty cell to place tile'
+                      : 'Click any empty cell to place tile'}
                   </Text>
                 )}
                 {placementMode === 'placed' && (

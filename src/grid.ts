@@ -146,6 +146,19 @@ export function anyEntryHasValidPlacement(grid: Grid, entrySpots: EntrySpot[]): 
 }
 
 /**
+ * Return all empty (null) cells on the grid as a Set of "row,col" keys.
+ */
+export function allEmptyCells(grid: Grid, boardSize: number = BOARD_SIZE): Set<string> {
+  const cells = new Set<string>();
+  for (let r = 0; r < boardSize; r++) {
+    for (let c = 0; c < boardSize; c++) {
+      if (grid[r][c] === null) cells.add(`${r},${c}`);
+    }
+  }
+  return cells;
+}
+
+/**
  * Find all unlocked, filled neighbors of the given locked cells.
  */
 export function findUnlockedNeighbors(
