@@ -2,7 +2,7 @@
 import React from 'react';
 import { View, Text, StyleSheet } from 'react-native';
 import { colors, fonts } from '../theme';
-import { SYMBOL_VALUES } from '../constants';
+import { BOARD_SIZE, SYMBOL_VALUES } from '../constants';
 import { useGameStore } from '../store';
 import { SymbolIcon } from '../symbols/index';
 import type { Symbol } from '../types';
@@ -21,7 +21,7 @@ export function HelpPanel() {
     <View style={styles.helpPanel}>
       <Text style={styles.helpHeading}>Goal</Text>
       <Text style={styles.helpBody}>
-        Score {levelConfig.threshold}+ points by placing {levelConfig.tilesPerLevel} domino tiles on an 8x8 grid, then using {levelConfig.respins} respins to improve your matches.
+        Score {levelConfig.threshold}+ points by placing {levelConfig.tilesPerLevel} domino tiles on a {BOARD_SIZE}x{BOARD_SIZE} grid, then using {levelConfig.respins} respins to improve your matches.
       </Text>
 
       <Text style={styles.helpHeading}>Matching</Text>
