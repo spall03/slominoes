@@ -229,14 +229,27 @@ export const useGameStore = create<GameState>((set, get) => ({
     newGrid[row][col] = symbolFirst;
     newGrid[row2][col2] = symbolSecond;
 
+    // Check for matches after placement — lock any 3+ matches immediately
+    const { lockedCells } = get();
+    const newLocked = new Set(lockedCells);
+    const placementMatches = findNewMatches(newGrid, newLocked);
+    if (placementMatches.length > 0) {
+      placementMatches.forEach(match => {
+        match.cells.forEach(([r, c]) => newLocked.add(`${r},${c}`));
+      });
+    }
+    const newScore = calculateLockedScore(newGrid, newLocked);
+
     const nextTile = batchQueue[0] ?? null;
     const newQueue = batchQueue.slice(1);
     const isBatchComplete = nextTile === null;
 
     if (isBatchComplete) {
-      // Batch is done — transition to igniting phase (no scoring yet)
+      // Batch is done — transition to igniting phase
       set({
         grid: newGrid,
+        lockedCells: newLocked,
+        score: newScore,
         batchQueue: [],
         currentTile: null,
         phase: 'igniting',
@@ -247,9 +260,11 @@ export const useGameStore = create<GameState>((set, get) => ({
         reachableCells: null,
       });
     } else {
-      // More tiles in batch — advance to next tile, free placement on all empty cells
+      // More tiles in batch — advance to next tile
       set({
         grid: newGrid,
+        lockedCells: newLocked,
+        score: newScore,
         batchQueue: newQueue,
         currentTile: nextTile,
         placementMode: 'idle',
