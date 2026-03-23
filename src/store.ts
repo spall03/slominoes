@@ -16,6 +16,7 @@ import type {
   SpinCellInfo,
 } from './types';
 import { BOARD_SIZE, NUM_LEVELS } from './constants';
+import { CONFIG } from './config';
 import {
   createEmptyGrid,
   cloneGrid,
@@ -27,6 +28,7 @@ import {
   isTilePlacementReachable,
   canPlaceTileWithEntry,
   anyEntryHasValidPlacement,
+  findUnlockedNeighbors,
 } from './grid';
 import {
   generateLevelConfig,
@@ -34,16 +36,13 @@ import {
   generateTileQueue,
   getRandomSymbol,
 } from './level';
-import { findMatches, calculateScore, matchKey } from './scoring';
+import { findMatches, calculateScore, matchKey, findNewMatches, calculateLockedScore } from './scoring';
 
 // =============================================================================
 // SHARED REF
 // =============================================================================
 
 export const respinModeRef = { current: false };
-
-const SPIN_STAGGER_MS = 80;
-const SPIN_BASE_CYCLES = 2;
 
 // =============================================================================
 // GAME STATE
@@ -52,7 +51,10 @@ const SPIN_BASE_CYCLES = 2;
 export interface GameState {
   levelConfig: LevelConfig;
   grid: Grid;
-  tileQueue: Tile[];
+  lockedCells: Set<string>;
+  tileBatches: Tile[][];
+  currentBatch: number;
+  batchQueue: Tile[];
   currentTile: Tile | null;
   rotation: Rotation;
   respinsRemaining: number;
@@ -70,9 +72,10 @@ export interface GameState {
   selectedEntry: number | null;
   reachableCells: Set<string> | null;
   spinningCells: Map<string, SpinCellInfo>;
-  pendingSpinGrid: Grid | null;
-  pendingSpinScore: number;
-  pendingSpinAnimState: Partial<GameState> | null;
+  pendingGrid: Grid | null;
+  pendingLockedCells: Set<string> | null;
+  pendingScore: number;
+  cascadeWave: number;
 
   selectEntry: (index: number) => void;
   deselectEntry: () => void;
@@ -85,19 +88,30 @@ export interface GameState {
   triggerMatchAnimation: (matches: Match[], newCells: [number, number][]) => void;
   clearMatchAnimation: () => void;
   removeScorePopup: (id: string) => void;
-  respinLine: (type: 'row' | 'col', index: number) => void;
+  ignite: (type: 'row' | 'col', index: number) => void;
   clearSpinAnimation: () => void;
   resetGame: (config?: LevelConfig) => void;
 }
 
 export function createInitialState(config: LevelConfig = generateLevelConfig(1)) {
-  const queue = generateTileQueue(config.tilesPerLevel, config.symbolCount);
+  const totalTiles = CONFIG.TILES_PER_BATCH * CONFIG.NUM_BATCHES;
+  const allTiles = generateTileQueue(totalTiles, config.symbolCount);
+  const batches: Tile[][] = [];
+  for (let i = 0; i < CONFIG.NUM_BATCHES; i++) {
+    batches.push(allTiles.slice(i * CONFIG.TILES_PER_BATCH, (i + 1) * CONFIG.TILES_PER_BATCH));
+  }
+
+  const firstBatch = batches[0] ?? [];
   const spots = getEntrySpots(config.entrySpotCount);
+
   return {
     levelConfig: config,
     grid: createGridFromConfig(config),
-    tileQueue: queue.slice(1),
-    currentTile: queue[0] ?? null,
+    lockedCells: new Set<string>(),
+    tileBatches: batches,
+    currentBatch: 0,
+    batchQueue: firstBatch.slice(1),
+    currentTile: firstBatch[0] ?? null,
     rotation: 0 as Rotation,
     respinsRemaining: config.respins,
     score: 0,
@@ -114,9 +128,10 @@ export function createInitialState(config: LevelConfig = generateLevelConfig(1))
     selectedEntry: null as number | null,
     reachableCells: null as Set<string> | null,
     spinningCells: new Map<string, SpinCellInfo>(),
-    pendingSpinGrid: null as Grid | null,
-    pendingSpinScore: 0,
-    pendingSpinAnimState: null as Partial<GameState> | null,
+    pendingGrid: null as Grid | null,
+    pendingLockedCells: null as Set<string> | null,
+    pendingScore: 0,
+    cascadeWave: 0,
   };
 }
 
@@ -197,7 +212,7 @@ export const useGameStore = create<GameState>((set, get) => ({
   },
 
   confirmPlacement: () => {
-    const { phase, currentTile, rotation, grid, tileQueue, placementMode, placedPosition, reachableCells } = get();
+    const { phase, currentTile, rotation, grid, batchQueue, placementMode, placedPosition, reachableCells } = get();
     if (phase !== 'placing' || !currentTile || placementMode !== 'placed' || !placedPosition) return;
 
     const { row, col } = placedPosition;
@@ -213,75 +228,35 @@ export const useGameStore = create<GameState>((set, get) => ({
     newGrid[row][col] = symbolFirst;
     newGrid[row2][col2] = symbolSecond;
 
-    const { score: newTotalScore, matches } = calculateScore(newGrid);
+    const nextTile = batchQueue[0] ?? null;
+    const newQueue = batchQueue.slice(1);
+    const isBatchComplete = nextTile === null;
 
-    const nextTile = tileQueue[0] ?? null;
-    const newQueue = tileQueue.slice(1);
-    const isComplete = nextTile === null;
-
-    if (isComplete) {
-      const result = newTotalScore >= get().levelConfig.threshold ? 'win' : 'lose';
+    if (isBatchComplete) {
+      // Batch is done — transition to igniting phase (no scoring yet)
       set({
         grid: newGrid,
-        tileQueue: [],
+        batchQueue: [],
         currentTile: null,
-        score: newTotalScore,
-        phase: 'ended',
-        result,
+        phase: 'igniting',
         placementMode: 'idle',
         placedPosition: null,
         holdReady: false,
         selectedEntry: null,
         reachableCells: null,
       });
-      if (result === 'win') {
-        useRunStore.getState().completeLevel(newTotalScore, get().levelConfig.threshold, get().respinsRemaining);
-      } else {
-        useRunStore.getState().failLevel(newTotalScore);
-      }
     } else {
-      // Check if any entry has valid placements on the new grid
-      const stuck = !anyEntryHasValidPlacement(newGrid, get().entrySpots);
-      if (stuck) {
-        // No valid placements remaining — end the game
-        const result = newTotalScore >= get().levelConfig.threshold ? 'win' : 'lose';
-        set({
-          grid: newGrid,
-          tileQueue: newQueue,
-          currentTile: nextTile,
-          score: newTotalScore,
-          phase: 'ended',
-          result,
-          placementMode: 'idle',
-          placedPosition: null,
-          holdReady: false,
-          selectedEntry: null,
-          reachableCells: null,
-        });
-        if (result === 'win') {
-          useRunStore.getState().completeLevel(newTotalScore, get().levelConfig.threshold, get().respinsRemaining);
-        } else {
-          useRunStore.getState().failLevel(newTotalScore);
-        }
-      } else {
-        set({
-          grid: newGrid,
-          tileQueue: newQueue,
-          currentTile: nextTile,
-          score: newTotalScore,
-          placementMode: 'idle',
-          placedPosition: null,
-          holdReady: false,
-          selectedEntry: null,
-          reachableCells: null,
-        });
-      }
-    }
-
-    // Trigger match animation for matches involving newly placed cells
-    if (matches.length > 0) {
-      const newCells: [number, number][] = [[row, col], [row2, col2]];
-      get().triggerMatchAnimation(matches, newCells);
+      // More tiles in batch — advance to next tile
+      set({
+        grid: newGrid,
+        batchQueue: newQueue,
+        currentTile: nextTile,
+        placementMode: 'idle',
+        placedPosition: null,
+        holdReady: false,
+        selectedEntry: null,
+        reachableCells: null,
+      });
     }
   },
 
@@ -373,122 +348,224 @@ export const useGameStore = create<GameState>((set, get) => ({
     }));
   },
 
-  respinLine: (type: 'row' | 'col', index: number) => {
-    const { phase, respinsRemaining, grid, score, matchingCells, spinningCells } = get();
-    if (phase !== 'placing' || respinsRemaining <= 0) return;
+  ignite: (type: 'row' | 'col', index: number) => {
+    const { phase, grid, lockedCells, spinningCells } = get();
+    if (phase !== 'igniting') return;
     if (index < 0 || index >= BOARD_SIZE) return;
-    if (matchingCells.size > 0) return; // Block respins during animation
-    if (spinningCells.size > 0) return; // Block respins during active spin
-
-    const matchesBefore = findMatches(grid);
+    if (spinningCells.size > 0) return; // Block during active spin
 
     const newGrid = cloneGrid(grid);
     const newSpinningCells = new Map<string, SpinCellInfo>();
 
     if (type === 'row') {
       for (let col = 0; col < BOARD_SIZE; col++) {
+        const key = `${index},${col}`;
+        if (lockedCells.has(key)) continue; // Skip locked cells
         if (newGrid[index][col] !== null && newGrid[index][col] !== 'wall') {
           const newSymbol = getRandomSymbol(get().levelConfig.symbolCount);
           newGrid[index][col] = newSymbol;
-          newSpinningCells.set(`${index},${col}`, {
+          newSpinningCells.set(key, {
             finalSymbol: newSymbol,
-            cycles: SPIN_BASE_CYCLES + col,
-            delay: col * SPIN_STAGGER_MS,
+            cycles: CONFIG.SPIN_BASE_CYCLES + col,
+            delay: col * CONFIG.SPIN_STAGGER_MS,
           });
         }
       }
     } else {
       for (let row = 0; row < BOARD_SIZE; row++) {
+        const key = `${row},${index}`;
+        if (lockedCells.has(key)) continue; // Skip locked cells
         if (newGrid[row][index] !== null && newGrid[row][index] !== 'wall') {
           const newSymbol = getRandomSymbol(get().levelConfig.symbolCount);
           newGrid[row][index] = newSymbol;
-          newSpinningCells.set(`${row},${index}`, {
+          newSpinningCells.set(key, {
             finalSymbol: newSymbol,
-            cycles: SPIN_BASE_CYCLES + row,
-            delay: row * SPIN_STAGGER_MS,
+            cycles: CONFIG.SPIN_BASE_CYCLES + row,
+            delay: row * CONFIG.SPIN_STAGGER_MS,
           });
         }
       }
     }
 
-    const newRespins = respinsRemaining - 1;
-    const matchesAfter = findMatches(newGrid);
-    const gridScore = matchesAfter.reduce((sum, m) => sum + m.score, 0);
-    const newScore = gridScore;
-
-    // Diff matches: broken = before only, new = after only
-    const beforeKeys = new Set(matchesBefore.map(matchKey));
-    const afterKeys = new Set(matchesAfter.map(matchKey));
-    const brokenMatches = matchesBefore.filter(m => !afterKeys.has(matchKey(m)));
-    const newMatches = matchesAfter.filter(m => !beforeKeys.has(matchKey(m)));
-
-    // Compute animation state inline so we can set everything atomically
-    let animState: Partial<GameState> = {};
-    if (brokenMatches.length > 0 || newMatches.length > 0) {
-      // Build phase 2 data (blue highlight + positive popups)
-      const phase2Cells = new Set<string>();
-      const phase2PopupMap = new Map<string, number>();
-      newMatches.forEach((match) => {
-        match.cells.forEach(([r, c]) => phase2Cells.add(`${r},${c}`));
-        const ci = Math.floor(match.cells.length / 2);
-        const [cr, cc] = match.cells[ci];
-        const key = `${cr},${cc}`;
-        phase2PopupMap.set(key, (phase2PopupMap.get(key) ?? 0) + match.score);
-      });
-      let idx = 0;
-      const phase2Popups: ScorePopup[] = [];
-      phase2PopupMap.forEach((totalScore, key) => {
-        const [r, c] = key.split(',').map(Number);
-        phase2Popups.push({ id: `popup-p2-${Date.now()}-${idx++}`, score: totalScore, row: r, col: c });
-      });
-
-      if (brokenMatches.length === 0) {
-        // No broken matches — skip to phase 2 directly
-        animState = { matchingCells: phase2Cells, highlightColor: 'blue', scorePopups: phase2Popups, pendingPhase2: null };
-      } else {
-        // Build phase 1 data (red highlight + negative popups)
-        const phase1Cells = new Set<string>();
-        const phase1PopupMap = new Map<string, number>();
-        brokenMatches.forEach((match) => {
-          match.cells.forEach(([r, c]) => phase1Cells.add(`${r},${c}`));
-          const ci = Math.floor(match.cells.length / 2);
-          const [cr, cc] = match.cells[ci];
-          const key = `${cr},${cc}`;
-          phase1PopupMap.set(key, (phase1PopupMap.get(key) ?? 0) + match.score);
-        });
-        let idx1 = 0;
-        const phase1Popups: ScorePopup[] = [];
-        phase1PopupMap.forEach((totalScore, key) => {
-          const [r, c] = key.split(',').map(Number);
-          phase1Popups.push({ id: `popup-p1-${Date.now()}-${idx1++}`, score: -totalScore, row: r, col: c });
-        });
-        const pending = phase2Cells.size > 0 ? { cells: phase2Cells, popups: phase2Popups } : null;
-        animState = { matchingCells: phase1Cells, highlightColor: 'red', scorePopups: phase1Popups, pendingPhase2: pending };
-      }
-    }
-
-    // Store pending results — grid/score/anim deferred until spin animation completes
     set({
-      respinsRemaining: newRespins,
+      phase: 'cascading',
       spinningCells: newSpinningCells,
-      pendingSpinGrid: newGrid,
-      pendingSpinScore: newScore,
-      pendingSpinAnimState: animState,
+      pendingGrid: newGrid,
+      pendingLockedCells: new Set(lockedCells),
+      pendingScore: get().score,
+      cascadeWave: 0,
     });
   },
 
   clearSpinAnimation: () => {
-    const { pendingSpinGrid, pendingSpinScore, pendingSpinAnimState } = get();
-    if (!pendingSpinGrid) return;
-    set({
-      grid: pendingSpinGrid,
-      score: pendingSpinScore,
-      spinningCells: new Map(),
-      pendingSpinGrid: null,
-      pendingSpinScore: 0,
-      pendingSpinAnimState: null,
-      ...(pendingSpinAnimState ?? {}),
-    });
+    const { pendingGrid, pendingLockedCells, currentBatch, tileBatches, levelConfig } = get();
+    if (!pendingGrid) return;
+
+    const grid = pendingGrid;
+    const locked = pendingLockedCells ?? new Set<string>();
+
+    // Find new matches (matches with at least one unlocked cell)
+    const newMatches = findNewMatches(grid, locked);
+
+    if (newMatches.length === 0) {
+      // No new matches — cascade ends
+      const finalScore = calculateLockedScore(grid, locked);
+      const nextBatchIndex = currentBatch + 1;
+
+      if (nextBatchIndex < tileBatches.length) {
+        // More batches remain — start next batch
+        const nextBatch = tileBatches[nextBatchIndex];
+        set({
+          grid,
+          lockedCells: locked,
+          score: finalScore,
+          phase: 'placing',
+          currentBatch: nextBatchIndex,
+          batchQueue: nextBatch.slice(1),
+          currentTile: nextBatch[0] ?? null,
+          spinningCells: new Map(),
+          pendingGrid: null,
+          pendingLockedCells: null,
+          pendingScore: 0,
+          cascadeWave: 0,
+        });
+      } else {
+        // No more batches — game ends
+        const result = finalScore >= levelConfig.threshold ? 'win' : 'lose';
+        set({
+          grid,
+          lockedCells: locked,
+          score: finalScore,
+          phase: 'ended',
+          result,
+          spinningCells: new Map(),
+          pendingGrid: null,
+          pendingLockedCells: null,
+          pendingScore: 0,
+          cascadeWave: 0,
+        });
+        if (result === 'win') {
+          useRunStore.getState().completeLevel(finalScore, levelConfig.threshold, get().respinsRemaining);
+        } else {
+          useRunStore.getState().failLevel(finalScore);
+        }
+      }
+    } else {
+      // New matches found — lock matched cells and propagate
+      const newlyLocked = new Set<string>();
+      newMatches.forEach(match => {
+        match.cells.forEach(([r, c]) => {
+          const key = `${r},${c}`;
+          if (!locked.has(key)) {
+            newlyLocked.add(key);
+          }
+          locked.add(key);
+        });
+      });
+
+      const updatedScore = calculateLockedScore(grid, locked);
+
+      // Build score popups for the new matches
+      const popupMap = new Map<string, number>();
+      newMatches.forEach((match) => {
+        match.cells.forEach(([row, col]) => {
+          // (cells are highlighted via matchingCells below)
+        });
+        const centerIndex = Math.floor(match.cells.length / 2);
+        const [cr, cc] = match.cells[centerIndex];
+        const key = `${cr},${cc}`;
+        popupMap.set(key, (popupMap.get(key) ?? 0) + match.score);
+      });
+      let popupIdx = 0;
+      const popups: ScorePopup[] = [];
+      popupMap.forEach((totalScore, key) => {
+        const [r, c] = key.split(',').map(Number);
+        popups.push({ id: `popup-cascade-${Date.now()}-${popupIdx++}`, score: totalScore, row: r, col: c });
+      });
+
+      // Highlight newly matched cells
+      const matchCells = new Set<string>();
+      newMatches.forEach(match => {
+        match.cells.forEach(([r, c]) => matchCells.add(`${r},${c}`));
+      });
+
+      // Find unlocked neighbors of newly locked cells
+      const neighbors = findUnlockedNeighbors(grid, newlyLocked, locked);
+
+      if (neighbors.size === 0) {
+        // No neighbors to respin — cascade ends
+        const nextBatchIndex = currentBatch + 1;
+        if (nextBatchIndex < tileBatches.length) {
+          const nextBatch = tileBatches[nextBatchIndex];
+          set({
+            grid,
+            lockedCells: locked,
+            score: updatedScore,
+            phase: 'placing',
+            currentBatch: nextBatchIndex,
+            batchQueue: nextBatch.slice(1),
+            currentTile: nextBatch[0] ?? null,
+            spinningCells: new Map(),
+            pendingGrid: null,
+            pendingLockedCells: null,
+            pendingScore: 0,
+            cascadeWave: 0,
+            matchingCells: matchCells,
+            scorePopups: popups,
+          });
+        } else {
+          const result = updatedScore >= levelConfig.threshold ? 'win' : 'lose';
+          set({
+            grid,
+            lockedCells: locked,
+            score: updatedScore,
+            phase: 'ended',
+            result,
+            spinningCells: new Map(),
+            pendingGrid: null,
+            pendingLockedCells: null,
+            pendingScore: 0,
+            cascadeWave: 0,
+            matchingCells: matchCells,
+            scorePopups: popups,
+          });
+          if (result === 'win') {
+            useRunStore.getState().completeLevel(updatedScore, levelConfig.threshold, get().respinsRemaining);
+          } else {
+            useRunStore.getState().failLevel(updatedScore);
+          }
+        }
+      } else {
+        // Respin neighbor cells — build new spin map and pending grid
+        const nextGrid = cloneGrid(grid);
+        const newSpinningCells = new Map<string, SpinCellInfo>();
+        let cellIndex = 0;
+        neighbors.forEach(cellKey => {
+          const [r, c] = cellKey.split(',').map(Number);
+          const newSymbol = getRandomSymbol(get().levelConfig.symbolCount);
+          nextGrid[r][c] = newSymbol;
+          newSpinningCells.set(cellKey, {
+            finalSymbol: newSymbol,
+            cycles: CONFIG.SPIN_BASE_CYCLES + cellIndex,
+            delay: cellIndex * CONFIG.SPIN_STAGGER_MS,
+          });
+          cellIndex++;
+        });
+
+        set({
+          grid,
+          lockedCells: locked,
+          score: updatedScore,
+          spinningCells: newSpinningCells,
+          pendingGrid: nextGrid,
+          pendingLockedCells: locked,
+          pendingScore: updatedScore,
+          cascadeWave: get().cascadeWave + 1,
+          matchingCells: matchCells,
+          scorePopups: popups,
+        });
+      }
+    }
   },
 
   resetGame: (config?: LevelConfig) => set(createInitialState(config ?? generateLevelConfig(1))),
