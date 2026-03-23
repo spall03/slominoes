@@ -10,29 +10,32 @@ import {
   GRID_PADDING,
   isMobile,
 } from '../constants';
-import { useGameStore, useRunStore, respinModeRef } from '../store';
+import { CONFIG } from '../config';
+import { useGameStore, useRunStore } from '../store';
 import { HUD } from './HUD';
 import { Grid } from './Grid';
 import { BottomBar } from './BottomBar';
 import { HelpPanel } from './HelpPanel';
 import { RespinCol } from '../symbols/RespinCol';
 import { RespinRow } from '../symbols/RespinRow';
-import { SymbolIcon } from '../symbols/index';
 import type { Dimensions as RNDimensions } from 'react-native';
 
 export function PlayingScreen() {
   const {
     levelConfig,
     currentTile,
-    tileQueue,
-    respinsRemaining,
+    batchQueue,
+    currentBatch,
+    tileBatches,
+    cascadeWave,
+    lockedCells,
     score,
     phase,
     result,
     placementMode,
     selectedEntry,
     entrySpots,
-    respinLine,
+    ignite,
     matchingCells,
   } = useGameStore();
 
@@ -41,108 +44,8 @@ export function PlayingScreen() {
 
   const { currentLevel } = useRunStore();
 
-  const tilesRemaining = tileQueue.length + (currentTile ? 1 : 0);
   const entryKeyHint = entrySpots.length > 2 ? '1-4' : '1 or 2';
   const [showHelp, setShowHelp] = useState(false);
-  const [respinMode, setRespinMode] = useState(false);
-
-  // Auto-exit respin mode when respins run out
-  useEffect(() => {
-    if (respinMode && respinsRemaining === 0) {
-      setRespinMode(false);
-    }
-  }, [respinsRemaining, respinMode]);
-
-  // Exit respin mode when tile gets placed
-  useEffect(() => {
-    if (placementMode === 'placed') {
-      setRespinMode(false);
-    }
-  }, [placementMode]);
-
-  // Keep module-level ref in sync for Grid gesture handler
-  respinModeRef.current = respinMode;
-
-  // Respin keyboard cursor (web only)
-  const [respinCursor, setRespinCursor] = useState<{
-    type: 'row' | 'col';
-    index: number;
-  }>({ type: 'row', index: 0 });
-  const respinCursorRef = useRef(respinCursor);
-  respinCursorRef.current = respinCursor;
-
-  useEffect(() => {
-    if (Platform.OS !== 'web') return;
-
-    const handleRespinKey = (e: KeyboardEvent) => {
-      const state = useGameStore.getState();
-      if (state.phase !== 'placing' || state.respinsRemaining <= 0) return;
-      if (state.placementMode === 'placed') return;
-
-      switch (e.key) {
-        case 'ArrowUp':
-          e.preventDefault();
-          setRespinCursor((c) =>
-            c.type === 'row'
-              ? { type: 'row', index: (c.index - 1 + BOARD_SIZE) % BOARD_SIZE }
-              : { type: 'col', index: c.index },
-          );
-          break;
-        case 'ArrowDown':
-          e.preventDefault();
-          setRespinCursor((c) =>
-            c.type === 'row'
-              ? { type: 'row', index: (c.index + 1) % BOARD_SIZE }
-              : { type: 'col', index: c.index },
-          );
-          break;
-        case 'ArrowLeft':
-          e.preventDefault();
-          setRespinCursor((c) =>
-            c.type === 'col'
-              ? {
-                  type: 'col',
-                  index: (c.index - 1 + BOARD_SIZE) % BOARD_SIZE,
-                }
-              : { type: 'col', index: 0 },
-          );
-          break;
-        case 'ArrowRight':
-          e.preventDefault();
-          setRespinCursor((c) =>
-            c.type === 'col'
-              ? { type: 'col', index: (c.index + 1) % BOARD_SIZE }
-              : { type: 'col', index: 0 },
-          );
-          break;
-        case 'Tab':
-          e.preventDefault();
-          setRespinCursor((c) =>
-            c.type === 'row'
-              ? {
-                  type: 'col',
-                  index: c.index < BOARD_SIZE ? c.index : 0,
-                }
-              : {
-                  type: 'row',
-                  index: c.index < BOARD_SIZE ? c.index : 0,
-                },
-          );
-          break;
-        case 'r':
-        case 'R':
-          e.preventDefault();
-          state.respinLine(
-            respinCursorRef.current.type,
-            respinCursorRef.current.index,
-          );
-          break;
-      }
-    };
-
-    document.addEventListener('keydown', handleRespinKey);
-    return () => document.removeEventListener('keydown', handleRespinKey);
-  }, []);
 
   const isDesktop = Platform.OS === 'web' && !isMobile;
 
@@ -153,99 +56,72 @@ export function PlayingScreen() {
         level={currentLevel}
         score={score}
         threshold={levelConfig.threshold}
-        respinsRemaining={respinsRemaining}
-        respinMode={respinMode}
+        batch={currentBatch + 1}
+        totalBatches={tileBatches.length}
+        cascadeWave={cascadeWave}
+        phase={phase}
       />
 
       <View style={isDesktop ? styles.mainRow : styles.mobileMain}>
         {/* Left column: grid + controls */}
         <View style={isDesktop ? styles.mainColumn : styles.mobileColumn}>
           {/* Grid area */}
-          <View
-            style={[
-              styles.gridContainer,
-              respinMode && styles.gridContainerRespin,
-            ]}
-          >
-            {/* Column respin buttons */}
-            {phase === 'placing' &&
-              respinsRemaining > 0 &&
-              (!isMobile || respinMode) && (
-                <View style={styles.colButtons}>
-                  {Array.from({ length: BOARD_SIZE }).map((_, col) => (
-                    <Pressable
-                      key={`col-${col}`}
-                      style={[
-                        styles.respinButton,
-                        respinCursor.type === 'col' &&
-                          respinCursor.index === col &&
-                          styles.respinButtonSelected,
-                        (placementMode === 'placed' || isSpinning) &&
-                          styles.respinButtonDisabled,
-                      ]}
-                      onPress={() =>
-                        placementMode !== 'placed' && respinLine('col', col)
-                      }
-                      disabled={
-                        placementMode === 'placed' ||
-                        matchingCells.size > 0 ||
-                        isSpinning
-                      }
-                    >
-                      <RespinCol size={CELL_SIZE - 4} />
-                    </Pressable>
-                  ))}
-                </View>
-              )}
+          <View style={styles.gridContainer}>
+            {/* Column ignite buttons — visible during igniting phase */}
+            {phase === 'igniting' && (
+              <View style={styles.colButtons}>
+                {Array.from({ length: BOARD_SIZE }).map((_, col) => (
+                  <Pressable
+                    key={`col-${col}`}
+                    style={[
+                      styles.respinButton,
+                      isSpinning && styles.respinButtonDisabled,
+                    ]}
+                    onPress={() => ignite('col', col)}
+                    disabled={isSpinning}
+                  >
+                    <RespinCol size={CELL_SIZE - 4} />
+                  </Pressable>
+                ))}
+              </View>
+            )}
 
             <View style={styles.gridWithRows}>
               <Grid />
 
-              {/* Row respin buttons */}
-              {phase === 'placing' &&
-                respinsRemaining > 0 &&
-                (!isMobile || respinMode) && (
-                  <View style={styles.rowButtons}>
-                    {Array.from({ length: BOARD_SIZE }).map((_, row) => (
-                      <Pressable
-                        key={`row-btn-${row}`}
-                        style={[
-                          styles.respinButton,
-                          respinCursor.type === 'row' &&
-                            respinCursor.index === row &&
-                            styles.respinButtonSelected,
-                          (placementMode === 'placed' || isSpinning) &&
-                            styles.respinButtonDisabled,
-                        ]}
-                        onPress={() =>
-                          placementMode !== 'placed' && respinLine('row', row)
-                        }
-                        disabled={
-                          placementMode === 'placed' ||
-                          matchingCells.size > 0 ||
-                          isSpinning
-                        }
-                      >
-                        <RespinRow size={CELL_SIZE - 4} />
-                      </Pressable>
-                    ))}
-                  </View>
-                )}
+              {/* Row ignite buttons — visible during igniting phase */}
+              {phase === 'igniting' && (
+                <View style={styles.rowButtons}>
+                  {Array.from({ length: BOARD_SIZE }).map((_, row) => (
+                    <Pressable
+                      key={`row-btn-${row}`}
+                      style={[
+                        styles.respinButton,
+                        isSpinning && styles.respinButtonDisabled,
+                      ]}
+                      onPress={() => ignite('row', row)}
+                      disabled={isSpinning}
+                    >
+                      <RespinRow size={CELL_SIZE - 4} />
+                    </Pressable>
+                  ))}
+                </View>
+              )}
             </View>
           </View>
 
           {/* Controls area */}
           <View style={styles.controls}>
-            {phase === 'placing' && currentTile && !respinMode && (
+            {/* Placing phase controls */}
+            {phase === 'placing' && currentTile && (
               <>
-                {/* Bottom bar: tile preview + count + respin toggle */}
+                {/* Bottom bar: tile preview + batch progress */}
                 {placementMode !== 'placed' ? (
                   <BottomBar
                     symbolA={currentTile.symbolA}
                     symbolB={currentTile.symbolB}
-                    tilesRemaining={tilesRemaining}
-                    respinsRemaining={respinsRemaining}
-                    onRespinToggle={() => setRespinMode(true)}
+                    tilesLeft={batchQueue.length + 1}
+                    totalInBatch={CONFIG.TILES_PER_BATCH}
                   />
                 ) : (
                   <View style={styles.placementButtons}>
@@ -289,31 +165,12 @@ export function PlayingScreen() {
               </>
             )}
 
-            {/* Respin mode controls */}
-            {phase === 'placing' && respinMode && (
-              <View style={styles.respinControls}>
-                <Text style={styles.hintTextRespin}>
-                  Tap a row or column to respin
-                </Text>
-                <Pressable
-                  style={styles.respinDoneButton}
-                  onPress={() => setRespinMode(false)}
-                >
-                  <Text style={styles.respinDoneText}>DONE</Text>
-                </Pressable>
-              </View>
+            {/* Igniting phase hint */}
+            {phase === 'igniting' && (
+              <Text style={styles.hintTextIgnite}>
+                CHOOSE A ROW OR COLUMN
+              </Text>
             )}
-
-            {/* Desktop respin info */}
-            {isDesktop &&
-              phase === 'placing' &&
-              respinsRemaining > 0 &&
-              !respinMode && (
-                <Text style={styles.infoText}>
-                  Respins: {respinsRemaining} | Arrows: select row/col | R:
-                  respin | Tab: toggle row/col
-                </Text>
-              )}
 
             {/* End-of-level overlay */}
             {phase === 'ended' && (
@@ -394,11 +251,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     padding: 8,
   },
-  gridContainerRespin: {
-    borderWidth: 1,
-    borderColor: colors.respinBorder,
-    borderRadius: 12,
-  },
   colButtons: {
     flexDirection: 'row',
     marginBottom: 4,
@@ -424,11 +276,6 @@ const styles = StyleSheet.create({
     borderRadius: 4,
     alignItems: 'center',
     justifyContent: 'center',
-  },
-  respinButtonSelected: {
-    backgroundColor: colors.respinTint,
-    borderWidth: 2,
-    borderColor: colors.respin,
   },
   respinButtonDisabled: {
     opacity: 0.3,
@@ -480,36 +327,13 @@ const styles = StyleSheet.create({
     marginTop: 6,
     textAlign: 'center',
   },
-  hintTextRespin: {
-    color: colors.respin,
-    fontFamily: fonts.regular,
-    fontSize: 13,
-  },
-  respinControls: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    width: '100%',
-    paddingHorizontal: 8,
-    marginBottom: 4,
-  },
-  respinDoneButton: {
-    backgroundColor: colors.respin,
-    borderRadius: 6,
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-  },
-  respinDoneText: {
-    color: colors.textPrimary,
+  hintTextIgnite: {
+    fontSize: 15,
+    color: colors.gold,
     fontFamily: fonts.bold,
-    fontSize: 13,
-    letterSpacing: 1,
-  },
-  infoText: {
-    fontSize: 14,
-    color: colors.textMuted,
-    fontFamily: fonts.regular,
-    marginBottom: 8,
+    marginTop: 6,
+    textAlign: 'center',
+    letterSpacing: 2,
   },
   endOverlay: {
     alignItems: 'center',

@@ -1,26 +1,25 @@
 // src/components/BottomBar.tsx
 import React from 'react';
-import { View, Text, Pressable, StyleSheet } from 'react-native';
+import { View, Text, StyleSheet } from 'react-native';
 import { colors, fonts } from '../theme';
-import { isMobile } from '../constants';
 import { SymbolIcon } from '../symbols/index';
 import type { Symbol } from '../types';
 
 interface BottomBarProps {
   symbolA: Symbol;
   symbolB: Symbol;
-  tilesRemaining: number;
-  respinsRemaining: number;
-  onRespinToggle: () => void;
+  tilesLeft: number;
+  totalInBatch: number;
 }
 
 export function BottomBar({
   symbolA,
   symbolB,
-  tilesRemaining,
-  respinsRemaining,
-  onRespinToggle,
+  tilesLeft,
+  totalInBatch,
 }: BottomBarProps) {
+  const tilesPlaced = totalInBatch - tilesLeft;
+
   return (
     <View style={styles.bottomBar}>
       <View style={styles.bottomBarTile}>
@@ -28,16 +27,10 @@ export function BottomBar({
           <SymbolIcon symbol={symbolA} size={20} />
           <SymbolIcon symbol={symbolB} size={20} />
         </View>
-        <Text style={styles.bottomBarMeta}>{tilesRemaining} left</Text>
+        <Text style={styles.bottomBarMeta}>
+          {tilesPlaced}/{totalInBatch} placed
+        </Text>
       </View>
-      {isMobile && respinsRemaining > 0 && (
-        <Pressable
-          style={({ pressed }) => [styles.respinToggle, pressed && styles.buttonPressed]}
-          onPress={onRespinToggle}
-        >
-          <Text style={styles.respinToggleText}>Respin</Text>
-        </Pressable>
-      )}
     </View>
   );
 }
@@ -74,21 +67,5 @@ const styles = StyleSheet.create({
     color: colors.textMuted,
     fontFamily: fonts.regular,
     fontSize: 13,
-  },
-  respinToggle: {
-    backgroundColor: 'transparent',
-    borderWidth: 1,
-    borderColor: colors.respin,
-    borderRadius: 6,
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-  },
-  respinToggleText: {
-    color: colors.respin,
-    fontFamily: fonts.semiBold,
-    fontSize: 13,
-  },
-  buttonPressed: {
-    opacity: 0.7,
   },
 });
