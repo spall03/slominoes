@@ -64,3 +64,28 @@ export function calculateScore(grid: Grid): { score: number; matches: Match[] } 
 export function matchKey(m: Match): string {
   return m.cells.map(([r, c]) => `${r},${c}`).join('|');
 }
+
+/**
+ * Find matches that include at least one unlocked cell.
+ */
+export function findNewMatches(grid: Grid, lockedCells: Set<string>): Match[] {
+  const allMatches = findMatches(grid);
+  return allMatches.filter(match =>
+    match.cells.some(([r, c]) => !lockedCells.has(`${r},${c}`))
+  );
+}
+
+/**
+ * Calculate total score from all matches on the board (locked or not).
+ * This gives the running total score.
+ */
+export function calculateLockedScore(grid: Grid, lockedCells: Set<string>): number {
+  const allMatches = findMatches(grid);
+  let score = 0;
+  for (const match of allMatches) {
+    if (match.cells.every(([r, c]) => lockedCells.has(`${r},${c}`))) {
+      score += match.score;
+    }
+  }
+  return score;
+}

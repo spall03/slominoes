@@ -50,7 +50,7 @@ export interface ScorePopup {
   col: number;
 }
 
-export type GamePhase = 'placing' | 'ended';
+export type GamePhase = 'placing' | 'igniting' | 'cascading' | 'ended';
 export type GameResult = 'win' | 'lose' | null;
 export type PlacementMode = 'idle' | 'placed';
 export type RunPhase = 'title' | 'levelPreview' | 'playing' | 'gameOver';

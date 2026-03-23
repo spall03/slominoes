@@ -144,3 +144,33 @@ export function anyEntryHasValidPlacement(grid: Grid, entrySpots: EntrySpot[]): 
   }
   return false;
 }
+
+/**
+ * Find all unlocked, filled neighbors of the given locked cells.
+ */
+export function findUnlockedNeighbors(
+  grid: Grid,
+  newlyLockedCells: Set<string>,
+  allLockedCells: Set<string>,
+  boardSize: number = BOARD_SIZE,
+): Set<string> {
+  const neighbors = new Set<string>();
+  const dirs: [number, number][] = [[-1, 0], [1, 0], [0, -1], [0, 1]];
+
+  for (const cellKey of newlyLockedCells) {
+    const [r, c] = cellKey.split(',').map(Number);
+    for (const [dr, dc] of dirs) {
+      const nr = r + dr;
+      const nc = c + dc;
+      if (nr < 0 || nr >= boardSize || nc < 0 || nc >= boardSize) continue;
+      const key = `${nr},${nc}`;
+      if (allLockedCells.has(key)) continue;
+      const cell = grid[nr][nc];
+      if (cell !== null && cell !== 'wall') {
+        neighbors.add(key);
+      }
+    }
+  }
+
+  return neighbors;
+}
