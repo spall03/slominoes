@@ -43,6 +43,7 @@ export function Grid() {
     removeScorePopup,
     spinningCells,
     clearSpinAnimation,
+    lockedCells,
   } = useGameStore();
 
   const [animationKey, setAnimationKey] = useState(0);
@@ -353,7 +354,7 @@ export function Grid() {
                   const cellKey = `${rowIndex},${colIndex}`;
                   const spinInfo = spinningCells.get(cellKey);
 
-                  if (spinInfo) {
+                  if (spinInfo && !lockedCells.has(cellKey)) {
                     return (
                       <SpinCell
                         key={`spin-${rowIndex}-${colIndex}`}
@@ -382,6 +383,7 @@ export function Grid() {
                       highlightColor={isMatching ? highlightColor : undefined}
                       previewSymbol={previewSymbol}
                       onMatchAnimationComplete={() => handleMatchAnimationComplete(cellKey)}
+                      isLocked={lockedCells.has(cellKey)}
                     />
                   );
                 })}
