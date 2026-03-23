@@ -197,6 +197,11 @@ export function Grid() {
     }
   }, [matchingCells]);
 
+  // Force cell remount when locked cells change (clears stale highlight overlays)
+  useEffect(() => {
+    setAnimationKey(k => k + 1);
+  }, [lockedCells.size]);
+
   const getCellFromPosition = useCallback((x: number, y: number) => {
     const col = Math.floor((x - GRID_PADDING) / CELL_TOTAL);
     const row = Math.floor((y - GRID_PADDING) / CELL_TOTAL);
