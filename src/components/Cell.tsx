@@ -18,6 +18,7 @@ interface CellProps {
   highlightColor?: 'gold' | 'red' | 'blue';
   previewSymbol?: Symbol;
   onMatchAnimationComplete?: () => void;
+  isLocked?: boolean;
 }
 
 export function Cell({
@@ -32,6 +33,7 @@ export function Cell({
   highlightColor,
   previewSymbol,
   onMatchAnimationComplete,
+  isLocked,
 }: CellProps) {
   const scaleAnim = useRef(new Animated.Value(1)).current;
   const highlightOpacity = useRef(new Animated.Value(0)).current;
@@ -93,6 +95,7 @@ export function Cell({
         isPreview && isPlaced && !isHoldReady && styles.placedCell,
         isPreview && isPlaced && isHoldReady && styles.holdReadyCell,
         isEmpty && isReachable && !isPreview && styles.reachableCell,
+        isLocked && styles.lockedCell,
         { transform: [{ scale: scaleAnim }], overflow: 'hidden' },
       ]}
     >
@@ -170,6 +173,11 @@ const styles = StyleSheet.create({
     borderColor: colors.indigoBorder,
     borderStyle: 'dashed',
     backgroundColor: colors.indigoTint,
+  },
+  lockedCell: {
+    backgroundColor: 'rgba(255,215,0,0.12)',
+    borderWidth: 1.5,
+    borderColor: 'rgba(255,215,0,0.6)',
   },
   highlightOverlay: {
     ...StyleSheet.absoluteFillObject,
