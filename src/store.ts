@@ -566,8 +566,10 @@ export const useGameStore = create<GameState>((set, get) => ({
           pendingLockedCells: locked,
           pendingScore: updatedScore,
           cascadeWave: get().cascadeWave + 1,
-          matchingCells: matchCells,
-          scorePopups: popups,
+          // Don't show match blink during propagation — locked gold tint is the feedback.
+          // Match blink + score popups only shown when cascade ends.
+          matchingCells: new Set<string>(),
+          scorePopups: [],
         });
       }
     }
