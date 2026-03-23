@@ -159,8 +159,9 @@ export function allEmptyCells(grid: Grid, boardSize: number = BOARD_SIZE): Set<s
 }
 
 /**
- * Find all unlocked, filled cells connected to newly locked cells via BFS.
- * Floods through all adjacent unlocked filled cells, not just immediate neighbors.
+ * Find all unlocked, filled cells reachable from newly locked cells.
+ * BFS travels THROUGH locked cells (they act as conduits) but only
+ * collects unlocked filled cells as targets for respin.
  */
 export function findUnlockedNeighbors(
   grid: Grid,
@@ -168,29 +169,19 @@ export function findUnlockedNeighbors(
   allLockedCells: Set<string>,
   boardSize: number = BOARD_SIZE,
 ): Set<string> {
-  const connected = new Set<string>();
+  const unlocked = new Set<string>();
+  const visited = new Set<string>();
   const queue: [number, number][] = [];
   const dirs: [number, number][] = [[-1, 0], [1, 0], [0, -1], [0, 1]];
 
-  // Seed BFS from immediate neighbors of newly locked cells
+  // Seed BFS from newly locked cells
   for (const cellKey of newlyLockedCells) {
+    visited.add(cellKey);
     const [r, c] = cellKey.split(',').map(Number);
-    for (const [dr, dc] of dirs) {
-      const nr = r + dr;
-      const nc = c + dc;
-      if (nr < 0 || nr >= boardSize || nc < 0 || nc >= boardSize) continue;
-      const key = `${nr},${nc}`;
-      if (allLockedCells.has(key)) continue;
-      if (connected.has(key)) continue;
-      const cell = grid[nr][nc];
-      if (cell !== null && cell !== 'wall') {
-        connected.add(key);
-        queue.push([nr, nc]);
-      }
-    }
+    queue.push([r, c]);
   }
 
-  // BFS: flood through all connected unlocked filled cells
+  // BFS: travel through locked cells, collect unlocked filled cells
   while (queue.length > 0) {
     const [cr, cc] = queue.shift()!;
     for (const [dr, dc] of dirs) {
@@ -198,15 +189,20 @@ export function findUnlockedNeighbors(
       const nc = cc + dc;
       if (nr < 0 || nr >= boardSize || nc < 0 || nc >= boardSize) continue;
       const key = `${nr},${nc}`;
-      if (allLockedCells.has(key)) continue;
-      if (connected.has(key)) continue;
+      if (visited.has(key)) continue;
+      visited.add(key);
       const cell = grid[nr][nc];
-      if (cell !== null && cell !== 'wall') {
-        connected.add(key);
+      if (cell === null || cell === 'wall') continue;
+
+      if (allLockedCells.has(key)) {
+        // Locked cell — pass through it (add to queue but not to results)
         queue.push([nr, nc]);
+      } else {
+        // Unlocked filled cell — collect for respin (don't pass through)
+        unlocked.add(key);
       }
     }
   }
 
-  return connected;
+  return unlocked;
 }
