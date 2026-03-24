@@ -44,6 +44,8 @@ export const respinModeRef = { current: false };
 
 const SPIN_STAGGER_MS = 80;
 const SPIN_BASE_CYCLES = 2;
+const BASE_RESPIN_COST = 100;
+const RESPIN_COST_STEP = 50;
 
 // =============================================================================
 // GAME STATE
@@ -70,6 +72,7 @@ export interface GameState {
   selectedEntry: number | null;
   reachableCells: Set<string> | null;
   lockedCells: Set<string>;
+  respinsBought: number;
   spinningCells: Map<string, SpinCellInfo>;
   pendingSpinGrid: Grid | null;
   pendingSpinScore: number;
@@ -87,6 +90,8 @@ export interface GameState {
   clearMatchAnimation: () => void;
   removeScorePopup: (id: string) => void;
   respinLine: (type: 'row' | 'col', index: number) => void;
+  buyRespin: () => void;
+  getNextRespinCost: () => number;
   clearSpinAnimation: () => void;
   resetGame: (config?: LevelConfig) => void;
 }
@@ -115,6 +120,7 @@ export function createInitialState(config: LevelConfig = generateLevelConfig(1))
     selectedEntry: null as number | null,
     reachableCells: null as Set<string> | null,
     lockedCells: new Set<string>(),
+    respinsBought: 0,
     spinningCells: new Map<string, SpinCellInfo>(),
     pendingSpinGrid: null as Grid | null,
     pendingSpinScore: 0,
@@ -487,6 +493,23 @@ export const useGameStore = create<GameState>((set, get) => ({
       pendingSpinGrid: newGrid,
       pendingSpinScore: newScore,
       pendingSpinAnimState: animState,
+    });
+  },
+
+  getNextRespinCost: () => {
+    return BASE_RESPIN_COST + get().respinsBought * RESPIN_COST_STEP;
+  },
+
+  buyRespin: () => {
+    const { phase, score, respinsBought, spinningCells, matchingCells } = get();
+    if (phase !== 'placing') return;
+    if (spinningCells.size > 0 || matchingCells.size > 0) return;
+    const cost = BASE_RESPIN_COST + respinsBought * RESPIN_COST_STEP;
+    if (score < cost) return;
+    set({
+      score: score - cost,
+      respinsRemaining: get().respinsRemaining + 1,
+      respinsBought: respinsBought + 1,
     });
   },
 

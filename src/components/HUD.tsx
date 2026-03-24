@@ -10,9 +10,10 @@ interface HUDProps {
   threshold: number;
   respinsRemaining: number;
   respinMode: boolean;
+  nextRespinCost: number;
 }
 
-export function HUD({ level, score, threshold, respinsRemaining, respinMode }: HUDProps) {
+export function HUD({ level, score, threshold, respinsRemaining, respinMode, nextRespinCost }: HUDProps) {
   const progress = Math.min(1, threshold > 0 ? score / threshold : 0);
 
   return (
@@ -23,16 +24,18 @@ export function HUD({ level, score, threshold, respinsRemaining, respinMode }: H
           <Text style={styles.hudScore}>{score}</Text>
           <Text style={styles.hudGoal}> / {threshold}</Text>
         </View>
-        {respinsRemaining > 0 && (
-          <View style={[styles.respinBadge, respinMode && styles.respinBadgeActive]}>
-            <Text style={[styles.respinBadgeLabel, respinMode && styles.respinBadgeLabelActive]}>
-              {'⟳ '}
-            </Text>
+        <View style={[styles.respinBadge, respinMode && styles.respinBadgeActive]}>
+          <Text style={[styles.respinBadgeLabel, respinMode && styles.respinBadgeLabelActive]}>
+            {'⟳ '}
+          </Text>
+          {respinsRemaining > 0 ? (
             <Text style={[styles.respinBadgeText, respinMode && styles.respinBadgeTextActive]}>
               {respinsRemaining}
             </Text>
-          </View>
-        )}
+          ) : (
+            <Text style={styles.respinCostText}>{nextRespinCost}pts</Text>
+          )}
+        </View>
       </View>
       {/* Progress bar */}
       <View style={styles.progressTrack}>
@@ -106,6 +109,11 @@ const styles = StyleSheet.create({
   respinBadgeTextActive: {
     color: colors.textPrimary,
     fontFamily: fonts.bold,
+  },
+  respinCostText: {
+    color: colors.gold,
+    fontFamily: fonts.regular,
+    fontSize: 11,
   },
   progressTrack: {
     height: 4,

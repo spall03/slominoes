@@ -33,6 +33,8 @@ export function PlayingScreen() {
     selectedEntry,
     entrySpots,
     respinLine,
+    buyRespin,
+    getNextRespinCost,
     matchingCells,
   } = useGameStore();
 
@@ -42,16 +44,28 @@ export function PlayingScreen() {
   const { currentLevel } = useRunStore();
 
   const tilesRemaining = tileQueue.length + (currentTile ? 1 : 0);
+
+  const handleRespin = (type: 'row' | 'col', index: number) => {
+    const state = useGameStore.getState();
+    if (state.respinsRemaining === 0) {
+      state.buyRespin();
+      // Re-check after buying
+      if (useGameStore.getState().respinsRemaining === 0) return;
+    }
+    useGameStore.getState().respinLine(type, index);
+  };
   const entryKeyHint = entrySpots.length > 2 ? '1-4' : '1 or 2';
   const [showHelp, setShowHelp] = useState(false);
   const [respinMode, setRespinMode] = useState(false);
 
-  // Auto-exit respin mode when respins run out
+  // Auto-exit respin mode when respins run out AND can't afford more
+  const nextCost = getNextRespinCost();
+  const canBuy = score >= nextCost;
   useEffect(() => {
-    if (respinMode && respinsRemaining === 0) {
+    if (respinMode && respinsRemaining === 0 && !canBuy) {
       setRespinMode(false);
     }
-  }, [respinsRemaining, respinMode]);
+  }, [respinsRemaining, respinMode, canBuy]);
 
   // Exit respin mode when tile gets placed
   useEffect(() => {
@@ -76,7 +90,8 @@ export function PlayingScreen() {
 
     const handleRespinKey = (e: KeyboardEvent) => {
       const state = useGameStore.getState();
-      if (state.phase !== 'placing' || state.respinsRemaining <= 0) return;
+      if (state.phase !== 'placing') return;
+      if (state.respinsRemaining <= 0 && state.score < state.getNextRespinCost()) return;
       if (state.placementMode === 'placed') return;
 
       switch (e.key) {
@@ -132,10 +147,13 @@ export function PlayingScreen() {
         case 'r':
         case 'R':
           e.preventDefault();
-          state.respinLine(
-            respinCursorRef.current.type,
-            respinCursorRef.current.index,
-          );
+          if (state.respinsRemaining === 0) state.buyRespin();
+          if (useGameStore.getState().respinsRemaining > 0) {
+            useGameStore.getState().respinLine(
+              respinCursorRef.current.type,
+              respinCursorRef.current.index,
+            );
+          }
           break;
       }
     };
@@ -155,6 +173,7 @@ export function PlayingScreen() {
         threshold={levelConfig.threshold}
         respinsRemaining={respinsRemaining}
         respinMode={respinMode}
+        nextRespinCost={nextCost}
       />
 
       <View style={isDesktop ? styles.mainRow : styles.mobileMain}>
@@ -169,7 +188,7 @@ export function PlayingScreen() {
           >
             {/* Column respin buttons */}
             {phase === 'placing' &&
-              respinsRemaining > 0 &&
+              (respinsRemaining > 0 || canBuy) &&
               (!isMobile || respinMode) && (
                 <View style={styles.colButtons}>
                   {Array.from({ length: BOARD_SIZE }).map((_, col) => (
@@ -184,7 +203,7 @@ export function PlayingScreen() {
                           styles.respinButtonDisabled,
                       ]}
                       onPress={() =>
-                        placementMode !== 'placed' && respinLine('col', col)
+                        placementMode !== 'placed' && handleRespin('col', col)
                       }
                       disabled={
                         placementMode === 'placed' ||
@@ -203,7 +222,7 @@ export function PlayingScreen() {
 
               {/* Row respin buttons */}
               {phase === 'placing' &&
-                respinsRemaining > 0 &&
+                (respinsRemaining > 0 || canBuy) &&
                 (!isMobile || respinMode) && (
                   <View style={styles.rowButtons}>
                     {Array.from({ length: BOARD_SIZE }).map((_, row) => (
@@ -218,7 +237,7 @@ export function PlayingScreen() {
                             styles.respinButtonDisabled,
                         ]}
                         onPress={() =>
-                          placementMode !== 'placed' && respinLine('row', row)
+                          placementMode !== 'placed' && handleRespin('row', row)
                         }
                         disabled={
                           placementMode === 'placed' ||
@@ -245,7 +264,10 @@ export function PlayingScreen() {
                     symbolB={currentTile.symbolB}
                     tilesRemaining={tilesRemaining}
                     respinsRemaining={respinsRemaining}
+                    nextRespinCost={getNextRespinCost()}
+                    canAffordRespin={score >= getNextRespinCost()}
                     onRespinToggle={() => setRespinMode(true)}
+                    onBuyRespin={() => { buyRespin(); setRespinMode(true); }}
                   />
                 ) : (
                   <View style={styles.placementButtons}>
@@ -307,11 +329,13 @@ export function PlayingScreen() {
             {/* Desktop respin info */}
             {isDesktop &&
               phase === 'placing' &&
-              respinsRemaining > 0 &&
+              (respinsRemaining > 0 || canBuy) &&
               !respinMode && (
                 <Text style={styles.infoText}>
-                  Respins: {respinsRemaining} | Arrows: select row/col | R:
-                  respin | Tab: toggle row/col
+                  {respinsRemaining > 0
+                    ? `Respins: ${respinsRemaining}`
+                    : `Buy respin: ${nextCost}pts`}
+                  {' | Arrows: select row/col | R: respin | Tab: toggle row/col'}
                 </Text>
               )}
 
