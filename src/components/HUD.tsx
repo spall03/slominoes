@@ -25,6 +25,9 @@ export function HUD({ level, score, threshold, respinsRemaining, respinMode }: H
         </View>
         {respinsRemaining > 0 && (
           <View style={[styles.respinBadge, respinMode && styles.respinBadgeActive]}>
+            <Text style={[styles.respinBadgeLabel, respinMode && styles.respinBadgeLabelActive]}>
+              {'⟳ '}
+            </Text>
             <Text style={[styles.respinBadgeText, respinMode && styles.respinBadgeTextActive]}>
               {respinsRemaining}
             </Text>
@@ -78,6 +81,8 @@ const styles = StyleSheet.create({
     fontSize: 16,
   },
   respinBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
     backgroundColor: colors.surface,
     borderRadius: 10,
     paddingHorizontal: 8,
@@ -86,10 +91,17 @@ const styles = StyleSheet.create({
   respinBadgeActive: {
     backgroundColor: colors.respin,
   },
+  respinBadgeLabel: {
+    color: colors.respin,
+    fontSize: 13,
+  },
+  respinBadgeLabelActive: {
+    color: colors.textPrimary,
+  },
   respinBadgeText: {
     color: colors.textPrimary,
-    fontFamily: fonts.regular,
-    fontSize: 12,
+    fontFamily: fonts.semiBold,
+    fontSize: 13,
   },
   respinBadgeTextActive: {
     color: colors.textPrimary,
