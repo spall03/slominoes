@@ -13,6 +13,7 @@ interface CellProps {
   isPlaced?: boolean;
   isHoldReady?: boolean;
   isMatching?: boolean;
+  isLocked?: boolean;
   isReachable?: boolean;
   isEntryCell?: 'down' | 'up' | 'left' | 'right' | null;
   highlightColor?: 'gold' | 'red' | 'blue';
@@ -27,6 +28,7 @@ export function Cell({
   isPlaced,
   isHoldReady,
   isMatching,
+  isLocked,
   isReachable,
   isEntryCell,
   highlightColor,
@@ -88,6 +90,7 @@ export function Cell({
       style={[
         styles.cell,
         !isEmpty && !isPreview && styles.filledCell,
+        isLocked && styles.lockedCell,
         symbol === 'wall' && styles.wallCell,
         isPreview && !isPlaced && styles.previewCell,
         isPreview && isPlaced && !isHoldReady && styles.placedCell,
@@ -144,6 +147,11 @@ const styles = StyleSheet.create({
   filledCell: {
     backgroundColor: colors.cellFilled,
     borderColor: colors.cellFilledBorder,
+  },
+  lockedCell: {
+    backgroundColor: colors.cellLocked,
+    borderColor: colors.cellLockedBorder,
+    borderWidth: 1.5,
   },
   wallCell: {
     backgroundColor: colors.cellWall,

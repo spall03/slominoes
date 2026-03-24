@@ -41,6 +41,7 @@ export function Grid() {
     setHoldReady,
     clearMatchAnimation,
     removeScorePopup,
+    lockedCells,
     spinningCells,
     clearSpinAnimation,
   } = useGameStore();
@@ -366,6 +367,7 @@ export function Grid() {
                   }
 
                   const isMatching = matchingCells.has(cellKey);
+                  const isLocked = lockedCells.has(cellKey);
                   const isReachable = reachableCells?.has(cellKey) ?? false;
                   const entryCellDir = entryCellMap.get(cellKey) ?? null;
                   return (
@@ -377,6 +379,7 @@ export function Grid() {
                       isPlaced={placementMode === 'placed'}
                       isHoldReady={holdReady}
                       isMatching={isMatching}
+                      isLocked={isLocked}
                       isReachable={isReachable}
                       isEntryCell={entryCellDir}
                       highlightColor={isMatching ? highlightColor : undefined}

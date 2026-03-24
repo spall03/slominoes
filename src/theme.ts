@@ -36,6 +36,10 @@ export const colors = {
   indigoBorder: 'rgba(92,107,192,0.4)',
   respinTint: 'rgba(231,76,111,0.1)',
   respinBorder: 'rgba(231,76,111,0.5)',
+
+  // Locked cell colors
+  cellLocked: '#1a1a2e',
+  cellLockedBorder: 'rgba(255,215,0,0.35)',
 };
 
 export const fonts = {

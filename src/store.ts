@@ -69,6 +69,7 @@ export interface GameState {
   entrySpots: EntrySpot[];
   selectedEntry: number | null;
   reachableCells: Set<string> | null;
+  lockedCells: Set<string>;
   spinningCells: Map<string, SpinCellInfo>;
   pendingSpinGrid: Grid | null;
   pendingSpinScore: number;
@@ -113,6 +114,7 @@ export function createInitialState(config: LevelConfig = generateLevelConfig(1))
     entrySpots: spots,
     selectedEntry: null as number | null,
     reachableCells: null as Set<string> | null,
+    lockedCells: new Set<string>(),
     spinningCells: new Map<string, SpinCellInfo>(),
     pendingSpinGrid: null as Grid | null,
     pendingSpinScore: 0,
@@ -215,6 +217,12 @@ export const useGameStore = create<GameState>((set, get) => ({
 
     const { score: newTotalScore, matches } = calculateScore(newGrid);
 
+    // Lock cells that are part of matches
+    const newLocked = new Set(get().lockedCells);
+    matches.forEach(match => {
+      match.cells.forEach(([r, c]) => newLocked.add(`${r},${c}`));
+    });
+
     const nextTile = tileQueue[0] ?? null;
     const newQueue = tileQueue.slice(1);
     const isComplete = nextTile === null;
@@ -226,6 +234,7 @@ export const useGameStore = create<GameState>((set, get) => ({
         tileQueue: [],
         currentTile: null,
         score: newTotalScore,
+        lockedCells: newLocked,
         phase: 'ended',
         result,
         placementMode: 'idle',
@@ -250,6 +259,7 @@ export const useGameStore = create<GameState>((set, get) => ({
           tileQueue: newQueue,
           currentTile: nextTile,
           score: newTotalScore,
+          lockedCells: newLocked,
           phase: 'ended',
           result,
           placementMode: 'idle',
@@ -269,6 +279,7 @@ export const useGameStore = create<GameState>((set, get) => ({
           tileQueue: newQueue,
           currentTile: nextTile,
           score: newTotalScore,
+          lockedCells: newLocked,
           placementMode: 'idle',
           placedPosition: null,
           holdReady: false,
@@ -374,7 +385,7 @@ export const useGameStore = create<GameState>((set, get) => ({
   },
 
   respinLine: (type: 'row' | 'col', index: number) => {
-    const { phase, respinsRemaining, grid, score, matchingCells, spinningCells } = get();
+    const { phase, respinsRemaining, grid, score, matchingCells, spinningCells, lockedCells } = get();
     if (phase !== 'placing' || respinsRemaining <= 0) return;
     if (index < 0 || index >= BOARD_SIZE) return;
     if (matchingCells.size > 0) return; // Block respins during animation
@@ -387,6 +398,7 @@ export const useGameStore = create<GameState>((set, get) => ({
 
     if (type === 'row') {
       for (let col = 0; col < BOARD_SIZE; col++) {
+        if (lockedCells.has(`${index},${col}`)) continue; // Skip locked cells
         if (newGrid[index][col] !== null && newGrid[index][col] !== 'wall') {
           const newSymbol = getRandomSymbol(get().levelConfig.symbolCount);
           newGrid[index][col] = newSymbol;
@@ -399,6 +411,7 @@ export const useGameStore = create<GameState>((set, get) => ({
       }
     } else {
       for (let row = 0; row < BOARD_SIZE; row++) {
+        if (lockedCells.has(`${row},${index}`)) continue; // Skip locked cells
         if (newGrid[row][index] !== null && newGrid[row][index] !== 'wall') {
           const newSymbol = getRandomSymbol(get().levelConfig.symbolCount);
           newGrid[row][index] = newSymbol;
@@ -478,11 +491,20 @@ export const useGameStore = create<GameState>((set, get) => ({
   },
 
   clearSpinAnimation: () => {
-    const { pendingSpinGrid, pendingSpinScore, pendingSpinAnimState } = get();
+    const { pendingSpinGrid, pendingSpinScore, pendingSpinAnimState, lockedCells } = get();
     if (!pendingSpinGrid) return;
+
+    // Lock any new matches formed by the respin
+    const matches = findMatches(pendingSpinGrid);
+    const newLocked = new Set(lockedCells);
+    matches.forEach(match => {
+      match.cells.forEach(([r, c]) => newLocked.add(`${r},${c}`));
+    });
+
     set({
       grid: pendingSpinGrid,
       score: pendingSpinScore,
+      lockedCells: newLocked,
       spinningCells: new Map(),
       pendingSpinGrid: null,
       pendingSpinScore: 0,
