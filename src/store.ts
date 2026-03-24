@@ -47,30 +47,132 @@ export const respinModeRef = { current: false };
 // =============================================================================
 
 /**
- * Propagate locks to adjacent unlocked cells with the same symbol.
- * Repeats until no more cells are absorbed. Returns the expanded locked set.
+ * Magnetic pull: locked matches attract same-symbol cells along their axis.
+ * A matching symbol separated by non-matching cells swaps past them to join
+ * the locked group. e.g. [C C C L C] → [C C C C L].
+ *
+ * Also absorbs any directly adjacent same-symbol cells (simple propagation).
+ * Repeats until no more cells are pulled. Mutates grid in place.
  */
-function propagateLocks(grid: Grid, lockedCells: Set<string>): Set<string> {
+function magneticPull(grid: Grid, lockedCells: Set<string>): Set<string> {
   const locked = new Set(lockedCells);
   let changed = true;
+
   while (changed) {
     changed = false;
-    for (const key of locked) {
-      const [r, c] = key.split(',').map(Number);
-      const symbol = grid[r][c];
-      if (!symbol || symbol === 'wall') continue;
-      const neighbors: [number, number][] = [[r - 1, c], [r + 1, c], [r, c - 1], [r, c + 1]];
-      for (const [nr, nc] of neighbors) {
-        if (nr < 0 || nr >= BOARD_SIZE || nc < 0 || nc >= BOARD_SIZE) continue;
-        const nKey = `${nr},${nc}`;
-        if (locked.has(nKey)) continue;
-        if (grid[nr][nc] === symbol) {
-          locked.add(nKey);
-          changed = true;
+
+    // Step 1: Simple adjacency absorption (handles direct neighbors)
+    let adjChanged = true;
+    while (adjChanged) {
+      adjChanged = false;
+      for (const key of locked) {
+        const [r, c] = key.split(',').map(Number);
+        const symbol = grid[r][c];
+        if (!symbol || symbol === 'wall') continue;
+        const neighbors: [number, number][] = [[r - 1, c], [r + 1, c], [r, c - 1], [r, c + 1]];
+        for (const [nr, nc] of neighbors) {
+          if (nr < 0 || nr >= BOARD_SIZE || nc < 0 || nc >= BOARD_SIZE) continue;
+          const nKey = `${nr},${nc}`;
+          if (locked.has(nKey)) continue;
+          if (grid[nr][nc] === symbol) {
+            locked.add(nKey);
+            adjChanged = true;
+            changed = true;
+          }
+        }
+      }
+    }
+
+    // Step 2: Pull matching symbols along match axes (swap through non-matching)
+    const matches = findMatches(grid).filter(m =>
+      m.cells.every(([r, c]) => locked.has(`${r},${c}`))
+    );
+
+    for (const match of matches) {
+      const sym = match.symbol;
+      const isHorizontal = match.cells.length > 1 && match.cells[0][0] === match.cells[1][0];
+
+      if (isHorizontal) {
+        const row = match.cells[0][0];
+        const cols = match.cells.map(([, c]) => c).sort((a, b) => a - b);
+        const minCol = cols[0];
+        const maxCol = cols[cols.length - 1];
+
+        // Scan right from end of match
+        for (let col = maxCol + 1; col < BOARD_SIZE; col++) {
+          const cell = grid[row][col];
+          if (cell === null || cell === 'wall') break;
+          if (locked.has(`${row},${col}`)) break;
+          if (cell === sym) {
+            // Shift everything between maxCol+1..col-1 one position right
+            for (let c = col; c > maxCol + 1; c--) {
+              grid[row][c] = grid[row][c - 1];
+            }
+            grid[row][maxCol + 1] = sym;
+            locked.add(`${row},${maxCol + 1}`);
+            changed = true;
+            break;
+          }
+        }
+
+        // Scan left from start of match
+        for (let col = minCol - 1; col >= 0; col--) {
+          const cell = grid[row][col];
+          if (cell === null || cell === 'wall') break;
+          if (locked.has(`${row},${col}`)) break;
+          if (cell === sym) {
+            // Shift everything between col+1..minCol-1 one position left
+            for (let c = col; c < minCol - 1; c++) {
+              grid[row][c] = grid[row][c + 1];
+            }
+            grid[row][minCol - 1] = sym;
+            locked.add(`${row},${minCol - 1}`);
+            changed = true;
+            break;
+          }
+        }
+      } else {
+        // Vertical match
+        const col = match.cells[0][1];
+        const rows = match.cells.map(([r]) => r).sort((a, b) => a - b);
+        const minRow = rows[0];
+        const maxRow = rows[rows.length - 1];
+
+        // Scan down from end of match
+        for (let row = maxRow + 1; row < BOARD_SIZE; row++) {
+          const cell = grid[row][col];
+          if (cell === null || cell === 'wall') break;
+          if (locked.has(`${row},${col}`)) break;
+          if (cell === sym) {
+            for (let r = row; r > maxRow + 1; r--) {
+              grid[r][col] = grid[r - 1][col];
+            }
+            grid[maxRow + 1][col] = sym;
+            locked.add(`${maxRow + 1},${col}`);
+            changed = true;
+            break;
+          }
+        }
+
+        // Scan up from start of match
+        for (let row = minRow - 1; row >= 0; row--) {
+          const cell = grid[row][col];
+          if (cell === null || cell === 'wall') break;
+          if (locked.has(`${row},${col}`)) break;
+          if (cell === sym) {
+            for (let r = row; r < minRow - 1; r++) {
+              grid[r][col] = grid[r + 1][col];
+            }
+            grid[minRow - 1][col] = sym;
+            locked.add(`${minRow - 1},${col}`);
+            changed = true;
+            break;
+          }
         }
       }
     }
   }
+
   return locked;
 }
 
@@ -254,7 +356,7 @@ export const useGameStore = create<GameState>((set, get) => ({
     matches.forEach(match => {
       match.cells.forEach(([r, c]) => baseLocked.add(`${r},${c}`));
     });
-    const newLocked = propagateLocks(newGrid, baseLocked);
+    const newLocked = magneticPull(newGrid, baseLocked);
 
     // Recalculate score after magnetic propagation may have extended matches
     const { score: newTotalScore } = calculateScore(newGrid);
@@ -536,7 +638,7 @@ export const useGameStore = create<GameState>((set, get) => ({
     matches.forEach(match => {
       match.cells.forEach(([r, c]) => baseLocked.add(`${r},${c}`));
     });
-    const newLocked = propagateLocks(pendingSpinGrid, baseLocked);
+    const newLocked = magneticPull(pendingSpinGrid, baseLocked);
 
     // Recalculate score after magnetic propagation
     const finalScore = calculateScore(pendingSpinGrid).score;
