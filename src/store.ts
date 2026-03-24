@@ -42,6 +42,38 @@ import { findMatches, calculateScore, matchKey } from './scoring';
 
 export const respinModeRef = { current: false };
 
+// =============================================================================
+// MAGNETIC LOCK PROPAGATION
+// =============================================================================
+
+/**
+ * Propagate locks to adjacent unlocked cells with the same symbol.
+ * Repeats until no more cells are absorbed. Returns the expanded locked set.
+ */
+function propagateLocks(grid: Grid, lockedCells: Set<string>): Set<string> {
+  const locked = new Set(lockedCells);
+  let changed = true;
+  while (changed) {
+    changed = false;
+    for (const key of locked) {
+      const [r, c] = key.split(',').map(Number);
+      const symbol = grid[r][c];
+      if (!symbol || symbol === 'wall') continue;
+      const neighbors: [number, number][] = [[r - 1, c], [r + 1, c], [r, c - 1], [r, c + 1]];
+      for (const [nr, nc] of neighbors) {
+        if (nr < 0 || nr >= BOARD_SIZE || nc < 0 || nc >= BOARD_SIZE) continue;
+        const nKey = `${nr},${nc}`;
+        if (locked.has(nKey)) continue;
+        if (grid[nr][nc] === symbol) {
+          locked.add(nKey);
+          changed = true;
+        }
+      }
+    }
+  }
+  return locked;
+}
+
 const SPIN_STAGGER_MS = 80;
 const SPIN_BASE_CYCLES = 2;
 
@@ -215,13 +247,17 @@ export const useGameStore = create<GameState>((set, get) => ({
     newGrid[row][col] = symbolFirst;
     newGrid[row2][col2] = symbolSecond;
 
-    const { score: newTotalScore, matches } = calculateScore(newGrid);
+    const { matches } = calculateScore(newGrid);
 
-    // Lock cells that are part of matches
-    const newLocked = new Set(get().lockedCells);
+    // Lock cells that are part of matches, then propagate magnetically
+    const baseLocked = new Set(get().lockedCells);
     matches.forEach(match => {
-      match.cells.forEach(([r, c]) => newLocked.add(`${r},${c}`));
+      match.cells.forEach(([r, c]) => baseLocked.add(`${r},${c}`));
     });
+    const newLocked = propagateLocks(newGrid, baseLocked);
+
+    // Recalculate score after magnetic propagation may have extended matches
+    const { score: newTotalScore } = calculateScore(newGrid);
 
     const nextTile = tileQueue[0] ?? null;
     const newQueue = tileQueue.slice(1);
@@ -494,16 +530,20 @@ export const useGameStore = create<GameState>((set, get) => ({
     const { pendingSpinGrid, pendingSpinScore, pendingSpinAnimState, lockedCells } = get();
     if (!pendingSpinGrid) return;
 
-    // Lock any new matches formed by the respin
+    // Lock any new matches formed by the respin, then propagate magnetically
     const matches = findMatches(pendingSpinGrid);
-    const newLocked = new Set(lockedCells);
+    const baseLocked = new Set(lockedCells);
     matches.forEach(match => {
-      match.cells.forEach(([r, c]) => newLocked.add(`${r},${c}`));
+      match.cells.forEach(([r, c]) => baseLocked.add(`${r},${c}`));
     });
+    const newLocked = propagateLocks(pendingSpinGrid, baseLocked);
+
+    // Recalculate score after magnetic propagation
+    const finalScore = calculateScore(pendingSpinGrid).score;
 
     set({
       grid: pendingSpinGrid,
-      score: pendingSpinScore,
+      score: finalScore,
       lockedCells: newLocked,
       spinningCells: new Map(),
       pendingSpinGrid: null,
