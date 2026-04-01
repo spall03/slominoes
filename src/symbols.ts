@@ -122,8 +122,8 @@ export const SYMBOL_ROSTER: SymbolDef[] = [
       {
         trigger: 'on_match',
         verb: 'score_multiplier',
-        params: { factor: 3, targetSymbol: 'cherry', scope: 'cross' },
-        description: '3x score for cherry matches in the same row or column',
+        params: { factor: 2, targetSymbol: 'cherry', scope: 'cross' },
+        description: '2x score for cherry matches in the same row or column',
       },
     ],
     base: false,
@@ -131,6 +131,12 @@ export const SYMBOL_ROSTER: SymbolDef[] = [
   {
     id: 'apple', name: 'Apple', matchLength: 3, scoreValue: 25, frequency: 2,
     abilities: [
+      {
+        trigger: 'wild_match',
+        verb: 'score_bonus',
+        params: { wildWith: ['cherry', 'lemon'], points: 0 },
+        description: 'Can match with cherries and lemons',
+      },
       {
         trigger: 'recipe_match',
         verb: 'score_bonus',
@@ -176,8 +182,8 @@ export const SYMBOL_ROSTER: SymbolDef[] = [
       {
         trigger: 'passive',
         verb: 'score_penalty',
-        params: { percent: 20, scope: 'all_other' },
-        description: 'All other symbols score -20%',
+        params: { percent: 15, scope: 'all_other' },
+        description: 'All other symbols score -15%',
       },
       {
         trigger: 'passive',
@@ -195,7 +201,7 @@ export const SYMBOL_ROSTER: SymbolDef[] = [
         trigger: 'on_match',
         verb: 'clear',
         params: { scope: 'adjacent' },
-        description: 'Clear all adjacent cells and self on match',
+        description: 'Clear all unlocked adjacent cells and self on match',
       },
     ],
     base: false,
@@ -218,8 +224,8 @@ export const SYMBOL_ROSTER: SymbolDef[] = [
       {
         trigger: 'passive',
         verb: 'extra_entry_spots',
-        params: { count: 2, sides: ['east', 'west'] },
-        description: '+2 entry spots on west and east sides',
+        params: { count: 1, sides: ['east', 'west'] },
+        description: '+1 entry spot on west or east side',
       },
     ],
     base: false,

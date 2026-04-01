@@ -391,13 +391,13 @@ function simulateGame(config: LevelConfig, loadout: SymbolDef[], freqs: Map<Symb
       trackTrigger('extra_tiles');
     }
 
-    // Clear cells (bomb)
+    // Clear cells (bomb) — only unlocked cells
     if (effects.cellsToClear.size > 0) {
       for (const key of effects.cellsToClear) {
+        if (lockedCells.has(key)) continue; // bomb doesn't destroy locked cells
         const [r, c] = key.split(',').map(Number);
         if (r >= 0 && r < BOARD_SIZE && c >= 0 && c < BOARD_SIZE) {
           grid[r][c] = null;
-          lockedCells.delete(key);
         }
       }
       trackTrigger('clear');

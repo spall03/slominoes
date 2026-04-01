@@ -60,20 +60,48 @@ export function findMatchesWithAbilities(
     scoreValues.set(sym.id, getEffectiveScoreValue(sym.id, loadout));
   }
 
+  // Build wild_match compatibility: for each symbol, which other symbols can it match with?
+  // If apple has wild_match with [cherry, lemon], then apple is compatible with cherry and lemon,
+  // AND cherry is compatible with apple, AND lemon is compatible with apple.
+  const compatible = new Map<SymbolId, Set<SymbolId>>();
+  for (const sym of loadout) {
+    if (!compatible.has(sym.id)) compatible.set(sym.id, new Set([sym.id]));
+    else compatible.get(sym.id)!.add(sym.id);
+
+    for (const ability of sym.abilities) {
+      if (ability.trigger === 'wild_match' && ability.params.wildWith) {
+        for (const target of ability.params.wildWith) {
+          compatible.get(sym.id)!.add(target);
+          if (!compatible.has(target)) compatible.set(target, new Set([target]));
+          compatible.get(target)!.add(sym.id);
+        }
+      }
+    }
+  }
+
+  /** Check if two symbols are compatible (same symbol or wild_match linked) */
+  const areCompatible = (a: SymbolId, b: SymbolId): boolean => {
+    return compatible.get(a)?.has(b) ?? (a === b);
+  };
+
   const lengthMultiplier = (len: number): number => {
     if (len <= 2) return 1;
     const table: Record<number, number> = { 3: 1, 4: 2, 5: 3 };
     return table[len] ?? 4;
   };
 
-  // Standard matches (horizontal)
+  // Standard matches (horizontal) — with wild_match support
   for (let row = 0; row < boardSize; row++) {
     let col = 0;
     while (col < boardSize) {
       const symbol = grid[row][col];
       if (symbol === null || symbol === 'wall') { col++; continue; }
       let length = 1;
-      while (col + length < boardSize && grid[row][col + length] === symbol) length++;
+      while (col + length < boardSize) {
+        const next = grid[row][col + length];
+        if (next === null || next === 'wall' || !areCompatible(symbol, next)) break;
+        length++;
+      }
 
       const minLen = matchLengths.get(symbol) ?? 3;
       if (length >= minLen) {
@@ -87,14 +115,18 @@ export function findMatchesWithAbilities(
     }
   }
 
-  // Standard matches (vertical)
+  // Standard matches (vertical) — with wild_match support
   for (let col = 0; col < boardSize; col++) {
     let row = 0;
     while (row < boardSize) {
       const symbol = grid[row][col];
       if (symbol === null || symbol === 'wall') { row++; continue; }
       let length = 1;
-      while (row + length < boardSize && grid[row + length][col] === symbol) length++;
+      while (row + length < boardSize) {
+        const next = grid[row + length][col];
+        if (next === null || next === 'wall' || !areCompatible(symbol, next)) break;
+        length++;
+      }
 
       const minLen = matchLengths.get(symbol) ?? 3;
       if (length >= minLen) {
