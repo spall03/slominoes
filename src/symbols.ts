@@ -182,8 +182,8 @@ export const SYMBOL_ROSTER: SymbolDef[] = [
       {
         trigger: 'passive',
         verb: 'score_penalty',
-        params: { percent: 15, scope: 'all_other' },
-        description: 'All other symbols score -15%',
+        params: { percent: 10, scope: 'all_other' },
+        description: 'All other symbols score -10%',
       },
       {
         trigger: 'passive',
@@ -195,7 +195,7 @@ export const SYMBOL_ROSTER: SymbolDef[] = [
     base: false,
   },
   {
-    id: 'bomb', name: 'Bomb', matchLength: 2, scoreValue: 0, frequency: 2,
+    id: 'bomb', name: 'Bomb', matchLength: 2, scoreValue: 20, frequency: 2,
     abilities: [
       {
         trigger: 'on_match',
@@ -219,7 +219,7 @@ export const SYMBOL_ROSTER: SymbolDef[] = [
     base: false,
   },
   {
-    id: 'compass', name: 'Compass', matchLength: 3, scoreValue: 15, frequency: 2,
+    id: 'compass', name: 'Compass', matchLength: 3, scoreValue: 5, frequency: 2,
     abilities: [
       {
         trigger: 'passive',

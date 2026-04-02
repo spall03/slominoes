@@ -519,7 +519,10 @@ interface LoadoutStats {
   abilityTriggerSummary: Map<string, number>;
 }
 
-function testLoadout(loadout: SymbolDef[], gamesPerLevel: number, levels: number[] = [1, 5, 10]): LoadoutStats {
+/** Level weight config: how many games to run per level (heavier = more influence) */
+interface LevelWeight { level: number; games: number; }
+
+function testLoadout(loadout: SymbolDef[], levelWeights: LevelWeight[]): LoadoutStats {
   const allScores: number[] = [];
   let totalWins = 0;
   let totalRespins = 0;
@@ -527,10 +530,10 @@ function testLoadout(loadout: SymbolDef[], gamesPerLevel: number, levels: number
   let totalLocked = 0;
   const triggerTotals = new Map<string, number>();
   const freqs = buildFrequencyTable(loadout);
-  const totalGames = gamesPerLevel * levels.length;
+  let totalGames = 0;
 
-  for (const level of levels) {
-    for (let g = 0; g < gamesPerLevel; g++) {
+  for (const { level, games } of levelWeights) {
+    for (let g = 0; g < games; g++) {
       const config = generateLevelConfig(level, loadout);
       const result = simulateGame(config, loadout, freqs);
 
@@ -539,6 +542,7 @@ function testLoadout(loadout: SymbolDef[], gamesPerLevel: number, levels: number
       totalRespins += result.respinsUsed;
       totalTiles += result.tilesPlaced;
       totalLocked += result.lockedCellCount;
+      totalGames++;
 
       for (const [key, count] of result.abilityTriggers) {
         triggerTotals.set(key, (triggerTotals.get(key) ?? 0) + count);
@@ -584,8 +588,13 @@ function combinations<T>(arr: T[], k: number): T[][] {
 // MAIN
 // =============================================================================
 
-const GAMES_PER_LEVEL = 200;
-const LEVELS_TO_TEST = [1, 5, 10];
+// Level weights: later levels get more games since that's where balance matters most
+const LEVEL_WEIGHTS: LevelWeight[] = [
+  { level: 1, games: 100 },
+  { level: 5, games: 200 },
+  { level: 10, games: 300 },
+];
+const TOTAL_GAMES_PER_LOADOUT = LEVEL_WEIGHTS.reduce((s, w) => s + w.games, 0);
 const LOADOUT_SIZE = 5;
 const MAX_LOADOUTS = 100; // Random sample if too many combos
 
@@ -594,13 +603,13 @@ const allSymbols = SYMBOL_ROSTER.filter(s => s.id !== 'wall');
 
 console.log('='.repeat(90));
 console.log('SLOMINOES LOADOUT SIMULATOR');
-console.log(`${GAMES_PER_LEVEL} games/level | Levels: ${LEVELS_TO_TEST.join(',')} | Loadout size: ${LOADOUT_SIZE}`);
+console.log(`Level weights: ${LEVEL_WEIGHTS.map(w => `L${w.level}×${w.games}`).join(', ')} | Loadout size: ${LOADOUT_SIZE}`);
 console.log('='.repeat(90));
 
 // First: test the baseline (all base symbols)
 const baseLoadout = allSymbols.filter(s => s.base);
 console.log('\nBASELINE: base symbols only');
-const baseline = testLoadout(baseLoadout, GAMES_PER_LEVEL, LEVELS_TO_TEST);
+const baseline = testLoadout(baseLoadout, LEVEL_WEIGHTS);
 console.log(`  Mean: ${baseline.meanScore} | Median: ${baseline.medianScore} | StdDev: ${baseline.stdDev} | Win: ${baseline.winRate.toFixed(1)}%`);
 
 // Generate loadouts to test
@@ -629,7 +638,7 @@ for (const loadout of loadoutsToTest) {
   // Skip the baseline combo (already tested)
   if (loadout.every(s => s.base) && loadout.length === LOADOUT_SIZE) continue;
 
-  const stats = testLoadout(loadout, GAMES_PER_LEVEL, LEVELS_TO_TEST);
+  const stats = testLoadout(loadout, LEVEL_WEIGHTS);
   results.push(stats);
   tested++;
   if (tested % 20 === 0) process.stdout.write(`  ${tested}/${loadoutsToTest.length} loadouts tested\r`);
