@@ -13,6 +13,8 @@ import {
   getEntrySpotCount,
   getSelectionSlots,
   getRecipeMatches,
+  hasNoLock,
+  getRespinMatchBonus,
   type SymbolDef,
   type SymbolId,
 } from './src/symbols';
@@ -375,9 +377,14 @@ function simulateGame(config: LevelConfig, loadout: SymbolDef[], freqs: Map<Symb
       if (m.isRecipe) trackTrigger(`${m.recipeDefiner}:recipe_match`);
     }
 
-    // Lock matched cells
+    // Lock matched cells (skip symbols with no_lock like ghost)
     for (const m of matches) {
-      for (const [r, c] of m.cells) lockedCells.add(`${r},${c}`);
+      for (const [r, c] of m.cells) {
+        const sym = grid[r][c];
+        if (sym && !hasNoLock(sym, loadout)) {
+          lockedCells.add(`${r},${c}`);
+        }
+      }
     }
 
     // Apply effects
@@ -417,6 +424,9 @@ function simulateGame(config: LevelConfig, loadout: SymbolDef[], freqs: Map<Symb
 
   // Use respins (greedy: try all, sample, pick best)
   const RESPIN_SAMPLES = 5;
+  const respinBonus = getRespinMatchBonus(loadout); // ember passive
+  const matchesBefore = new Set(calculateScoreWithAbilities(grid, loadout, BOARD_SIZE).matches.map(m => m.cells.map(([r,c]) => `${r},${c}`).join('|')));
+
   while (respinsRemaining > 0) {
     let bestGrid = grid;
     let bestScore = score;
@@ -438,10 +448,23 @@ function simulateGame(config: LevelConfig, loadout: SymbolDef[], freqs: Map<Symb
     respinsRemaining--;
     respinsUsed++;
 
-    // Lock new matches after respin
+    // Lock new matches after respin (skip no_lock symbols)
+    // Also check for ember bonus (new matches created by respin)
     const { matches } = calculateScoreWithAbilities(grid, loadout, BOARD_SIZE);
+    const matchesAfter = new Set(matches.map(m => m.cells.map(([r,c]) => `${r},${c}`).join('|')));
+    const newMatchCount = [...matchesAfter].filter(k => !matchesBefore.has(k)).length;
+    if (newMatchCount > 0 && respinBonus > 0) {
+      score += respinBonus * newMatchCount;
+      trackTrigger('respin_match_bonus');
+    }
+
     for (const m of matches) {
-      for (const [r, c] of m.cells) lockedCells.add(`${r},${c}`);
+      for (const [r, c] of m.cells) {
+        const sym = grid[r][c];
+        if (sym && !hasNoLock(sym, loadout)) {
+          lockedCells.add(`${r},${c}`);
+        }
+      }
     }
   }
 
@@ -490,7 +513,12 @@ function simulateGame(config: LevelConfig, loadout: SymbolDef[], freqs: Map<Symb
 
     const { matches } = calculateScoreWithAbilities(grid, loadout, BOARD_SIZE);
     for (const m of matches) {
-      for (const [r, c] of m.cells) lockedCells.add(`${r},${c}`);
+      for (const [r, c] of m.cells) {
+        const sym = grid[r][c];
+        if (sym && !hasNoLock(sym, loadout)) {
+          lockedCells.add(`${r},${c}`);
+        }
+      }
     }
   }
 

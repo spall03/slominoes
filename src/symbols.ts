@@ -10,6 +10,8 @@ export type SymbolId =
   | 'cherry' | 'lemon' | 'bar' | 'bell' | 'seven'
   | 'jam' | 'apple' | 'magnet' | 'oil_can' | 'crown'
   | 'bomb' | 'egg' | 'compass' | 'vine'
+  | 'ghost' | 'honey'
+  | 'tide' | 'coral' | 'ember' | 'banana'
   | 'wall';
 
 /** Triggers — when an ability fires */
@@ -38,7 +40,11 @@ export type Verb =
   | 'extra_tiles'
   | 'extra_slots'
   | 'extra_entry_spots'
-  | 'place_on_wall';
+  | 'place_on_wall'
+  | 'no_lock'
+  | 'score_per_empty_cell'
+  | 'score_per_unique_adjacent'
+  | 'respin_match_bonus';
 
 /** Scope for score modifiers */
 export type Scope = 'self' | 'adjacent' | 'row' | 'col' | 'cross' | 'all' | 'all_other';
@@ -117,7 +123,7 @@ export const SYMBOL_ROSTER: SymbolDef[] = [
 
   // --- Unlockable symbols ---
   {
-    id: 'jam', name: 'Jam', matchLength: 2, scoreValue: 15, frequency: 3,
+    id: 'jam', name: 'Jam', matchLength: 3, scoreValue: 25, frequency: 3,
     abilities: [
       {
         trigger: 'on_match',
@@ -181,12 +187,6 @@ export const SYMBOL_ROSTER: SymbolDef[] = [
     abilities: [
       {
         trigger: 'passive',
-        verb: 'score_penalty',
-        params: { percent: 10, scope: 'all_other' },
-        description: 'All other symbols score -10%',
-      },
-      {
-        trigger: 'passive',
         verb: 'extra_slots',
         params: { count: 2 },
         description: '+2 symbol selection slots',
@@ -244,6 +244,84 @@ export const SYMBOL_ROSTER: SymbolDef[] = [
         verb: 'score_bonus',
         params: { points: 50 },
         description: '+50 bonus on match',
+      },
+    ],
+    base: false,
+  },
+  {
+    id: 'ghost', name: 'Ghost', matchLength: 3, scoreValue: 30, frequency: 2,
+    abilities: [
+      {
+        trigger: 'passive',
+        verb: 'no_lock',
+        params: {},
+        description: 'Ghost cells don\'t lock when matched — stays respinnable',
+      },
+    ],
+    base: false,
+  },
+  {
+    id: 'honey', name: 'Honey', matchLength: 2, scoreValue: 15, frequency: 3,
+    abilities: [
+      {
+        trigger: 'on_adjacent_match',
+        verb: 'score_bonus',
+        params: { points: 30 },
+        description: '+30 when any adjacent match forms',
+      },
+    ],
+    base: false,
+  },
+  {
+    id: 'tide', name: 'Tide', matchLength: 3, scoreValue: 10, frequency: 2,
+    abilities: [
+      {
+        trigger: 'on_match',
+        verb: 'score_per_empty_cell',
+        params: { points: 5 },
+        description: '+5 bonus per empty cell on the board when matched',
+      },
+    ],
+    base: false,
+  },
+  {
+    id: 'coral', name: 'Coral', matchLength: 2, scoreValue: 15, frequency: 3,
+    abilities: [
+      {
+        trigger: 'on_match',
+        verb: 'score_per_unique_adjacent',
+        params: { points: 20 },
+        description: '+20 for each unique symbol type adjacent to the match',
+      },
+    ],
+    base: false,
+  },
+  {
+    id: 'ember', name: 'Ember', matchLength: 2, scoreValue: 20, frequency: 2,
+    abilities: [
+      {
+        trigger: 'passive',
+        verb: 'respin_match_bonus',
+        params: { points: 40 },
+        description: '+40 whenever a respin creates a new match',
+      },
+    ],
+    base: false,
+  },
+  {
+    id: 'banana', name: 'Banana', matchLength: 3, scoreValue: 20, frequency: 3,
+    abilities: [
+      {
+        trigger: 'wild_match',
+        verb: 'score_bonus',
+        params: { wildWith: ['cherry', 'lemon', 'apple'], points: 0 },
+        description: 'Can match with cherries, lemons, and apples',
+      },
+      {
+        trigger: 'recipe_match',
+        verb: 'score_bonus',
+        params: { recipe: ['banana', 'apple', 'cherry', 'lemon'], points: 400 },
+        description: 'Banana + Apple + Cherry + Lemon = Grand Salad (+400)',
       },
     ],
     base: false,
@@ -372,4 +450,28 @@ export function getRecipeMatches(loadout: SymbolDef[]): { definer: SymbolId; rec
     }
   }
   return recipes;
+}
+
+/**
+ * Get the respin match bonus for a loadout (from passive respin_match_bonus abilities).
+ */
+export function getRespinMatchBonus(loadout: SymbolDef[]): number {
+  let bonus = 0;
+  for (const sym of loadout) {
+    for (const ability of sym.abilities) {
+      if (ability.trigger === 'passive' && ability.verb === 'respin_match_bonus') {
+        bonus += ability.params.points ?? 0;
+      }
+    }
+  }
+  return bonus;
+}
+
+/**
+ * Check if a symbol has the no_lock passive (e.g., ghost).
+ */
+export function hasNoLock(symbolId: SymbolId, loadout: SymbolDef[]): boolean {
+  const def = loadout.find(s => s.id === symbolId);
+  if (!def) return false;
+  return def.abilities.some(a => a.trigger === 'passive' && a.verb === 'no_lock');
 }

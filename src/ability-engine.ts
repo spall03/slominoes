@@ -307,6 +307,36 @@ export function evaluateOnMatch(
         case 'extra_tiles':
           effects.extraTiles += ability.params.count ?? 0;
           break;
+
+        case 'score_per_empty_cell': {
+          const perCell = ability.params.points ?? 0;
+          let emptyCells = 0;
+          for (let r = 0; r < boardSize; r++) {
+            for (let c = 0; c < boardSize; c++) {
+              if (grid[r][c] === null) emptyCells++;
+            }
+          }
+          effects.bonusScore += perCell * emptyCells;
+          break;
+        }
+
+        case 'score_per_unique_adjacent': {
+          const perType = ability.params.points ?? 0;
+          const adjacentTypes = new Set<SymbolId>();
+          const dirs: [number, number][] = [[-1, 0], [1, 0], [0, -1], [0, 1]];
+          for (const [r, c] of match.cells) {
+            for (const [dr, dc] of dirs) {
+              const nr = r + dr, nc = c + dc;
+              if (nr < 0 || nr >= boardSize || nc < 0 || nc >= boardSize) continue;
+              const adjSym = grid[nr][nc];
+              if (adjSym && adjSym !== 'wall' && adjSym !== match.symbol) {
+                adjacentTypes.add(adjSym);
+              }
+            }
+          }
+          effects.bonusScore += perType * adjacentTypes.size;
+          break;
+        }
       }
     }
   }
