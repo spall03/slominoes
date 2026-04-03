@@ -1,0 +1,21 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64">
+  <defs>
+    <filter id="neon-honey" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur in="SourceGraphic" stdDeviation="2.5" result="blur"/>
+      <feColorMatrix in="blur" type="matrix"
+        values="1 0 0 0 0  0 0.67 0 0 0  0 0 0 0 0  0 0 0 1 0" result="glow"/>
+      <feMerge>
+        <feMergeNode in="glow"/>
+        <feMergeNode in="glow"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+  </defs>
+  <g filter="url(#neon-honey)" fill="none" stroke="#FFAA00" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+    <!-- hexagon -->
+    <path d="M32 8 L50 18 L50 38 L32 48 L14 38 L14 18 Z"/>
+    <!-- drip -->
+    <path d="M32 48 Q32 56 28 58"/>
+    <path d="M38 42 Q40 50 38 54"/>
+  </g>
+</svg>

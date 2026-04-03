@@ -1,0 +1,26 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64">
+  <defs>
+    <filter id="neon-compass" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur in="SourceGraphic" stdDeviation="2.5" result="blur"/>
+      <feColorMatrix in="blur" type="matrix"
+        values="0.2 0 0 0 0  0 0.9 0 0 0  0 0 0.8 0 0  0 0 0 1 0" result="glow"/>
+      <feMerge>
+        <feMergeNode in="glow"/>
+        <feMergeNode in="glow"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+  </defs>
+  <g filter="url(#neon-compass)" fill="none" stroke="#40E0D0" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+    <!-- outer circle -->
+    <circle cx="32" cy="34" r="20"/>
+    <!-- N arrow -->
+    <path d="M32 34 L32 18"/>
+    <path d="M28 22 L32 14 L36 22"/>
+    <!-- S line -->
+    <path d="M32 34 L32 50"/>
+    <!-- E/W ticks -->
+    <line x1="16" y1="34" x2="20" y2="34"/>
+    <line x1="44" y1="34" x2="48" y2="34"/>
+  </g>
+</svg>

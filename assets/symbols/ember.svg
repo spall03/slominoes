@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64">
+  <defs>
+    <filter id="neon-ember" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur in="SourceGraphic" stdDeviation="2.5" result="blur"/>
+      <feColorMatrix in="blur" type="matrix"
+        values="1 0 0 0 0  0 0.4 0 0 0  0 0 0 0 0  0 0 0 1 0" result="glow"/>
+      <feMerge>
+        <feMergeNode in="glow"/>
+        <feMergeNode in="glow"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+  </defs>
+  <g filter="url(#neon-ember)" fill="none" stroke="#FF6600" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+    <!-- outer flame -->
+    <path d="M32 6 Q44 20 44 36 Q44 54 32 56 Q20 54 20 36 Q20 20 32 6Z"/>
+    <!-- inner flame -->
+    <path d="M32 22 Q38 30 38 40 Q38 50 32 52 Q26 50 26 40 Q26 30 32 22Z"/>
+  </g>
+</svg>

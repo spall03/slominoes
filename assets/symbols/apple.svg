@@ -1,0 +1,22 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64">
+  <defs>
+    <filter id="neon-apple" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur in="SourceGraphic" stdDeviation="2.5" result="blur"/>
+      <feColorMatrix in="blur" type="matrix"
+        values="0.2 0 0 0 0  0 0.8 0 0 0  0 0 0.2 0 0  0 0 0 1 0" result="glow"/>
+      <feMerge>
+        <feMergeNode in="glow"/>
+        <feMergeNode in="glow"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+  </defs>
+  <g filter="url(#neon-apple)" fill="none" stroke="#44CC44" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+    <!-- stem -->
+    <path d="M32 12 L32 20"/>
+    <!-- leaf -->
+    <path d="M32 16 Q38 12 40 16"/>
+    <!-- apple body -->
+    <path d="M20 28 Q18 16 32 20 Q46 16 44 28 Q46 46 32 54 Q18 46 20 28Z"/>
+  </g>
+</svg>
