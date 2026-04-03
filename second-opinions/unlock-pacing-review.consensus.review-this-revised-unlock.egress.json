@@ -1,0 +1,50 @@
+{
+  "timestamp": "2026-04-03T20:41:40.391Z",
+  "provider": "consensus",
+  "model": "consensus (gemini-3-flash-preview, gpt-5.2)",
+  "sessionName": "unlock-pacing-review",
+  "task": "Review this revised unlock progression for a tile-matching puzzle game. Key requirement: we want this to be a LONG progression system — 100+ runs to unlock everything, 8-15 hours of gameplay. At most 1 unlock per run, usually 0. Each unlock should feel like an event.\n\nA run is ~5-10 minutes, consists of levels 1-10 with increasing difficulty. Players pick 5 symbols per run from their unlocked pool (start with 5 base symbols).\n\nREVISED 4-TIER UNLOCK SYSTEM:\n\nTier 1 — Early game (runs 1-15, ~4 unlocks):\n- Jam (2x cherry in row/col): Cumulative score 5,000\n- Bomb (clears unlocked adjacent): Win 3 levels total\n- Honey (+30 adjacent match): Cumulative score 15,000\n- Ghost (no-lock on match): Create a 5+ length match\n\nTier 2 — Mid game (runs 15-40, ~4 unlocks):\n- Coral (+20 per unique adjacent type): Win 10 levels total\n- Egg (+3 tiles, ML4): Reach level 7\n- Ember (+40 on respin match): Buy 10 respins total (lifetime)\n- Compass (+1 entry spot): Win a full run (beat level 10)\n\nTier 3 — Late game (runs 40-80, ~4 unlocks):\n- Apple (wild match fruits + fruit salad +200): Score 500 from cherry in one run\n- Magnet (bell freq +2, seven freq +1): Match bell 5 times in one run\n- Vine (replaces walls, +50 on match): Win 5 full runs\n- Oil Can (ML1, unlocks cross): End a level with 20+ locked cells\n\nTier 4 — Endgame (runs 80-150+, ~3 unlocks):\n- Crown (+2 selection slots): Use 12 different symbols across all runs\n- Banana (grand salad +400): Trigger Fruit Salad in a run\n- Tide (+5 per empty cell): Win a full run without buying any respins\n\nPower rankings: Compass(1341) > Oil Can(1234) > Bell(1192) > Seven(1150) > Ember(1106) > Apple(1079) > Vine(1029) > Magnet(1002) > Bar(1000) > Banana(998) > Coral(993) > Jam(984) > Lemon(976) > Ghost(975) > Tide(961) > Egg(960) > Cherry(957) > Honey(900) > Bomb(888) > Crown(872)\n\nTop archetype: Fruit deck (cherry+lemon+apple+banana+compass) at 58.7% win rate.\n\nPlease evaluate:\n1. Does the pacing work for 100+ run progression? Too fast? Too slow? Dead zones?\n2. Are cumulative vs per-run conditions well balanced?\n3. Is requiring \"win a full run\" for Compass (the #1 power symbol) the right gate?\n4. Do later unlock conditions feel achievable but aspirational?\n5. Any conditions that are frustrating, unclear, or that players would hate?\n6. Does the system create enough reason to keep playing after unlocking everything?",
+  "egress": {
+    "projectFiles": {
+      "count": 24,
+      "paths": [
+        "src/symbols.ts",
+        "docs/superpowers/specs/2026-04-01-symbol-abilities-design.md",
+        ".superpowers/brainstorm/46656-1773602044/.server.pid",
+        ".superpowers/brainstorm/46879-1773602171/.server.pid",
+        "dist-serve/slominoes/metadata.json",
+        ".superpowers/brainstorm/46879-1773602171/waiting.html",
+        ".superpowers/brainstorm/46879-1773602171/.server.log",
+        ".superpowers/brainstorm/46656-1773602044/.server.log",
+        "WORKING.md",
+        "dist-serve/slominoes/index.html",
+        ".superpowers/brainstorm/46879-1773602171/layout-v2.html",
+        "second-opinions/unlock-progression-review.consensus.review-this-unlock-progression.egress.json",
+        "docs/superpowers/specs/2026-03-15-progressive-disclosure-ui-design.md",
+        ".superpowers/brainstorm/46879-1773602171/layout-v3.html",
+        ".superpowers/brainstorm/46879-1773602171/progressive-detail.html",
+        ".superpowers/brainstorm/46879-1773602171/layout-comparison.html",
+        "second-opinions/unlock-progression-review.consensus.review-this-unlock-progression.md",
+        "dist-serve/slominoes/favicon.ico",
+        "docs/superpowers/plans/2026-03-15-progressive-disclosure-ui.md",
+        "docs/superpowers/plans/2026-03-12-mid-game-respins.md",
+        "docs/stitch-designs/slominoes_title.jpg",
+        "docs/stitch-designs/slominoes_symbols.jpg",
+        "docs/stitch-designs/slominoes_gameover.jpg",
+        "docs/stitch-designs/slominoes_v1_original.png"
+      ]
+    },
+    "externalFiles": {
+      "count": 0,
+      "paths": [],
+      "locations": []
+    },
+    "blockedFiles": [
+      {
+        "path": "/Users/spall03/slominoes/dist-serve/slominoes/_expo/static/js/web/index-3d4037bf2153874c3f8b6c3b26731b3b.js",
+        "reason": "budget_exceeded"
+      }
+    ],
+    "totalFilesSent": 24
+  }
+}

@@ -1,0 +1,53 @@
+{
+  "timestamp": "2026-04-03T20:49:18.914Z",
+  "provider": "consensus",
+  "model": "consensus (gemini-3-flash-preview, gpt-5.2)",
+  "sessionName": "final-unlock-review",
+  "task": "Review this final unlock progression for a tile-matching puzzle game called Slominoes. \n\nGAME CONTEXT:\n- 8x8 grid, players place domino-like tiles (2 symbols each) through entry points on board edges\n- Matching 3+ same symbols in a row/column scores points and LOCKS those cells\n- Locked cells are immune to respins (row/column randomization)\n- Players can buy additional respins by spending score (escalating cost: 100, 150, 200...)\n- A \"run\" is levels 1-10, each level has a score threshold to beat\n- Later levels have more wall cells and higher thresholds\n- ~5-10 minutes per run\n- 5 base symbols always available (cherry freq 5, lemon freq 4, bar freq 3, bell freq 2, seven freq 1)\n- Players pick 5 symbols from their unlocked pool before each run\n- 16 tiles per level, so 32 symbol placements per level\n\nKEY DESIGN REQUIREMENT: We want 100+ runs to unlock everything (8-15 hours). At most 1 unlock per run, usually 0. Each unlock should feel like a significant event, not routine. We want this to drive replayability over dozens to hundreds of runs.\n\nTYPICAL PLAYER STATS (estimated):\n- Average score per run: 500-1500 (varies wildly by skill/luck)\n- Average levels won per run: 3-5 early, improving to 5-8 with better symbols\n- Full run win (beat level 10): rare early, maybe 20-30% once skilled\n- Buying respins: 1-3 per run average, some runs 0\n- 8-length match (full row/column): very rare, maybe 1 in 20+ runs\n- Average locked cells per level: 8-15\n\nFINAL UNLOCK SYSTEM:\n\nTier 1 — Early game (runs 3-15, 4 unlocks):\n- Jam (ML3, score 25, freq 3, on_match: 2x cherry in same row/col): Cumulative score 10,000\n- Bomb (ML2, score 20, freq 2, on_match: clear unlocked adjacent + self): Win 15 levels total\n- Honey (ML2, score 15, freq 3, on_adjacent_match: +30): Cumulative score 40,000\n- Ghost (ML3, score 30, freq 2, passive: no-lock when matched): Create an 8-length match\n\nTier 2 — Mid game (runs 15-40, 4 unlocks):\n- Coral (ML2, score 15, freq 3, on_match: +20 per unique adjacent type): Win 50 levels total\n- Egg (ML4, score 30, freq 3, on_match: +3 tiles): Cumulative score 100,000\n- Ember (ML2, score 20, freq 2, passive: +40 when respin creates match): Buy 30 respins total (lifetime)\n- Compass (ML3, score 5, freq 2, passive: +1 entry spot east/west): Win a full run (beat level 10)\n\nTier 3 — Late game (runs 40-80, 4 unlocks):\n- Apple (ML3, score 25, freq 2, wild_match cherry/lemon + recipe_match fruit salad +200): Score 1500 from cherry matches in a single run\n- Magnet (ML3, score 0, freq 3, passive: bell freq +2, seven freq +1): Match bell 3 times in a single level\n- Vine (ML3, score 35, freq 2, on_place: replaces walls, on_match: +50): Win 10 full runs\n- Oil Can (ML1, score 40, freq 1, on_match: unlock all locked cells in row+col): Have 30+ locked cells at any point in a level\n\nTier 4 — Endgame (runs 80-150+, 3 unlocks):\n- Crown (ML3, score 20, freq 4, passive: +2 selection slots): Use 12 different symbols across all runs\n- Banana (ML3, score 20, freq 3, wild_match all fruits + recipe_match grand salad +400): Trigger Fruit Salad in a run (requires Apple)\n- Tide (ML3, score 10, freq 2, on_match: +5 per empty cell): Win a full run without buying any respins\n\nPOWER RANKINGS (from exhaustive 15,504 loadout simulation):\nCompass(1341) > Oil Can(1234) > Bell(1192) > Seven(1150) > Ember(1106) > Apple(1079) > Vine(1029) > Magnet(1002) > Bar(1000) > Banana(998) > Coral(993) > Jam(984) > Lemon(976) > Ghost(975) > Tide(961) > Egg(960) > Cherry(957) > Honey(900) > Bomb(888) > Crown(872)\n\nTop archetype: Fruit deck (cherry+lemon+apple+banana+compass) — 58.7% win, requires Tier 3 + Tier 4 unlocks.\nSecond archetype: High-value (bell+seven+magnet+compass+ghost) — 52.7% win.\n\nPlease evaluate:\n1. Given the estimated player stats, do these thresholds actually produce the pacing we want (usually 0 unlocks per run, at most 1)?\n2. Are any conditions still too easy or too hard for their tier?\n3. Ghost requiring an 8-length match (full row/column) — is this the right difficulty for a Tier 1 unlock? It might take 20+ runs.\n4. Does the mix of cumulative vs per-run vs per-level conditions feel right?\n5. Is there a dead zone anywhere in the progression where players go too long without an unlock?\n6. Any final concerns before we lock this in?",
+  "egress": {
+    "projectFiles": {
+      "count": 27,
+      "paths": [
+        "src/symbols.ts",
+        "simulate-loadouts.ts",
+        "src/ability-engine.ts",
+        ".superpowers/brainstorm/46656-1773602044/.server.pid",
+        ".superpowers/brainstorm/46879-1773602171/.server.pid",
+        "dist-serve/slominoes/metadata.json",
+        ".superpowers/brainstorm/46879-1773602171/waiting.html",
+        ".superpowers/brainstorm/46879-1773602171/.server.log",
+        ".superpowers/brainstorm/46656-1773602044/.server.log",
+        "WORKING.md",
+        "dist-serve/slominoes/index.html",
+        ".superpowers/brainstorm/46879-1773602171/layout-v2.html",
+        "second-opinions/unlock-progression-review.consensus.review-this-unlock-progression.egress.json",
+        "second-opinions/unlock-pacing-review.consensus.review-this-revised-unlock.egress.json",
+        "docs/superpowers/specs/2026-03-15-progressive-disclosure-ui-design.md",
+        ".superpowers/brainstorm/46879-1773602171/layout-v3.html",
+        ".superpowers/brainstorm/46879-1773602171/progressive-detail.html",
+        ".superpowers/brainstorm/46879-1773602171/layout-comparison.html",
+        "second-opinions/unlock-progression-review.consensus.review-this-unlock-progression.md",
+        "dist-serve/slominoes/favicon.ico",
+        "docs/superpowers/plans/2026-03-15-progressive-disclosure-ui.md",
+        "docs/superpowers/plans/2026-03-12-mid-game-respins.md",
+        "second-opinions/unlock-pacing-review.consensus.review-this-revised-unlock.md",
+        "docs/stitch-designs/slominoes_title.jpg",
+        "docs/stitch-designs/slominoes_symbols.jpg",
+        "docs/stitch-designs/slominoes_gameover.jpg",
+        "docs/stitch-designs/slominoes_v1_original.png"
+      ]
+    },
+    "externalFiles": {
+      "count": 0,
+      "paths": [],
+      "locations": []
+    },
+    "blockedFiles": [
+      {
+        "path": "/Users/spall03/slominoes/dist-serve/slominoes/_expo/static/js/web/index-3d4037bf2153874c3f8b6c3b26731b3b.js",
+        "reason": "budget_exceeded"
+      }
+    ],
+    "totalFilesSent": 27
+  }
+}

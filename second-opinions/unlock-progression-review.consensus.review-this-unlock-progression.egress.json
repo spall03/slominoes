@@ -1,0 +1,48 @@
+{
+  "timestamp": "2026-04-03T20:24:09.848Z",
+  "provider": "consensus",
+  "model": "consensus (gemini-3-flash-preview, gpt-5.2)",
+  "sessionName": "unlock-progression-review",
+  "task": "Review this unlock progression system design for a tile-matching puzzle game with 20 symbols (5 base, 15 unlockable). Players pick 5 symbols per run. The game has levels 1-10 with increasing difficulty (more walls, higher score thresholds). Key mechanics: tile placement on an 8x8 grid, matching 3+ in a row, locking matched cells, respinning rows/columns, buying respins with score.\n\nHere's the proposed 4-tier unlock system:\n\nTIER 1 (first 1-3 runs, teaches abilities exist):\n- Jam: Cumulative score 500 (2x cherry multiplier in same row/col)\n- Bomb: Create a 4+ length match (clears unlocked adjacent cells)\n- Honey: Cumulative score 2000 (+30 on adjacent match)\n- Coral: Match 3 different symbol types in one level (+20 per unique adjacent type)\n\nTIER 2 (several runs, introduces new strategies):\n- Egg: Place all 16 tiles in a single level (+3 tiles on match, needs ML4)\n- Ghost: Lock 20 cells in one level (doesn't lock when matched)\n- Ember: Buy 3 respins in a single level (+40 when respin creates match)\n- Compass: Beat level 3 (+1 entry spot)\n\nTIER 3 (dedicated play, symbol-specific challenges):\n- Apple: Score 300 from cherry matches in one run (wild match with cherry/lemon + fruit salad recipe +200)\n- Magnet: Match bell or seven 5 times in one run (bell freq +2, seven freq +1, scores 0)\n- Vine: Place tile adjacent to 3+ walls (replaces walls, +50 on match)\n- Oil Can: Have 25+ locked cells at once (match length 1, unlocks cross of locked cells)\n\nTIER 4 (mastery/endgame):\n- Crown: Use 10 different symbols across runs (+2 selection slots)\n- Banana: Trigger Fruit Salad 3 times in one run (wild match all fruits + grand salad +400)\n- Tide: Win a level with 15+ empty cells remaining (+5 per empty cell on match)\n\nPower rankings from full 15,504 loadout simulation:\nCompass(1341) > Oil Can(1234) > Bell(1192) > Seven(1150) > Ember(1106) > Apple(1079) > Vine(1029) > Magnet(1002) > Bar(1000) > Banana(998) > Coral(993) > Jam(984) > Lemon(976) > Ghost(975) > Tide(961) > Egg(960) > Cherry(957) > Honey(900) > Bomb(888) > Crown(872)\n\nTop archetype: Fruit deck (cherry+lemon+apple+banana+compass) at 58.7% win. Requires Tier 3 apple + Tier 4 banana.\n\nPlease evaluate:\n1. Is the unlock ordering good? Should strong symbols unlock earlier or later?\n2. Are the unlock conditions fun and fair? Any too easy, too hard, or too grindy?\n3. Does the progression create good \"aha moments\" and discovery?\n4. Are there any issues with the tier structure or pacing?\n5. Any suggestions for improvement?",
+  "egress": {
+    "projectFiles": {
+      "count": 22,
+      "paths": [
+        "src/symbols.ts",
+        "docs/superpowers/specs/2026-04-01-symbol-abilities-design.md",
+        ".superpowers/brainstorm/46656-1773602044/.server.pid",
+        ".superpowers/brainstorm/46879-1773602171/.server.pid",
+        "dist-serve/slominoes/metadata.json",
+        ".superpowers/brainstorm/46879-1773602171/waiting.html",
+        ".superpowers/brainstorm/46879-1773602171/.server.log",
+        ".superpowers/brainstorm/46656-1773602044/.server.log",
+        "WORKING.md",
+        "dist-serve/slominoes/index.html",
+        ".superpowers/brainstorm/46879-1773602171/layout-v2.html",
+        "docs/superpowers/specs/2026-03-15-progressive-disclosure-ui-design.md",
+        ".superpowers/brainstorm/46879-1773602171/layout-v3.html",
+        ".superpowers/brainstorm/46879-1773602171/progressive-detail.html",
+        ".superpowers/brainstorm/46879-1773602171/layout-comparison.html",
+        "dist-serve/slominoes/favicon.ico",
+        "docs/superpowers/plans/2026-03-15-progressive-disclosure-ui.md",
+        "docs/superpowers/plans/2026-03-12-mid-game-respins.md",
+        "docs/stitch-designs/slominoes_title.jpg",
+        "docs/stitch-designs/slominoes_symbols.jpg",
+        "docs/stitch-designs/slominoes_gameover.jpg",
+        "docs/stitch-designs/slominoes_v1_original.png"
+      ]
+    },
+    "externalFiles": {
+      "count": 0,
+      "paths": [],
+      "locations": []
+    },
+    "blockedFiles": [
+      {
+        "path": "/Users/spall03/slominoes/dist-serve/slominoes/_expo/static/js/web/index-3d4037bf2153874c3f8b6c3b26731b3b.js",
+        "reason": "budget_exceeded"
+      }
+    ],
+    "totalFilesSent": 22
+  }
+}

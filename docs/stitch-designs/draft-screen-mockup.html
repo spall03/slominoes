@@ -1,0 +1,295 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;600;700&display=swap" rel="stylesheet">
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    background: #060614;
+    font-family: 'Space Grotesk', sans-serif;
+    color: #fff;
+    max-width: 400px;
+    margin: 0 auto;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+  }
+
+  .header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 20px 16px 12px;
+  }
+  .header h1 {
+    font-size: 16px;
+    letter-spacing: 4px;
+    color: #00E5FF;
+    text-shadow: 0 0 16px rgba(0,229,255,0.4);
+    text-transform: uppercase;
+    font-weight: 700;
+  }
+  .header .counter {
+    font-size: 14px;
+    color: #ffd700;
+    text-shadow: 0 0 8px rgba(255,215,0,0.4);
+    font-weight: 600;
+  }
+
+  .grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 8px;
+    padding: 0 12px;
+    flex: 1;
+    overflow-y: auto;
+    padding-bottom: 100px;
+  }
+
+  .cell {
+    background: #0a0a1e;
+    border: 1px solid #1e1e3a;
+    border-radius: 8px;
+    padding: 10px 6px 8px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 4px;
+    cursor: pointer;
+    transition: all 0.2s;
+  }
+  .cell:hover { border-color: #2a2a50; }
+  .cell.selected {
+    border-color: #ffd700;
+    box-shadow: 0 0 12px rgba(255,215,0,0.3), inset 0 0 8px rgba(255,215,0,0.05);
+  }
+  .cell.locked {
+    opacity: 0.5;
+    cursor: default;
+  }
+  .cell.locked:hover { border-color: #1e1e3a; }
+
+  .cell img {
+    width: 44px;
+    height: 44px;
+  }
+  .cell .icon-placeholder {
+    width: 44px;
+    height: 44px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 24px;
+    color: #333;
+  }
+  .cell .name {
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: 1.5px;
+    text-transform: uppercase;
+    color: #e6e3f9;
+  }
+  .cell.selected .name { color: #ffd700; }
+  .cell .stats {
+    font-size: 8px;
+    color: #555;
+    letter-spacing: 0.5px;
+  }
+  .cell .ability {
+    font-size: 7px;
+    color: #00E5FF;
+    text-align: center;
+    line-height: 1.3;
+    opacity: 0.7;
+  }
+  .cell .hint {
+    font-size: 8px;
+    color: #444;
+    font-style: italic;
+    text-align: center;
+  }
+  .cell .locked-label {
+    font-size: 8px;
+    color: #333;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+  }
+
+  .bottom-bar {
+    position: fixed;
+    bottom: 0;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 100%;
+    max-width: 400px;
+    background: #060614;
+    border-top: 1px solid #1e1e3a;
+    padding: 12px 16px 20px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+  .selected-row {
+    display: flex;
+    justify-content: center;
+    gap: 12px;
+  }
+  .selected-row img {
+    width: 28px;
+    height: 28px;
+  }
+  .selected-row .empty-slot {
+    width: 28px;
+    height: 28px;
+    border: 1px dashed #333;
+    border-radius: 4px;
+  }
+  .start-btn {
+    background: transparent;
+    border: 2px solid #00E5FF;
+    box-shadow: 0 0 16px rgba(0,229,255,0.3), inset 0 0 12px rgba(0,229,255,0.05);
+    color: #00E5FF;
+    font-family: inherit;
+    font-size: 14px;
+    font-weight: 700;
+    letter-spacing: 3px;
+    text-transform: uppercase;
+    padding: 12px;
+    border-radius: 10px;
+    cursor: pointer;
+  }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <h1>Choose Your Symbols</h1>
+  <span class="counter">5 / 5</span>
+</div>
+
+<div class="grid">
+  <!-- Selected unlocked symbols -->
+  <div class="cell selected">
+    <img src="../../assets/symbols/cherry.svg">
+    <div class="name">Cherry</div>
+    <div class="stats">Match 3 | 10pts | freq 5</div>
+  </div>
+  <div class="cell selected">
+    <img src="../../assets/symbols/lemon.svg">
+    <div class="name">Lemon</div>
+    <div class="stats">Match 3 | 20pts | freq 4</div>
+  </div>
+  <div class="cell selected">
+    <img src="../../assets/symbols/bar.svg">
+    <div class="name">Bar</div>
+    <div class="stats">Match 3 | 40pts | freq 3</div>
+  </div>
+  <div class="cell selected">
+    <img src="../../assets/symbols/bell.svg">
+    <div class="name">Bell</div>
+    <div class="stats">Match 3 | 80pts | freq 2</div>
+  </div>
+  <div class="cell selected">
+    <img src="../../assets/symbols/seven.svg">
+    <div class="name">Seven</div>
+    <div class="stats">Match 3 | 150pts | freq 1</div>
+  </div>
+
+  <!-- Unselected unlocked symbols -->
+  <div class="cell">
+    <img src="../../assets/symbols/jam.svg">
+    <div class="name">Jam</div>
+    <div class="stats">Match 3 | 25pts | freq 3</div>
+    <div class="ability">2x cherry in row/col</div>
+  </div>
+  <div class="cell">
+    <img src="../../assets/symbols/bomb.svg">
+    <div class="name">Bomb</div>
+    <div class="stats">Match 2 | 20pts | freq 2</div>
+    <div class="ability">Clear adjacent</div>
+  </div>
+  <div class="cell">
+    <img src="../../assets/symbols/honey.svg">
+    <div class="name">Honey</div>
+    <div class="stats">Match 2 | 15pts | freq 3</div>
+    <div class="ability">+30 adjacent match</div>
+  </div>
+  <div class="cell">
+    <img src="../../assets/symbols/ghost.svg">
+    <div class="name">Ghost</div>
+    <div class="stats">Match 3 | 30pts | freq 2</div>
+    <div class="ability">No lock on match</div>
+  </div>
+
+  <!-- Locked symbols -->
+  <div class="cell locked">
+    <div class="icon-placeholder">?</div>
+    <div class="locked-label">Locked</div>
+    <div class="hint">A seasoned champion</div>
+  </div>
+  <div class="cell locked">
+    <div class="icon-placeholder">?</div>
+    <div class="locked-label">Locked</div>
+    <div class="hint">Dedicated scorer</div>
+  </div>
+  <div class="cell locked">
+    <div class="icon-placeholder">?</div>
+    <div class="locked-label">Locked</div>
+    <div class="hint">Spin to win</div>
+  </div>
+  <div class="cell locked">
+    <div class="icon-placeholder">?</div>
+    <div class="locked-label">Locked</div>
+    <div class="hint">Conquer all ten</div>
+  </div>
+  <div class="cell locked">
+    <div class="icon-placeholder">?</div>
+    <div class="locked-label">Locked</div>
+    <div class="hint">Cherry devotee</div>
+  </div>
+  <div class="cell locked">
+    <div class="icon-placeholder">?</div>
+    <div class="locked-label">Locked</div>
+    <div class="hint">Ring the bell</div>
+  </div>
+  <div class="cell locked">
+    <div class="icon-placeholder">?</div>
+    <div class="locked-label">Locked</div>
+    <div class="hint">Veteran champion</div>
+  </div>
+  <div class="cell locked">
+    <div class="icon-placeholder">?</div>
+    <div class="locked-label">Locked</div>
+    <div class="hint">Under pressure</div>
+  </div>
+  <div class="cell locked">
+    <div class="icon-placeholder">?</div>
+    <div class="locked-label">Locked</div>
+    <div class="hint">Symbol collector</div>
+  </div>
+  <div class="cell locked">
+    <div class="icon-placeholder">?</div>
+    <div class="locked-label">Locked</div>
+    <div class="hint">Fruit salad chef</div>
+  </div>
+  <div class="cell locked">
+    <div class="icon-placeholder">?</div>
+    <div class="locked-label">Locked</div>
+    <div class="hint">Pure skill</div>
+  </div>
+</div>
+
+<div class="bottom-bar">
+  <div class="selected-row">
+    <img src="../../assets/symbols/cherry.svg">
+    <img src="../../assets/symbols/lemon.svg">
+    <img src="../../assets/symbols/bar.svg">
+    <img src="../../assets/symbols/bell.svg">
+    <img src="../../assets/symbols/seven.svg">
+  </div>
+  <button class="start-btn">Start Run</button>
+</div>
+
+</body>
+</html>
