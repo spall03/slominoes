@@ -12,9 +12,14 @@
     </filter>
   </defs>
   <g filter="url(#neon-banana)" fill="none" stroke="#FFE135" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-    <!-- banana curve -->
-    <path d="M18 14 Q12 32 20 48 Q28 58 40 54 Q48 50 46 42 Q40 52 30 44 Q20 34 22 14Z"/>
-    <!-- stem -->
-    <path d="M18 14 Q16 10 20 8"/>
+    <!-- banana: thick crescent, tapered ends, like 🍌 -->
+    <!-- outer curve (top edge) -->
+    <path d="M16 44 Q12 36 16 26 Q22 14 34 10 Q42 8 48 12"/>
+    <!-- inner curve (bottom edge) -->
+    <path d="M18 48 Q16 42 20 32 Q26 22 36 18 Q42 14 48 16"/>
+    <!-- top tip -->
+    <path d="M48 12 Q50 14 48 16"/>
+    <!-- bottom tip -->
+    <path d="M16 44 Q16 46 18 48"/>
   </g>
 </svg>

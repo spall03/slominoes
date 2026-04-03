@@ -12,7 +12,9 @@
     </filter>
   </defs>
   <g filter="url(#neon-egg)" fill="none" stroke="#FFFACD" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-    <!-- egg shape -->
-    <path d="M32 8 Q14 24 14 40 Q14 56 32 56 Q50 56 50 40 Q50 24 32 8Z"/>
+    <!-- egg — rounder, less pointy top -->
+    <ellipse cx="32" cy="34" rx="16" ry="20"/>
+    <!-- subtle shine line -->
+    <path d="M26 24 Q28 20 32 20"/>
   </g>
 </svg>

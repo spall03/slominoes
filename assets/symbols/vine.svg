@@ -12,11 +12,13 @@
     </filter>
   </defs>
   <g filter="url(#neon-vine)" fill="none" stroke="#22BB44" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-    <!-- curling vine -->
-    <path d="M16 52 Q20 36 32 32 Q44 28 40 16 Q38 10 32 12"/>
-    <!-- leaf 1 -->
-    <path d="M24 40 Q18 34 24 32"/>
-    <!-- leaf 2 -->
-    <path d="M40 22 Q46 18 44 24"/>
+    <!-- main stem — S-curve -->
+    <path d="M28 56 Q20 44 28 34 Q36 24 28 14 Q26 10 22 8"/>
+    <!-- leaf left -->
+    <path d="M24 42 Q14 38 16 30 Q18 34 24 36"/>
+    <!-- leaf right -->
+    <path d="M32 26 Q42 22 44 14 Q40 20 34 22"/>
+    <!-- tendril -->
+    <path d="M22 8 Q18 6 16 10"/>
   </g>
 </svg>

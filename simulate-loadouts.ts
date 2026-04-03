@@ -618,13 +618,13 @@ function combinations<T>(arr: T[], k: number): T[][] {
 
 // Level weights: later levels get more games since that's where balance matters most
 const LEVEL_WEIGHTS: LevelWeight[] = [
-  { level: 1, games: 100 },
-  { level: 5, games: 200 },
-  { level: 10, games: 300 },
+  { level: 1, games: 25 },
+  { level: 5, games: 50 },
+  { level: 10, games: 75 },
 ];
 const TOTAL_GAMES_PER_LOADOUT = LEVEL_WEIGHTS.reduce((s, w) => s + w.games, 0);
 const LOADOUT_SIZE = 5;
-const MAX_LOADOUTS = 100; // Random sample if too many combos
+const MAX_LOADOUTS = 0; // 0 = test ALL combos
 
 // Get all non-wall symbols
 const allSymbols = SYMBOL_ROSTER.filter(s => s.id !== 'wall');
@@ -644,9 +644,9 @@ console.log(`  Mean: ${baseline.meanScore} | Median: ${baseline.medianScore} | S
 const allCombos = combinations(allSymbols, LOADOUT_SIZE);
 let loadoutsToTest: SymbolDef[][];
 
-if (allCombos.length <= MAX_LOADOUTS) {
+if (MAX_LOADOUTS === 0 || allCombos.length <= MAX_LOADOUTS) {
   loadoutsToTest = allCombos;
-  console.log(`\nTesting all ${allCombos.length} loadout combinations`);
+  console.log(`\nTesting ALL ${allCombos.length} loadout combinations`);
 } else {
   // Random sample
   loadoutsToTest = [];

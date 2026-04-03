@@ -13,10 +13,10 @@
   </defs>
   <g filter="url(#neon-apple)" fill="none" stroke="#44CC44" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
     <!-- stem -->
-    <path d="M32 12 L32 20"/>
+    <path d="M32 14 Q33 8 36 6"/>
     <!-- leaf -->
-    <path d="M32 16 Q38 12 40 16"/>
-    <!-- apple body -->
-    <path d="M20 28 Q18 16 32 20 Q46 16 44 28 Q46 46 32 54 Q18 46 20 28Z"/>
+    <path d="M34 10 Q40 6 42 10 Q40 14 34 10"/>
+    <!-- apple body — two lobes with indent at top -->
+    <path d="M24 18 Q14 22 14 36 Q14 52 26 54 Q32 56 38 54 Q50 52 50 36 Q50 22 40 18 Q36 16 32 18 Q28 16 24 18Z"/>
   </g>
 </svg>

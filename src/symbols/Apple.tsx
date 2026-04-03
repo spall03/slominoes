@@ -10,11 +10,11 @@ export function Apple({ size = 64 }: Props) {
     <Svg width={size} height={size} viewBox="0 0 64 64">
       <G fill="none" stroke="#44CC44" strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round">
         {/* stem */}
-        <Path d="M32 12 L32 20" />
+        <Path d="M32 14 Q33 8 36 6" />
         {/* leaf */}
-        <Path d="M32 16 Q38 12 40 16" />
+        <Path d="M34 10 Q40 6 42 10 Q40 14 34 10" />
         {/* apple body */}
-        <Path d="M20 28 Q18 16 32 20 Q46 16 44 28 Q46 46 32 54 Q18 46 20 28Z" />
+        <Path d="M24 18 Q14 22 14 36 Q14 52 26 54 Q32 56 38 54 Q50 52 50 36 Q50 22 40 18 Q36 16 32 18 Q28 16 24 18Z" />
       </G>
     </Svg>
   );

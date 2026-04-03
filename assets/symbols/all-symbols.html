@@ -1,0 +1,234 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;600;700&display=swap" rel="stylesheet">
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    background: #060614;
+    font-family: 'Space Grotesk', system-ui, sans-serif;
+    color: #fff;
+    padding: 40px 20px;
+  }
+  h1 {
+    text-align: center;
+    font-size: 28px;
+    letter-spacing: 4px;
+    color: #00E5FF;
+    text-shadow: 0 0 20px rgba(0,229,255,0.5);
+    margin-bottom: 8px;
+  }
+  h2 {
+    text-align: center;
+    font-size: 12px;
+    letter-spacing: 3px;
+    color: #5c6bc0;
+    margin-bottom: 32px;
+    text-transform: uppercase;
+  }
+  h3 {
+    font-size: 14px;
+    letter-spacing: 3px;
+    color: #555;
+    text-transform: uppercase;
+    margin: 32px 0 16px;
+    padding-bottom: 8px;
+    border-bottom: 1px solid #1a1a2e;
+    text-align: center;
+  }
+  .grid {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 16px;
+    justify-content: center;
+  }
+  .card {
+    background: #111127;
+    border: 1px solid #1e1e3a;
+    border-radius: 12px;
+    padding: 16px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 8px;
+    width: 130px;
+  }
+  .card img { width: 64px; height: 64px; }
+  .card .name {
+    font-size: 13px;
+    font-weight: 600;
+    letter-spacing: 1px;
+  }
+  .card .stats {
+    font-size: 9px;
+    color: #666;
+    text-align: center;
+    line-height: 1.5;
+  }
+  .card .ability {
+    font-size: 8px;
+    color: #888;
+    text-align: center;
+    line-height: 1.4;
+    font-style: italic;
+  }
+  .sizes {
+    display: flex;
+    gap: 24px;
+    justify-content: center;
+    align-items: flex-end;
+    padding: 24px;
+    background: #111127;
+    border-radius: 12px;
+    margin: 16px auto;
+    max-width: 600px;
+  }
+  .size-item {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 6px;
+  }
+  .size-item .label { color: #444; font-size: 9px; }
+</style>
+</head>
+<body>
+
+<h1>SLOMINOES</h1>
+<h2>Symbol Roster (20 symbols)</h2>
+
+<h3>Base Symbols</h3>
+<div class="grid">
+  <div class="card">
+    <img src="cherry.svg">
+    <div class="name" style="color:#FF3B82">Cherry</div>
+    <div class="stats">ML3 | Score 10 | Freq 5</div>
+  </div>
+  <div class="card">
+    <img src="lemon.svg">
+    <div class="name" style="color:#BFFF00">Lemon</div>
+    <div class="stats">ML3 | Score 20 | Freq 4</div>
+  </div>
+  <div class="card">
+    <img src="bar.svg">
+    <div class="name" style="color:#FF4444">Bar</div>
+    <div class="stats">ML3 | Score 40 | Freq 3</div>
+  </div>
+  <div class="card">
+    <img src="bell.svg">
+    <div class="name" style="color:#FF8C00">Bell</div>
+    <div class="stats">ML3 | Score 80 | Freq 2</div>
+  </div>
+  <div class="card">
+    <img src="seven.svg">
+    <div class="name" style="color:#00E5FF">Seven</div>
+    <div class="stats">ML3 | Score 150 | Freq 1</div>
+  </div>
+</div>
+
+<h3>Unlockable Symbols</h3>
+<div class="grid">
+  <div class="card">
+    <img src="jam.svg">
+    <div class="name" style="color:#E040A0">Jam</div>
+    <div class="stats">ML3 | Score 25 | Freq 3</div>
+    <div class="ability">2x cherry matches in same row/col</div>
+  </div>
+  <div class="card">
+    <img src="apple.svg">
+    <div class="name" style="color:#44CC44">Apple</div>
+    <div class="stats">ML3 | Score 25 | Freq 2</div>
+    <div class="ability">Wild w/ cherry & lemon. Fruit Salad +200</div>
+  </div>
+  <div class="card">
+    <img src="banana.svg">
+    <div class="name" style="color:#FFE135">Banana</div>
+    <div class="stats">ML3 | Score 20 | Freq 3</div>
+    <div class="ability">Wild w/ all fruits. Grand Salad +400</div>
+  </div>
+  <div class="card">
+    <img src="magnet.svg">
+    <div class="name" style="color:#8888FF">Magnet</div>
+    <div class="stats">ML3 | Score 0 | Freq 3</div>
+    <div class="ability">Bell freq +2, Seven freq +1</div>
+  </div>
+  <div class="card">
+    <img src="oil-can.svg">
+    <div class="name" style="color:#FFB020">Oil Can</div>
+    <div class="stats">ML1 | Score 40 | Freq 1</div>
+    <div class="ability">Unlock all locked cells in row & col</div>
+  </div>
+  <div class="card">
+    <img src="crown.svg">
+    <div class="name" style="color:#FFD700">Crown</div>
+    <div class="stats">ML3 | Score 20 | Freq 4</div>
+    <div class="ability">+2 symbol selection slots</div>
+  </div>
+  <div class="card">
+    <img src="bomb.svg">
+    <div class="name" style="color:#FF4444">Bomb</div>
+    <div class="stats">ML2 | Score 20 | Freq 2</div>
+    <div class="ability">Clear unlocked adjacent cells + self</div>
+  </div>
+  <div class="card">
+    <img src="egg.svg">
+    <div class="name" style="color:#FFFACD">Egg</div>
+    <div class="stats">ML4 | Score 30 | Freq 3</div>
+    <div class="ability">+3 tiles added to queue</div>
+  </div>
+  <div class="card">
+    <img src="compass.svg">
+    <div class="name" style="color:#40E0D0">Compass</div>
+    <div class="stats">ML3 | Score 5 | Freq 2</div>
+    <div class="ability">+1 entry spot (east/west)</div>
+  </div>
+  <div class="card">
+    <img src="vine.svg">
+    <div class="name" style="color:#22BB44">Vine</div>
+    <div class="stats">ML3 | Score 35 | Freq 2</div>
+    <div class="ability">Replaces walls. +50 on match</div>
+  </div>
+  <div class="card">
+    <img src="ghost.svg">
+    <div class="name" style="color:#BBBBFF">Ghost</div>
+    <div class="stats">ML3 | Score 30 | Freq 2</div>
+    <div class="ability">Doesn't lock when matched</div>
+  </div>
+  <div class="card">
+    <img src="honey.svg">
+    <div class="name" style="color:#FFAA00">Honey</div>
+    <div class="stats">ML2 | Score 15 | Freq 3</div>
+    <div class="ability">+30 when adjacent match forms</div>
+  </div>
+  <div class="card">
+    <img src="tide.svg">
+    <div class="name" style="color:#4488FF">Tide</div>
+    <div class="stats">ML3 | Score 10 | Freq 2</div>
+    <div class="ability">+5 per empty cell on match</div>
+  </div>
+  <div class="card">
+    <img src="coral.svg">
+    <div class="name" style="color:#FF7766">Coral</div>
+    <div class="stats">ML2 | Score 15 | Freq 3</div>
+    <div class="ability">+20 per unique adjacent symbol type</div>
+  </div>
+  <div class="card">
+    <img src="ember.svg">
+    <div class="name" style="color:#FF6600">Ember</div>
+    <div class="stats">ML2 | Score 20 | Freq 2</div>
+    <div class="ability">+40 when respin creates a match</div>
+  </div>
+</div>
+
+<h3>Size Test (Cherry)</h3>
+<div class="sizes">
+  <div class="size-item"><img src="cherry.svg" width="16" height="16"><div class="label">16px</div></div>
+  <div class="size-item"><img src="cherry.svg" width="24" height="24"><div class="label">24px</div></div>
+  <div class="size-item"><img src="cherry.svg" width="32" height="32"><div class="label">32px</div></div>
+  <div class="size-item"><img src="cherry.svg" width="48" height="48"><div class="label">48px</div></div>
+  <div class="size-item"><img src="cherry.svg" width="64" height="64"><div class="label">64px</div></div>
+</div>
+
+</body>
+</html>
