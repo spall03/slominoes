@@ -2,7 +2,7 @@
 import React from 'react';
 import { View, Text, Pressable, ScrollView, StyleSheet, Platform } from 'react-native';
 import { colors, fonts, symbolColors } from '../theme';
-import { useMetaStore } from '../meta-store';
+import { useMetaStore, UNLOCK_CONDITIONS } from '../meta-store';
 import { useRunStore } from '../store';
 import { SYMBOL_ROSTER, type SymbolId, type SymbolDef } from '../symbols';
 import { SymbolIcon } from '../symbols/index';
@@ -64,21 +64,29 @@ function SymbolCard({
 }
 
 export function DraftScreen() {
-  const {
-    selectedLoadout,
-    selectSymbol,
-    deselectSymbol,
-    getAvailableSymbols,
-    getLockedSymbols,
-    getMaxSlots,
-    startRun: metaStartRun,
-  } = useMetaStore();
+  const selectedLoadout = useMetaStore(s => s.selectedLoadout);
+  const unlockedSymbols = useMetaStore(s => s.unlockedSymbols);
+  const selectSymbol = useMetaStore(s => s.selectSymbol);
+  const deselectSymbol = useMetaStore(s => s.deselectSymbol);
+  const metaStartRun = useMetaStore(s => s.startRun);
 
   const { confirmDraft } = useRunStore();
 
-  const available = getAvailableSymbols();
-  const locked = getLockedSymbols();
-  const maxSlots = getMaxSlots();
+  // Derive available and locked from reactive state
+  const available = SYMBOL_ROSTER.filter(s =>
+    s.id !== 'wall' && (s.base || unlockedSymbols.has(s.id))
+  );
+  const locked = UNLOCK_CONDITIONS
+    .filter(c => !unlockedSymbols.has(c.symbolId))
+    .map(c => ({
+      def: SYMBOL_ROSTER.find(s => s.id === c.symbolId)!,
+      hint: c.hint,
+    }))
+    .filter(x => x.def && !x.def.base);
+
+  // Check if crown is selected for +2 slots
+  const hasCrown = selectedLoadout.includes('crown');
+  const maxSlots = hasCrown ? 7 : 5;
   const isFull = selectedLoadout.length >= maxSlots;
 
   const handlePress = (id: SymbolId) => {
@@ -213,43 +221,42 @@ const styles = StyleSheet.create({
     opacity: 0.4,
   },
   lockedIcon: {
-    fontSize: 24,
-    color: '#333',
+    fontSize: 28,
+    color: '#555',
     fontFamily: fonts.bold,
     height: 40,
     lineHeight: 40,
   },
   lockedLabel: {
-    fontSize: 8,
-    color: '#333',
+    fontSize: 10,
+    color: '#555',
     letterSpacing: 2,
     fontFamily: fonts.semiBold,
     textTransform: 'uppercase',
   },
   hint: {
-    fontSize: 8,
-    color: '#444',
+    fontSize: 10,
+    color: '#666',
     fontStyle: 'italic',
     textAlign: 'center',
   },
   name: {
-    fontSize: 10,
+    fontSize: 12,
     fontFamily: fonts.semiBold,
     color: colors.textPrimary,
     letterSpacing: 1,
     textTransform: 'uppercase',
   },
   stats: {
-    fontSize: 8,
+    fontSize: 10,
     fontFamily: fonts.regular,
-    color: colors.textDim,
+    color: colors.textMuted,
   },
   ability: {
-    fontSize: 7,
+    fontSize: 9,
     fontFamily: fonts.regular,
     color: colors.cyan,
     textAlign: 'center',
-    opacity: 0.7,
   },
   bottomBar: {
     position: 'absolute',
