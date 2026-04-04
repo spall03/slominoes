@@ -37,7 +37,14 @@ import {
   getRandomSymbolFromFreqs,
 } from './level';
 import { findMatches, calculateScore, matchKey } from './scoring';
-import { buildFrequencyTable, SYMBOL_ROSTER, type SymbolDef, type SymbolId } from './symbols';
+import { buildFrequencyTable, SYMBOL_ROSTER, hasNoLock, getRespinMatchBonus, type SymbolDef, type SymbolId } from './symbols';
+import {
+  calculateScoreWithAbilities,
+  evaluateOnPlace,
+  canPlaceOnWall,
+  type AbilityEffects,
+  type Match as AbilityMatch,
+} from './ability-engine';
 
 // Lazy import to avoid circular dependency — meta store imports are deferred
 let _metaStore: any = null;
@@ -88,6 +95,7 @@ export interface GameState {
   pendingSpinScore: number;
   pendingSpinAnimState: Partial<GameState> | null;
   loadoutFreqs: Map<string, number> | null;
+  loadoutDefs: SymbolDef[] | null;
 
   selectEntry: (index: number) => void;
   deselectEntry: () => void;
@@ -104,10 +112,10 @@ export interface GameState {
   buyRespin: () => void;
   getNextRespinCost: () => number;
   clearSpinAnimation: () => void;
-  resetGame: (config?: LevelConfig, loadoutFreqs?: Map<string, number>) => void;
+  resetGame: (config?: LevelConfig, loadoutFreqs?: Map<string, number>, loadoutDefs?: SymbolDef[]) => void;
 }
 
-export function createInitialState(config: LevelConfig = generateLevelConfig(1), loadoutFreqs?: Map<string, number>) {
+export function createInitialState(config: LevelConfig = generateLevelConfig(1), loadoutFreqs?: Map<string, number>, loadoutDefs?: SymbolDef[]) {
   const queue = loadoutFreqs
     ? generateTileQueueFromFreqs(config.tilesPerLevel, loadoutFreqs)
     : generateTileQueue(config.tilesPerLevel, config.symbolCount);
@@ -139,6 +147,7 @@ export function createInitialState(config: LevelConfig = generateLevelConfig(1),
     pendingSpinScore: 0,
     pendingSpinAnimState: null as Partial<GameState> | null,
     loadoutFreqs: loadoutFreqs ?? null,
+    loadoutDefs: loadoutDefs ?? null,
   };
 }
 
@@ -235,7 +244,41 @@ export const useGameStore = create<GameState>((set, get) => ({
     newGrid[row][col] = symbolFirst;
     newGrid[row2][col2] = symbolSecond;
 
-    const { score: newTotalScore, matches } = calculateScore(newGrid);
+    // Use ability-aware scoring if loadout available, otherwise fall back
+    const loadout = get().loadoutDefs;
+    let newTotalScore: number;
+    let matches: { cells: [number, number][]; symbol: string; length: number; score: number }[];
+    let effects: AbilityEffects | null = null;
+
+    if (loadout) {
+      const result = calculateScoreWithAbilities(newGrid, loadout, BOARD_SIZE);
+      newTotalScore = result.score;
+      matches = result.matches;
+      effects = result.effects;
+    } else {
+      const result = calculateScore(newGrid);
+      newTotalScore = result.score;
+      matches = result.matches;
+    }
+
+    // Apply ability effects
+    let extraTiles = 0;
+    let extraRespins = 0;
+    if (effects) {
+      extraTiles = effects.extraTiles;
+      extraRespins = effects.freeRespins;
+
+      // Clear cells (bomb)
+      for (const key of effects.cellsToClear) {
+        const [cr, cc] = key.split(',').map(Number);
+        if (cr >= 0 && cr < BOARD_SIZE && cc >= 0 && cc < BOARD_SIZE) {
+          newGrid[cr][cc] = null;
+        }
+      }
+
+      // Unlock cells (oil can)
+      // Applied to lockedCells below
+    }
 
     // Record stats for unlock tracking
     try {
@@ -245,19 +288,59 @@ export const useGameStore = create<GameState>((set, get) => ({
           meta.recordMatchLength(m.length);
           if (m.symbol === 'cherry') meta.recordCherryScore(m.score);
           if (m.symbol === 'bell') meta.recordBellMatch();
+          // Check for fruit salad recipe matches
+          if ((m as any).isRecipe && (m as any).recipeDefiner === 'apple') {
+            meta.recordFruitSalad();
+          }
         }
         meta.recordLockedCellCount(get().lockedCells.size + matches.reduce((n, m) => n + m.cells.length, 0));
       }
     } catch {}
 
-    // Lock cells that are part of matches
+    // Lock cells that are part of matches (skip no-lock symbols like ghost)
     const newLocked = new Set(get().lockedCells);
-    matches.forEach(match => {
-      match.cells.forEach(([r, c]) => newLocked.add(`${r},${c}`));
-    });
+    if (loadout) {
+      matches.forEach(match => {
+        match.cells.forEach(([r, c]) => {
+          const sym = newGrid[r][c];
+          if (sym && !hasNoLock(sym as SymbolId, loadout)) {
+            newLocked.add(`${r},${c}`);
+          }
+        });
+      });
+      // Apply unlock effects (oil can)
+      if (effects) {
+        for (const key of effects.cellsToUnlock) {
+          newLocked.delete(key);
+        }
+      }
+    } else {
+      matches.forEach(match => {
+        match.cells.forEach(([r, c]) => newLocked.add(`${r},${c}`));
+      });
+    }
+
+    // Recalculate score after clears/unlocks if effects were applied
+    if (effects && (effects.cellsToClear.size > 0 || effects.cellsToUnlock.size > 0)) {
+      if (loadout) {
+        newTotalScore = calculateScoreWithAbilities(newGrid, loadout, BOARD_SIZE).score;
+      } else {
+        newTotalScore = calculateScore(newGrid).score;
+      }
+    }
+
+    // Generate extra tiles from abilities (egg)
+    let newQueue = tileQueue.slice(1);
+    if (extraTiles > 0) {
+      const getSymbol = get().loadoutFreqs
+        ? () => getRandomSymbolFromFreqs(get().loadoutFreqs!)
+        : () => getRandomSymbol(get().levelConfig.symbolCount);
+      for (let i = 0; i < extraTiles; i++) {
+        newQueue.push({ id: `extra-${Date.now()}-${i}`, symbolA: getSymbol(), symbolB: getSymbol() });
+      }
+    }
 
     const nextTile = tileQueue[0] ?? null;
-    const newQueue = tileQueue.slice(1);
     const isComplete = nextTile === null;
 
     if (isComplete) {
@@ -320,6 +403,11 @@ export const useGameStore = create<GameState>((set, get) => ({
           reachableCells: null,
         });
       }
+    }
+
+    // Apply extra respins from abilities
+    if (extraRespins > 0) {
+      set({ respinsRemaining: get().respinsRemaining + extraRespins });
     }
 
     // Trigger match animation for matches involving newly placed cells
@@ -546,19 +634,90 @@ export const useGameStore = create<GameState>((set, get) => ({
   },
 
   clearSpinAnimation: () => {
-    const { pendingSpinGrid, pendingSpinScore, pendingSpinAnimState, lockedCells } = get();
+    const { pendingSpinGrid, pendingSpinScore, pendingSpinAnimState, lockedCells, loadoutDefs } = get();
     if (!pendingSpinGrid) return;
 
-    // Lock any new matches formed by the respin
-    const matches = findMatches(pendingSpinGrid);
+    let finalScore = pendingSpinScore;
     const newLocked = new Set(lockedCells);
-    matches.forEach(match => {
-      match.cells.forEach(([r, c]) => newLocked.add(`${r},${c}`));
-    });
+
+    if (loadoutDefs) {
+      // Ability-aware: score, lock (respecting ghost), apply effects
+      const { score, matches, effects } = calculateScoreWithAbilities(pendingSpinGrid, loadoutDefs, BOARD_SIZE);
+      finalScore = score;
+
+      // Lock matches (skip no-lock symbols like ghost)
+      matches.forEach(match => {
+        match.cells.forEach(([r, c]) => {
+          const sym = pendingSpinGrid[r][c];
+          if (sym && !hasNoLock(sym as SymbolId, loadoutDefs)) {
+            newLocked.add(`${r},${c}`);
+          }
+        });
+      });
+
+      // Apply effects
+      if (effects.cellsToClear.size > 0) {
+        for (const key of effects.cellsToClear) {
+          const [cr, cc] = key.split(',').map(Number);
+          if (cr >= 0 && cr < BOARD_SIZE && cc >= 0 && cc < BOARD_SIZE) {
+            pendingSpinGrid[cr][cc] = null;
+          }
+          newLocked.delete(key);
+        }
+        finalScore = calculateScoreWithAbilities(pendingSpinGrid, loadoutDefs, BOARD_SIZE).score;
+      }
+      for (const key of effects.cellsToUnlock) {
+        newLocked.delete(key);
+      }
+      if (effects.freeRespins > 0) {
+        set({ respinsRemaining: get().respinsRemaining + effects.freeRespins });
+      }
+      if (effects.extraTiles > 0) {
+        const freqs = get().loadoutFreqs;
+        const currentQueue = get().tileQueue;
+        const extras = [];
+        for (let i = 0; i < effects.extraTiles; i++) {
+          const sym = freqs ? getRandomSymbolFromFreqs(freqs) : getRandomSymbol(get().levelConfig.symbolCount);
+          const sym2 = freqs ? getRandomSymbolFromFreqs(freqs) : getRandomSymbol(get().levelConfig.symbolCount);
+          extras.push({ id: `extra-spin-${Date.now()}-${i}`, symbolA: sym, symbolB: sym2 });
+        }
+        set({ tileQueue: [...currentQueue, ...extras] });
+      }
+
+      // Ember: bonus for respin creating new matches
+      const respinBonus = getRespinMatchBonus(loadoutDefs);
+      if (respinBonus > 0) {
+        const newMatchCount = matches.filter(m =>
+          m.cells.some(([r, c]) => !lockedCells.has(`${r},${c}`))
+        ).length;
+        if (newMatchCount > 0) {
+          finalScore += respinBonus * newMatchCount;
+        }
+      }
+
+      // Record stats
+      try {
+        const meta = getMetaStore()?.getState();
+        if (meta) {
+          for (const m of matches) {
+            meta.recordMatchLength(m.length);
+            if (m.symbol === 'cherry') meta.recordCherryScore(m.score);
+            if (m.symbol === 'bell') meta.recordBellMatch();
+          }
+          meta.recordLockedCellCount(newLocked.size);
+        }
+      } catch {}
+    } else {
+      // Fallback: original behavior
+      const matches = findMatches(pendingSpinGrid);
+      matches.forEach(match => {
+        match.cells.forEach(([r, c]) => newLocked.add(`${r},${c}`));
+      });
+    }
 
     set({
       grid: pendingSpinGrid,
-      score: pendingSpinScore,
+      score: finalScore,
       lockedCells: newLocked,
       spinningCells: new Map(),
       pendingSpinGrid: null,
@@ -568,8 +727,12 @@ export const useGameStore = create<GameState>((set, get) => ({
     });
   },
 
-  resetGame: (config?: LevelConfig, loadoutFreqs?: Map<string, number>) =>
-    set(createInitialState(config ?? generateLevelConfig(1), loadoutFreqs ?? get().loadoutFreqs ?? undefined)),
+  resetGame: (config?: LevelConfig, loadoutFreqs?: Map<string, number>, loadoutDefs?: SymbolDef[]) =>
+    set(createInitialState(
+      config ?? generateLevelConfig(1),
+      loadoutFreqs ?? get().loadoutFreqs ?? undefined,
+      loadoutDefs ?? get().loadoutDefs ?? undefined,
+    )),
 }));
 
 // =============================================================================
@@ -611,7 +774,7 @@ export const useRunStore = create<RunState>((set, get) => ({
     const freqs = buildFrequencyTable(loadout);
     const config = generateLevelConfig(1);
     set({ runPhase: 'levelPreview', levelConfig: config });
-    useGameStore.setState({ loadoutFreqs: freqs });
+    useGameStore.setState({ loadoutFreqs: freqs, loadoutDefs: loadout });
   },
 
   startLevel: () => {
@@ -620,9 +783,9 @@ export const useRunStore = create<RunState>((set, get) => ({
     const config = bonusRespins > 0
       ? { ...levelConfig, respins: levelConfig.respins + bonusRespins }
       : levelConfig;
-    // Preserve loadout freqs from previous level
-    const freqs = useGameStore.getState().loadoutFreqs;
-    useGameStore.getState().resetGame(config, freqs ?? undefined);
+    // Preserve loadout from previous level
+    const { loadoutFreqs: freqs, loadoutDefs: defs } = useGameStore.getState();
+    useGameStore.getState().resetGame(config, freqs ?? undefined, defs ?? undefined);
     set({ runPhase: 'playing' });
   },
 

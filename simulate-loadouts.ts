@@ -316,7 +316,7 @@ interface GameResult {
   won: boolean;
   respinsUsed: number;
   abilityTriggers: Map<string, number>;
-  matchesBySymbol: Map<SymbolId, number>;
+  matchesBySymbol: Map<string, number>;
   lockedCellCount: number;
   tilesPlaced: number;
 }
@@ -331,7 +331,7 @@ function simulateGame(config: LevelConfig, loadout: SymbolDef[], freqs: Map<Symb
   let lockedCells = new Set<string>();
   let tilesPlaced = 0;
   const abilityTriggers = new Map<string, number>();
-  const matchesBySymbol = new Map<SymbolId, number>();
+  const matchesBySymbol = new Map<string, number>();
 
   const trackTrigger = (key: string) => {
     abilityTriggers.set(key, (abilityTriggers.get(key) ?? 0) + 1);
@@ -381,7 +381,7 @@ function simulateGame(config: LevelConfig, loadout: SymbolDef[], freqs: Map<Symb
     for (const m of matches) {
       for (const [r, c] of m.cells) {
         const sym = grid[r][c];
-        if (sym && !hasNoLock(sym, loadout)) {
+        if (sym && !hasNoLock(sym as any, loadout)) {
           lockedCells.add(`${r},${c}`);
         }
       }
@@ -461,7 +461,7 @@ function simulateGame(config: LevelConfig, loadout: SymbolDef[], freqs: Map<Symb
     for (const m of matches) {
       for (const [r, c] of m.cells) {
         const sym = grid[r][c];
-        if (sym && !hasNoLock(sym, loadout)) {
+        if (sym && !hasNoLock(sym as any, loadout)) {
           lockedCells.add(`${r},${c}`);
         }
       }
@@ -515,7 +515,7 @@ function simulateGame(config: LevelConfig, loadout: SymbolDef[], freqs: Map<Symb
     for (const m of matches) {
       for (const [r, c] of m.cells) {
         const sym = grid[r][c];
-        if (sym && !hasNoLock(sym, loadout)) {
+        if (sym && !hasNoLock(sym as any, loadout)) {
           lockedCells.add(`${r},${c}`);
         }
       }

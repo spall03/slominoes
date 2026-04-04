@@ -9,17 +9,17 @@ import { getEffectiveScoreValue, getRecipeMatches, buildFrequencyTable } from '.
 // TYPES
 // =============================================================================
 
-export type Grid = (SymbolId | null)[][];
+export type Grid = (string | null)[][];
 
 export interface Match {
   cells: [number, number][];
-  symbol: SymbolId;
+  symbol: string;
   length: number;
   score: number;
   /** If this match was triggered by a recipe_match ability */
   isRecipe?: boolean;
   /** The symbol that defined the recipe (if isRecipe) */
-  recipeDefiner?: SymbolId;
+  recipeDefiner?: string;
 }
 
 /** Effects produced by ability evaluation — caller applies them */
@@ -30,7 +30,7 @@ export interface AbilityEffects {
   cellsToUnlock: Set<string>;
   cellsToClear: Set<string>;
   /** Score multipliers: [cellKey, factor] — applied to matches intersecting that cell */
-  matchMultipliers: { matchSymbol: SymbolId; scope: 'cross'; sourceRow: number; sourceCol: number; factor: number }[];
+  matchMultipliers: { matchSymbol: string; scope: 'cross'; sourceRow: number; sourceCol: number; factor: number }[];
 }
 
 // =============================================================================
@@ -49,13 +49,13 @@ export function findMatchesWithAbilities(
   const matches: Match[] = [];
 
   // Build match length lookup
-  const matchLengths = new Map<SymbolId, number>();
+  const matchLengths = new Map<string, number>();
   for (const sym of loadout) {
     matchLengths.set(sym.id, sym.matchLength);
   }
 
   // Build effective score values
-  const scoreValues = new Map<SymbolId, number>();
+  const scoreValues = new Map<string, number>();
   for (const sym of loadout) {
     scoreValues.set(sym.id, getEffectiveScoreValue(sym.id, loadout));
   }
@@ -63,7 +63,7 @@ export function findMatchesWithAbilities(
   // Build wild_match compatibility: for each symbol, which other symbols can it match with?
   // If apple has wild_match with [cherry, lemon], then apple is compatible with cherry and lemon,
   // AND cherry is compatible with apple, AND lemon is compatible with apple.
-  const compatible = new Map<SymbolId, Set<SymbolId>>();
+  const compatible = new Map<string, Set<string>>();
   for (const sym of loadout) {
     if (!compatible.has(sym.id)) compatible.set(sym.id, new Set([sym.id]));
     else compatible.get(sym.id)!.add(sym.id);
@@ -80,7 +80,7 @@ export function findMatchesWithAbilities(
   }
 
   /** Check if two symbols are compatible (same symbol or wild_match linked) */
-  const areCompatible = (a: SymbolId, b: SymbolId): boolean => {
+  const areCompatible = (a: string, b: string): boolean => {
     return compatible.get(a)?.has(b) ?? (a === b);
   };
 
@@ -150,7 +150,7 @@ export function findMatchesWithAbilities(
     // Scan horizontal
     for (let row = 0; row < boardSize; row++) {
       for (let col = 0; col <= boardSize - recipeLen; col++) {
-        const window: (SymbolId | null)[] = [];
+        const window: (string | null)[] = [];
         for (let i = 0; i < recipeLen; i++) window.push(grid[row][col + i]);
         if (isRecipeMatch(window, recipe)) {
           const cells: [number, number][] = [];
@@ -170,7 +170,7 @@ export function findMatchesWithAbilities(
     // Scan vertical
     for (let col = 0; col < boardSize; col++) {
       for (let row = 0; row <= boardSize - recipeLen; row++) {
-        const window: (SymbolId | null)[] = [];
+        const window: (string | null)[] = [];
         for (let i = 0; i < recipeLen; i++) window.push(grid[row + i][col]);
         if (isRecipeMatch(window, recipe)) {
           const cells: [number, number][] = [];
@@ -191,7 +191,7 @@ export function findMatchesWithAbilities(
 }
 
 /** Check if a window of symbols matches a recipe (any order) */
-function isRecipeMatch(window: (SymbolId | null)[], recipe: SymbolId[]): boolean {
+function isRecipeMatch(window: (string | null)[], recipe: SymbolId[]): boolean {
   if (window.length !== recipe.length) return false;
   if (window.some(s => s === null || s === 'wall')) return false;
 
@@ -238,7 +238,7 @@ export function evaluateOnMatch(
   boardSize: number,
 ): AbilityEffects {
   const effects = emptyEffects();
-  const loadoutMap = new Map(loadout.map(s => [s.id, s]));
+  const loadoutMap = new Map<string, SymbolDef>(loadout.map(s => [s.id, s]));
 
   for (const match of matches) {
     // Recipe matches only trigger the definer's on_match (already scored in findMatches)
@@ -322,7 +322,7 @@ export function evaluateOnMatch(
 
         case 'score_per_unique_adjacent': {
           const perType = ability.params.points ?? 0;
-          const adjacentTypes = new Set<SymbolId>();
+          const adjacentTypes = new Set<string>();
           const dirs: [number, number][] = [[-1, 0], [1, 0], [0, -1], [0, 1]];
           for (const [r, c] of match.cells) {
             for (const [dr, dc] of dirs) {
@@ -348,7 +348,7 @@ export function evaluateOnMatch(
  * Evaluate on_place abilities when a tile is placed.
  */
 export function evaluateOnPlace(
-  symbolId: SymbolId,
+  symbolId: string,
   row: number,
   col: number,
   grid: Grid,
@@ -385,7 +385,7 @@ export function evaluateOnAdjacentMatch(
   boardSize: number,
 ): AbilityEffects {
   const effects = emptyEffects();
-  const loadoutMap = new Map(loadout.map(s => [s.id, s]));
+  const loadoutMap = new Map<string, SymbolDef>(loadout.map(s => [s.id, s]));
 
   // Collect all cells that are part of any match
   const matchCells = new Set<string>();
@@ -450,7 +450,7 @@ export function evaluateOnRespin(
   boardSize: number,
 ): AbilityEffects {
   const effects = emptyEffects();
-  const loadoutMap = new Map(loadout.map(s => [s.id, s]));
+  const loadoutMap = new Map<string, SymbolDef>(loadout.map(s => [s.id, s]));
 
   // Check each cell in the respun line
   for (let i = 0; i < boardSize; i++) {
@@ -544,7 +544,7 @@ export function calculateScoreWithAbilities(
 /**
  * Check if a symbol has the place_on_wall ability.
  */
-export function canPlaceOnWall(symbolId: SymbolId, loadout: SymbolDef[]): boolean {
+export function canPlaceOnWall(symbolId: string, loadout: SymbolDef[]): boolean {
   const def = loadout.find(s => s.id === symbolId);
   if (!def) return false;
   return def.abilities.some(a => a.trigger === 'on_place' && a.verb === 'place_on_wall');

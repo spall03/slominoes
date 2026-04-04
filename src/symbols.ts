@@ -379,7 +379,7 @@ export function buildFrequencyTable(loadout: SymbolDef[]): Map<SymbolId, number>
  * Get the effective score value for a symbol, applying passive score_penalty
  * from other symbols in the loadout.
  */
-export function getEffectiveScoreValue(symbolId: SymbolId, loadout: SymbolDef[]): number {
+export function getEffectiveScoreValue(symbolId: string, loadout: SymbolDef[]): number {
   const def = loadout.find(s => s.id === symbolId);
   if (!def) return 0;
 
@@ -402,7 +402,7 @@ export function getEffectiveScoreValue(symbolId: SymbolId, loadout: SymbolDef[])
 /**
  * Get the match length for a symbol (from its definition).
  */
-export function getMatchLength(symbolId: SymbolId, loadout: SymbolDef[]): number {
+export function getMatchLength(symbolId: string, loadout: SymbolDef[]): number {
   const def = loadout.find(s => s.id === symbolId);
   return def?.matchLength ?? 3;
 }
@@ -470,7 +470,7 @@ export function getRespinMatchBonus(loadout: SymbolDef[]): number {
 /**
  * Check if a symbol has the no_lock passive (e.g., ghost).
  */
-export function hasNoLock(symbolId: SymbolId, loadout: SymbolDef[]): boolean {
+export function hasNoLock(symbolId: string, loadout: SymbolDef[]): boolean {
   const def = loadout.find(s => s.id === symbolId);
   if (!def) return false;
   return def.abilities.some(a => a.trigger === 'passive' && a.verb === 'no_lock');
