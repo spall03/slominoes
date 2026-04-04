@@ -14,8 +14,8 @@ export function RespinCol({ size = 40 }: Props) {
         <Polyline points="15,12 20,8 25,12" />
         <Polyline points="15,28 20,32 25,28" />
         {/* circular refresh hint */}
-        <Path d="M12 14 A10 10 0 0 1 12 26" />
-        <Path d="M28 26 A10 10 0 0 1 28 14" />
+        <Path d="M14 12 A10 10 0 0 1 26 12" />
+        <Path d="M26 28 A10 10 0 0 1 14 28" />
       </G>
     </Svg>
   );
