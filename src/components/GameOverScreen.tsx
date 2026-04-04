@@ -6,6 +6,7 @@ import { colors, fonts } from '../theme';
 import { NUM_LEVELS } from '../constants';
 import { useRunStore } from '../store';
 import { useMetaStore } from '../meta-store';
+import { startMusic, stopMusic } from '../music';
 
 export function GameOverScreen() {
   const { currentLevel, levelScore, levelConfig } = useRunStore();
@@ -13,6 +14,15 @@ export function GameOverScreen() {
   const endRunCalled = useRef(false);
 
   const won = currentLevel >= NUM_LEVELS && levelScore >= 0;
+
+  useEffect(() => {
+    if (won) {
+      try { stopMusic(); } catch {}
+    } else {
+      try { startMusic('loss'); } catch {}
+    }
+    return () => { try { stopMusic(); } catch {} };
+  }, [won]);
 
   // Call endRun once when this screen mounts
   useEffect(() => {

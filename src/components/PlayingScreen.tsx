@@ -15,6 +15,7 @@ import { HUD } from './HUD';
 import { Grid } from './Grid';
 import { BottomBar } from './BottomBar';
 import { HelpPanel } from './HelpPanel';
+import { startMusic, stopMusic } from '../music';
 import { RespinCol } from '../symbols/RespinCol';
 import { RespinRow } from '../symbols/RespinRow';
 import { SymbolIcon } from '../symbols/index';
@@ -42,6 +43,11 @@ export function PlayingScreen() {
   const isSpinning = spinningCells.size > 0;
 
   const { currentLevel } = useRunStore();
+
+  useEffect(() => {
+    try { startMusic('level' + currentLevel); } catch {}
+    return () => { try { stopMusic(); } catch {} };
+  }, [currentLevel]);
 
   const tilesRemaining = tileQueue.length + (currentTile ? 1 : 0);
 

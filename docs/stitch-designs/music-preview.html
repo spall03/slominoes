@@ -1,0 +1,420 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;600;700&display=swap" rel="stylesheet">
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    background: #060614;
+    font-family: 'Space Grotesk', sans-serif;
+    color: #fff;
+    padding: 40px 20px;
+    max-width: 500px;
+    margin: 0 auto;
+  }
+  h1 { font-size: 16px; letter-spacing: 4px; color: #00E5FF; text-transform: uppercase; text-shadow: 0 0 16px rgba(0,229,255,0.4); text-align: center; margin-bottom: 8px; }
+  h2 { font-size: 11px; letter-spacing: 3px; color: #555; text-transform: uppercase; text-align: center; margin-bottom: 32px; }
+  .track-list { display: flex; flex-direction: column; gap: 6px; }
+  .track-btn {
+    background: #0a0a1e; border: 1px solid #1e1e3a; border-radius: 10px;
+    padding: 14px 20px; display: flex; justify-content: space-between; align-items: center;
+    cursor: pointer; transition: border-color 0.2s;
+  }
+  .track-btn:hover { border-color: #00E5FF; }
+  .track-btn.playing { border-color: #FF3B82; box-shadow: 0 0 12px rgba(255,59,130,0.2); }
+  .track-name { font-size: 13px; font-weight: 600; color: #e6e3f9; }
+  .track-desc { font-size: 10px; color: #666; margin-top: 2px; }
+  .track-ctrl { font-size: 11px; color: #00E5FF; letter-spacing: 2px; text-transform: uppercase; font-weight: 700; }
+  .track-btn.playing .track-ctrl { color: #FF3B82; }
+  .divider { height: 1px; background: #1e1e3a; margin: 12px 0; }
+  .stop-all {
+    margin-top: 20px; width: 100%; padding: 14px; background: transparent;
+    border: 2px solid #FF3B82; border-radius: 10px; color: #FF3B82;
+    font-family: inherit; font-size: 13px; font-weight: 700; letter-spacing: 2px;
+    text-transform: uppercase; cursor: pointer;
+  }
+</style>
+</head>
+<body>
+
+<h1>Music Preview</h1>
+<h2>Chiptune · Dreamy Keys · ~30s loops</h2>
+
+<div class="track-list" id="tracks"></div>
+<button class="stop-all" onclick="stopAll()">Stop All</button>
+
+<script>
+const ctx = new (window.AudioContext || window.webkitAudioContext)();
+let currentTrack = null;
+let currentInterval = null;
+let currentOscs = [];
+
+const N = {
+  C2:65,D2:73,E2:82,F2:87,G2:98,A2:110,B2:123,
+  C3:131,D3:147,E3:165,F3:175,Fs3:185,G3:196,A3:220,Bb3:233,B3:247,
+  C4:262,D4:294,E4:330,F4:349,Fs4:370,G4:392,A4:440,Bb4:466,B4:494,
+  C5:523,D5:587,E5:659,F5:698,Fs5:740,G5:784,A5:880,Bb5:932,B5:988,
+  C6:1047,D6:1175,E6:1319,
+  Eb3:156,Ab3:208,Eb4:311,Ab4:415,Eb5:622,Ab5:831,
+};
+
+function stopAll() {
+  if (currentInterval) clearInterval(currentInterval);
+  currentOscs.forEach(o => { try { o.stop(); } catch {} });
+  currentOscs = [];
+  currentTrack = null;
+  document.querySelectorAll('.track-btn').forEach(b => {
+    b.classList.remove('playing');
+    b.querySelector('.track-ctrl').textContent = '▶ Play';
+  });
+}
+
+// Sustained pad tone with slow attack
+function pad(freq, dur, vol=0.04, delay=0) {
+  if (!freq) return;
+  const c = ctx;
+  const osc = c.createOscillator();
+  const gain = c.createGain();
+  osc.type = 'sine';
+  osc.frequency.setValueAtTime(freq, c.currentTime + delay);
+  gain.gain.setValueAtTime(0, c.currentTime + delay);
+  gain.gain.linearRampToValueAtTime(vol, c.currentTime + delay + dur * 0.15);
+  gain.gain.setValueAtTime(vol, c.currentTime + delay + dur * 0.7);
+  gain.gain.linearRampToValueAtTime(0, c.currentTime + delay + dur);
+  osc.connect(gain);
+  gain.connect(c.destination);
+  osc.start(c.currentTime + delay);
+  osc.stop(c.currentTime + delay + dur);
+  currentOscs.push(osc);
+}
+
+// Plucky arpeggio note
+function pluck(freq, dur, type='triangle', vol=0.06, delay=0) {
+  if (!freq) return;
+  const c = ctx;
+  const osc = c.createOscillator();
+  const gain = c.createGain();
+  osc.type = type;
+  osc.frequency.setValueAtTime(freq, c.currentTime + delay);
+  gain.gain.setValueAtTime(vol, c.currentTime + delay);
+  gain.gain.exponentialRampToValueAtTime(vol * 0.3, c.currentTime + delay + dur * 0.5);
+  gain.gain.linearRampToValueAtTime(0, c.currentTime + delay + dur);
+  osc.connect(gain);
+  gain.connect(c.destination);
+  osc.start(c.currentTime + delay);
+  osc.stop(c.currentTime + delay + dur);
+  currentOscs.push(osc);
+}
+
+// Soft melody note
+function mel(freq, dur, vol=0.05, delay=0) {
+  if (!freq) return;
+  const c = ctx;
+  const osc = c.createOscillator();
+  const gain = c.createGain();
+  osc.type = 'square';
+  osc.frequency.setValueAtTime(freq, c.currentTime + delay);
+  gain.gain.setValueAtTime(0, c.currentTime + delay);
+  gain.gain.linearRampToValueAtTime(vol, c.currentTime + delay + 0.02);
+  gain.gain.setValueAtTime(vol * 0.8, c.currentTime + delay + dur * 0.6);
+  gain.gain.linearRampToValueAtTime(0, c.currentTime + delay + dur);
+  osc.connect(gain);
+  gain.connect(c.destination);
+  osc.start(c.currentTime + delay);
+  osc.stop(c.currentTime + delay + dur);
+  currentOscs.push(osc);
+}
+
+// Sub bass
+function sub(freq, dur, vol=0.12, delay=0) {
+  if (!freq) return;
+  const c = ctx;
+  const osc = c.createOscillator();
+  const gain = c.createGain();
+  osc.type = 'sine';
+  osc.frequency.setValueAtTime(freq, c.currentTime + delay);
+  gain.gain.setValueAtTime(vol, c.currentTime + delay);
+  gain.gain.setValueAtTime(vol * 0.8, c.currentTime + delay + dur * 0.7);
+  gain.gain.linearRampToValueAtTime(0, c.currentTime + delay + dur);
+  osc.connect(gain);
+  gain.connect(c.destination);
+  osc.start(c.currentTime + delay);
+  osc.stop(c.currentTime + delay + dur);
+  currentOscs.push(osc);
+}
+
+function hihat(delay=0, vol=0.02) {
+  const buf = ctx.createBuffer(1, ctx.sampleRate * 0.025, ctx.sampleRate);
+  const d = buf.getChannelData(0);
+  for (let i = 0; i < d.length; i++) d[i] = (Math.random()*2-1) * (1 - i/d.length);
+  const src = ctx.createBufferSource(); src.buffer = buf;
+  const g = ctx.createGain(); g.gain.setValueAtTime(vol, ctx.currentTime + delay);
+  const f = ctx.createBiquadFilter(); f.type = 'highpass'; f.frequency.value = 7000;
+  src.connect(f); f.connect(g); g.connect(ctx.destination);
+  src.start(ctx.currentTime + delay);
+}
+
+function kick(delay=0, vol=0.1) {
+  const osc = ctx.createOscillator();
+  const g = ctx.createGain();
+  osc.type = 'sine';
+  osc.frequency.setValueAtTime(120, ctx.currentTime + delay);
+  osc.frequency.exponentialRampToValueAtTime(35, ctx.currentTime + delay + 0.12);
+  g.gain.setValueAtTime(vol, ctx.currentTime + delay);
+  g.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + delay + 0.2);
+  osc.connect(g); g.connect(ctx.destination);
+  osc.start(ctx.currentTime + delay); osc.stop(ctx.currentTime + delay + 0.2);
+}
+
+function playPattern(id, bpm, stepFn, totalSteps) {
+  const btn = document.getElementById(id);
+  if (currentTrack === id) { stopAll(); return; }
+  stopAll();
+  currentTrack = id;
+  btn.classList.add('playing');
+  btn.querySelector('.track-ctrl').textContent = '■ Stop';
+
+  const stepDur = 60 / bpm / 2;
+  let step = 0;
+
+  function tick() {
+    stepFn(step % totalSteps, stepDur);
+    step++;
+  }
+  tick();
+  currentInterval = setInterval(tick, stepDur * 1000);
+}
+
+// ============================================================
+// TITLE: Dreamy, warm, pad-heavy. C major. Slow arpeggios.
+// I - vi - IV - V  (C - Am - F - G)
+// ============================================================
+function titleTrack(step, d) {
+  // Pads: long sustained chords, change every 8 steps
+  if (step % 8 === 0) {
+    const chords = [
+      [N.C4,N.E4,N.G4], [N.A3,N.C4,N.E4],
+      [N.F3,N.A3,N.C4], [N.G3,N.B3,N.D4],
+    ];
+    chords[Math.floor(step/8)].forEach(n => pad(n, d*8, 0.04));
+  }
+
+  // Arpeggiated keys
+  const arps = [
+    N.C5,N.E5,N.G5,N.E5, N.A4,N.C5,N.E5,N.C5,
+    N.F4,N.A4,N.C5,N.A4, N.G4,N.B4,N.D5,N.B4,
+    N.C5,N.G5,N.E5,N.G5, N.A4,N.E5,N.C5,N.E5,
+    N.F4,N.C5,N.A4,N.C5, N.G4,N.D5,N.B4,N.D5,
+  ];
+  pluck(arps[step], d*0.9, 'triangle', 0.05);
+
+  // Sub bass: root notes
+  if (step % 8 === 0) {
+    const roots = [N.C2, N.A2, N.F2, N.G2];
+    sub(roots[Math.floor(step/8) % 4], d*7.5);
+  }
+
+  // Gentle melody — sparse, floating
+  const melody = [
+    N.G5,0,0,0, 0,N.E5,0,0,
+    N.C5,0,0,N.D5, 0,0,0,0,
+    N.A5,0,0,0, 0,N.G5,0,N.E5,
+    0,0,N.F5,0, N.G5,0,0,0,
+  ];
+  if (melody[step]) mel(melody[step], d*1.8, 0.04);
+
+  // Very light percussion
+  if (step % 4 === 0) kick(0, 0.04);
+  if (step % 4 === 2) hihat(0, 0.012);
+}
+
+// ============================================================
+// DRAFT: Anticipation, lighter, G major. Pulsing pads.
+// I - V - vi - IV  (G - D - Em - C)
+// ============================================================
+function draftTrack(step, d) {
+  if (step % 8 === 0) {
+    const chords = [
+      [N.G3,N.B3,N.D4], [N.D4,N.Fs4,N.A4],
+      [N.E4,N.G4,N.B4], [N.C4,N.E4,N.G4],
+    ];
+    chords[Math.floor(step/8)].forEach(n => pad(n, d*8, 0.035));
+  }
+
+  // Pulsing arp — every other step
+  const arps = [
+    N.G4,0,N.B4,0, N.D5,0,N.B4,0,
+    N.E4,0,N.G4,0, N.C5,0,N.G4,0,
+    N.G4,0,N.D5,0, N.Fs4,0,N.A4,0,
+    N.E4,0,N.B4,0, N.C4,0,N.E4,0,
+  ];
+  if (arps[step]) pluck(arps[step], d*0.7, 'triangle', 0.04);
+
+  if (step % 8 === 0) {
+    const roots = [N.G2, N.D2, N.E2, N.C2];
+    sub(roots[Math.floor(step/8) % 4], d*7.5, 0.08);
+  }
+
+  if (step % 8 === 0) kick(0, 0.03);
+}
+
+// ============================================================
+// LOSS: A minor, very slow, sustained pads, no arp, sparse melody
+// i - iv - VI - V  (Am - Dm - F - E)
+// ============================================================
+function lossTrack(step, d) {
+  if (step % 8 === 0) {
+    const chords = [
+      [N.A3,N.C4,N.E4], [N.D4,N.F4,N.A4],
+      [N.F3,N.A3,N.C4], [N.E3,N.Ab3,N.B3],
+    ];
+    chords[Math.floor(step/8)].forEach(n => pad(n, d*8, 0.045));
+  }
+
+  if (step % 8 === 0) {
+    const roots = [N.A2, N.D2, N.F2, N.E2];
+    sub(roots[Math.floor(step/8) % 4], d*8, 0.08);
+  }
+
+  const melody = [
+    N.E5,0,0,0, 0,0,N.C5,0,
+    0,0,0,0, N.D5,0,0,0,
+    N.C5,0,0,0, 0,0,N.A4,0,
+    0,0,0,0, N.Ab4,0,0,0,
+  ];
+  if (melody[step]) mel(melody[step], d*2.5, 0.04);
+}
+
+// ============================================================
+// LEVELS 1-10: C major, keyboard-driven, pad + arp + melody
+// Progression: I - V - vi - IV  (C - G - Am - F)
+// Energy builds via: arp density, melody activity, percussion, tempo
+// ============================================================
+function levelTrack(level) {
+  return function(step, d) {
+    const energy = 0.55 + level * 0.045;
+
+    // ---- PADS: sustained chords, richer voicings on higher levels ----
+    if (step % 8 === 0) {
+      const ci = Math.floor(step / 8);
+      const simple = [
+        [N.C4,N.E4,N.G4], [N.G3,N.B3,N.D4],
+        [N.A3,N.C4,N.E4], [N.F3,N.A3,N.C4],
+      ];
+      const rich = [
+        [N.C4,N.E4,N.G4,N.B4], [N.G3,N.B3,N.D4,N.Fs4],
+        [N.A3,N.C4,N.E4,N.G4], [N.F3,N.A3,N.C4,N.E4],
+      ];
+      const ch = level >= 5 ? rich[ci] : simple[ci];
+      ch.forEach(n => pad(n, d*8, 0.035 * energy));
+    }
+
+    // ---- SUB BASS ----
+    if (step % 8 === 0) {
+      const roots = [N.C2, N.G2, N.A2, N.F2];
+      sub(roots[Math.floor(step/8) % 4], d*7.5, 0.1 * energy);
+    }
+
+    // ---- ARPEGGIOS: get denser with level ----
+    const arpPatterns = [
+      // Sparse: every 4 steps
+      [N.C5,0,0,0, N.G4,0,0,0, N.A4,0,0,0, N.F4,0,0,0,
+       N.E5,0,0,0, N.D5,0,0,0, N.C5,0,0,0, N.A4,0,0,0],
+      // Medium: every 2 steps
+      [N.C5,0,N.E5,0, N.G4,0,N.B4,0, N.A4,0,N.C5,0, N.F4,0,N.A4,0,
+       N.E5,0,N.G5,0, N.D5,0,N.B4,0, N.C5,0,N.E5,0, N.A4,0,N.C5,0],
+      // Full: every step
+      [N.C5,N.E5,N.G5,N.E5, N.G4,N.B4,N.D5,N.B4, N.A4,N.C5,N.E5,N.C5, N.F4,N.A4,N.C5,N.A4,
+       N.E5,N.G5,N.C6,N.G5, N.D5,N.G5,N.B5,N.G5, N.C5,N.E5,N.A5,N.E5, N.A4,N.C5,N.F5,N.C5],
+    ];
+    const ai = level <= 3 ? 0 : level <= 6 ? 1 : 2;
+    const arp = arpPatterns[ai];
+    if (arp[step]) pluck(arp[step], d*0.8, 'triangle', 0.04 * energy);
+
+    // ---- MELODY: gets more active ----
+    const melodies = [
+      // Simple, spacious
+      [N.G5,0,0,0, 0,0,N.E5,0, 0,0,0,0, N.D5,0,0,0,
+       N.E5,0,0,0, 0,0,N.C5,0, 0,0,0,0, 0,0,0,0],
+      // More notes
+      [N.G5,0,0,N.A5, 0,0,N.G5,0, N.E5,0,0,0, N.D5,0,N.C5,0,
+       N.E5,0,N.G5,0, 0,N.A5,0,N.G5, N.E5,0,0,0, N.D5,0,0,0],
+      // Active, flowing
+      [N.G5,0,N.A5,N.G5, N.E5,0,N.D5,0, N.C5,0,N.D5,N.E5, 0,N.G5,0,0,
+       N.A5,0,N.G5,N.E5, N.D5,0,N.C5,0, N.E5,0,N.G5,0, N.A5,N.G5,N.E5,0],
+      // Syncopated
+      [0,N.E5,0,N.G5, N.A5,0,0,N.G5, 0,N.E5,N.D5,0, N.C5,0,0,0,
+       0,N.G5,0,N.A5, N.B5,0,0,N.A5, 0,N.G5,N.E5,0, N.D5,0,N.C5,0],
+      // Triumphant
+      [N.C5,N.D5,N.E5,0, N.G5,0,0,N.A5, N.G5,0,N.E5,0, 0,0,N.D5,0,
+       N.E5,N.G5,N.A5,0, N.B5,0,0,N.C6, N.B5,0,N.A5,N.G5, N.E5,0,0,0],
+    ];
+    const mi = Math.floor((level - 1) / 2) % melodies.length;
+    const m = melodies[mi];
+    if (m[step]) mel(m[step], d*1.2, 0.04 * energy);
+
+    // ---- OCTAVE BASS on higher levels ----
+    if (level >= 6 && step % 4 === 0) {
+      const bassNotes = [N.C3, N.G3, N.A3, N.F3];
+      const bi = Math.floor(step / 8) % 4;
+      pluck(bassNotes[bi], d*1.5, 'triangle', 0.04 * energy);
+    }
+
+    // ---- PERCUSSION: builds gradually ----
+    if (step % 8 === 0) kick(0, 0.05 * energy);
+    if (level >= 3 && step % 4 === 0) kick(0, 0.04 * energy);
+    if (level >= 2 && step % 4 === 2) hihat(0, 0.015 * energy);
+    if (level >= 5 && step % 2 === 0) hihat(0, 0.01 * energy);
+    if (level >= 7 && step % 2 === 1) hihat(0, 0.006 * energy);
+    if (level >= 8 && step % 8 === 6) kick(0, 0.03 * energy);
+  };
+}
+
+// ============================================================
+// BUILD UI
+// ============================================================
+
+const trackDefs = [
+  { id: 'title', name: 'Title Screen', desc: 'C major · dreamy pads + arp · 90 BPM', bpm: 90, fn: titleTrack, steps: 32 },
+  { id: 'draft', name: 'Draft / Select', desc: 'G major · pulsing keys · 84 BPM', bpm: 84, fn: draftTrack, steps: 32 },
+  { id: 'div1' },
+  { id: 'l1',  name: 'Level 1',  desc: 'Gentle · sparse arp · 88 BPM', bpm: 88, fn: levelTrack(1), steps: 32 },
+  { id: 'l2',  name: 'Level 2',  desc: 'Hihats join · 90 BPM', bpm: 90, fn: levelTrack(2), steps: 32 },
+  { id: 'l3',  name: 'Level 3',  desc: 'Steady kick · 92 BPM', bpm: 92, fn: levelTrack(3), steps: 32 },
+  { id: 'l4',  name: 'Level 4',  desc: 'Arps thicken · 96 BPM', bpm: 96, fn: levelTrack(4), steps: 32 },
+  { id: 'l5',  name: 'Level 5',  desc: 'Rich chords · faster hats · 100 BPM', bpm: 100, fn: levelTrack(5), steps: 32 },
+  { id: 'l6',  name: 'Level 6',  desc: 'Octave bass · flowing melody · 104 BPM', bpm: 104, fn: levelTrack(6), steps: 32 },
+  { id: 'l7',  name: 'Level 7',  desc: 'Full arps · offbeat hats · 108 BPM', bpm: 108, fn: levelTrack(7), steps: 32 },
+  { id: 'l8',  name: 'Level 8',  desc: 'Dense groove · extra kick · 112 BPM', bpm: 112, fn: levelTrack(8), steps: 32 },
+  { id: 'l9',  name: 'Level 9',  desc: 'Syncopated melody · 116 BPM', bpm: 116, fn: levelTrack(9), steps: 32 },
+  { id: 'l10', name: 'Level 10', desc: 'Triumphant · full energy · 120 BPM', bpm: 120, fn: levelTrack(10), steps: 32 },
+  { id: 'div2' },
+  { id: 'loss', name: 'Loss Screen', desc: 'A minor · slow sustained pads · 66 BPM', bpm: 66, fn: lossTrack, steps: 32 },
+];
+
+const container = document.getElementById('tracks');
+trackDefs.forEach(t => {
+  if (t.id.startsWith('div')) {
+    const div = document.createElement('div');
+    div.className = 'divider';
+    container.appendChild(div);
+    return;
+  }
+  const btn = document.createElement('div');
+  btn.className = 'track-btn';
+  btn.id = t.id;
+  btn.innerHTML = `
+    <div>
+      <div class="track-name">${t.name}</div>
+      <div class="track-desc">${t.desc}</div>
+    </div>
+    <div class="track-ctrl">▶ Play</div>
+  `;
+  btn.onclick = () => playPattern(t.id, t.bpm, t.fn, t.steps);
+  container.appendChild(btn);
+});
+</script>
+
+</body>
+</html>

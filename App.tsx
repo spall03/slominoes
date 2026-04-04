@@ -5,6 +5,7 @@ import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { useFonts, SpaceGrotesk_400Regular, SpaceGrotesk_600SemiBold, SpaceGrotesk_700Bold } from '@expo-google-fonts/space-grotesk';
 import { useRunStore } from './src/store';
 import { useMetaStore } from './src/meta-store';
+import { useSettingsStore } from './src/settings-store';
 import { TitleScreen } from './src/components/TitleScreen';
 import { DraftScreen } from './src/components/DraftScreen';
 import { LevelPreviewScreen } from './src/components/LevelPreviewScreen';
@@ -24,12 +25,15 @@ export default function App() {
   const metaLoaded = useMetaStore(s => s.loaded);
   const loadFromStorage = useMetaStore(s => s.loadFromStorage);
   const pendingUnlock = useMetaStore(s => s.pendingUnlock);
+  const settingsLoaded = useSettingsStore(s => s.loaded);
+  const loadSettings = useSettingsStore(s => s.loadSettings);
 
   useEffect(() => {
     loadFromStorage();
-  }, [loadFromStorage]);
+    loadSettings();
+  }, [loadFromStorage, loadSettings]);
 
-  if (!fontsLoaded || !metaLoaded) {
+  if (!fontsLoaded || !metaLoaded || !settingsLoaded) {
     return (
       <View style={{ flex: 1, backgroundColor: colors.bg, alignItems: 'center', justifyContent: 'center' }}>
         <ActivityIndicator color={colors.cyan} size="large" />

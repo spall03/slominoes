@@ -2,6 +2,8 @@
 // Synthesized sound effects with 3 subtle variations per sound.
 // Uses Web Audio API — no audio files needed.
 
+import { useSettingsStore } from './settings-store';
+
 let ctx: AudioContext | null = null;
 
 function getCtx(): AudioContext {
@@ -57,6 +59,7 @@ function v(base: number, range = 15): number {
 // =============================================================================
 
 export function playTilePlace() {
+  if (!useSettingsStore.getState().sfxEnabled) return;
   const variant = pick([0, 1, 2]);
   if (variant === 0) {
     playTone(800, 0.06, 'square', 0.15);
@@ -71,6 +74,7 @@ export function playTilePlace() {
 }
 
 export function playMatch() {
+  if (!useSettingsStore.getState().sfxEnabled) return;
   const variant = pick([0, 1, 2]);
   if (variant === 0) {
     // C-E-G
@@ -91,6 +95,7 @@ export function playMatch() {
 }
 
 export function playBigMatch() {
+  if (!useSettingsStore.getState().sfxEnabled) return;
   const variant = pick([0, 1, 2]);
   if (variant === 0) {
     playTone(523, 0.1, 'sine', 0.2);
@@ -117,6 +122,7 @@ export function playBigMatch() {
 }
 
 export function playLock() {
+  if (!useSettingsStore.getState().sfxEnabled) return;
   const variant = pick([0, 1, 2]);
   if (variant === 0) {
     playTone(2000, 0.03, 'square', 0.1);
@@ -131,6 +137,7 @@ export function playLock() {
 }
 
 export function playRespin() {
+  if (!useSettingsStore.getState().sfxEnabled) return;
   const variant = pick([0, 1, 2]);
   const baseFreq = variant === 0 ? 1200 : variant === 1 ? 1300 : 1100;
   const step = variant === 0 ? 80 : variant === 1 ? 90 : 70;
@@ -142,6 +149,7 @@ export function playRespin() {
 }
 
 export function playBuyRespin() {
+  if (!useSettingsStore.getState().sfxEnabled) return;
   const variant = pick([0, 1, 2]);
   if (variant === 0) {
     playTone(880, 0.08, 'sine', 0.15);
@@ -159,12 +167,14 @@ export function playBuyRespin() {
 }
 
 export function playRotate() {
+  if (!useSettingsStore.getState().sfxEnabled) return;
   const variant = pick([0, 1, 2]);
   const freq = variant === 0 ? 1400 : variant === 1 ? 1500 : 1300;
   playTone(freq, 0.03, 'triangle', 0.08);
 }
 
 export function playButtonTap() {
+  if (!useSettingsStore.getState().sfxEnabled) return;
   const variant = pick([0, 1, 2]);
   if (variant === 0) {
     playTone(600, 0.04, 'sine', 0.1);
@@ -179,6 +189,7 @@ export function playButtonTap() {
 }
 
 export function playLevelWin() {
+  if (!useSettingsStore.getState().sfxEnabled) return;
   const variant = pick([0, 1, 2]);
   if (variant === 0) {
     // C major
@@ -208,6 +219,7 @@ export function playLevelWin() {
 }
 
 export function playLevelLose() {
+  if (!useSettingsStore.getState().sfxEnabled) return;
   const variant = pick([0, 1, 2]);
   if (variant === 0) {
     playTone(440, 0.2, 'sine', 0.2);
@@ -228,6 +240,7 @@ export function playLevelLose() {
 }
 
 export function playUnlock() {
+  if (!useSettingsStore.getState().sfxEnabled) return;
   const variant = pick([0, 1, 2]);
   const bases = [
     [400, 784, 988, 1175],   // G major

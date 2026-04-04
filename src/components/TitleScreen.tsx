@@ -1,18 +1,26 @@
 // src/components/TitleScreen.tsx
 import React, { useState, useEffect } from 'react';
-import { View, Text, Pressable, StyleSheet } from 'react-native';
+import { View, Text, Pressable, StyleSheet, Platform } from 'react-native';
 import { colors, fonts } from '../theme';
 import { useRunStore } from '../store';
 import { Logo } from '../symbols/Logo';
 import { Domino } from '../symbols/Domino';
 import { Tutorial, hasTutorialBeenSeen } from './Tutorial';
+import { SettingsScreen } from './SettingsScreen';
+import { startMusic, stopMusic } from '../music';
 
 export function TitleScreen() {
   const [showTutorial, setShowTutorial] = useState(false);
+  const [showSettings, setShowSettings] = useState(false);
   const [tutorialChecked, setTutorialChecked] = useState(false);
 
   useEffect(() => {
     hasTutorialBeenSeen().then(seen => setTutorialChecked(true));
+  }, []);
+
+  useEffect(() => {
+    try { startMusic('title'); } catch {}
+    return () => { try { stopMusic(); } catch {} };
   }, []);
 
   const handleNewGame = async () => {
@@ -31,6 +39,12 @@ export function TitleScreen() {
 
   return (
     <View style={styles.container}>
+      <Pressable
+        style={({ pressed }) => [styles.settingsButton, pressed && styles.buttonPressed]}
+        onPress={() => setShowSettings(true)}
+      >
+        <Text style={styles.settingsIcon}>&#x2699;</Text>
+      </Pressable>
       <Logo width={240} />
       <View style={styles.dominoWrap}>
         <Domino size={60} />
@@ -48,6 +62,7 @@ export function TitleScreen() {
         <Text style={styles.howToPlayText}>HOW TO PLAY</Text>
       </Pressable>
       {showTutorial && <Tutorial onComplete={handleTutorialComplete} />}
+      {showSettings && <SettingsScreen onClose={() => setShowSettings(false)} />}
     </View>
   );
 }
@@ -97,5 +112,19 @@ const styles = StyleSheet.create({
   },
   buttonPressed: {
     opacity: 0.7,
+  },
+  settingsButton: {
+    position: 'absolute',
+    top: 16,
+    right: 16,
+    zIndex: 10,
+    padding: 8,
+  },
+  settingsIcon: {
+    fontSize: 28,
+    color: colors.textMuted,
+    ...(Platform.OS === 'web' ? {
+      textShadow: `0 0 8px rgba(136,136,136,0.4)`,
+    } as any : {}),
   },
 });

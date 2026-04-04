@@ -1,11 +1,12 @@
 // src/components/DraftScreen.tsx
-import React from 'react';
+import React, { useEffect } from 'react';
 import { View, Text, Pressable, ScrollView, StyleSheet, Platform } from 'react-native';
 import { colors, fonts, symbolColors } from '../theme';
 import { useMetaStore, UNLOCK_CONDITIONS } from '../meta-store';
 import { useRunStore } from '../store';
 import { SYMBOL_ROSTER, type SymbolId, type SymbolDef } from '../symbols';
 import { SymbolIcon } from '../symbols/index';
+import { startMusic, stopMusic } from '../music';
 
 function SymbolCard({
   def,
@@ -64,6 +65,11 @@ function SymbolCard({
 }
 
 export function DraftScreen() {
+  useEffect(() => {
+    try { startMusic('draft'); } catch {}
+    return () => { try { stopMusic(); } catch {} };
+  }, []);
+
   const selectedLoadout = useMetaStore(s => s.selectedLoadout);
   const unlockedSymbols = useMetaStore(s => s.unlockedSymbols);
   const selectSymbol = useMetaStore(s => s.selectSymbol);
