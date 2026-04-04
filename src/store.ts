@@ -551,6 +551,7 @@ export interface RunState {
   bonusRespins: number;
 
   startRun: () => void;
+  confirmDraft: () => void;
   startLevel: () => void;
   completeLevel: (score: number, threshold: number, respinsLeft: number) => void;
   failLevel: (score: number) => void;
@@ -564,13 +565,20 @@ export const useRunStore = create<RunState>((set, get) => ({
   bonusRespins: 0,
 
   startRun: () => {
+    set({
+      runPhase: 'draft',
+      currentLevel: 1,
+      levelScore: 0,
+      levelConfig: null,
+      bonusRespins: 0,
+    });
+  },
+
+  confirmDraft: () => {
     const config = generateLevelConfig(1);
     set({
       runPhase: 'levelPreview',
-      currentLevel: 1,
-      levelScore: 0,
       levelConfig: config,
-      bonusRespins: 0,
     });
   },
 

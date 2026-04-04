@@ -53,7 +53,7 @@ export interface ScorePopup {
 export type GamePhase = 'placing' | 'ended';
 export type GameResult = 'win' | 'lose' | null;
 export type PlacementMode = 'idle' | 'placed';
-export type RunPhase = 'title' | 'levelPreview' | 'playing' | 'gameOver';
+export type RunPhase = 'title' | 'draft' | 'levelPreview' | 'playing' | 'gameOver';
 
 export interface SpinCellInfo {
   finalSymbol: Symbol;
