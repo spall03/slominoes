@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect } from 'react';
 import { View, ActivityIndicator, SafeAreaView } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
@@ -11,7 +11,6 @@ import { LevelPreviewScreen } from './src/components/LevelPreviewScreen';
 import { PlayingScreen } from './src/components/PlayingScreen';
 import { GameOverScreen } from './src/components/GameOverScreen';
 import { UnlockReveal } from './src/components/UnlockReveal';
-import { Tutorial, hasTutorialBeenSeen } from './src/components/Tutorial';
 import { colors } from './src/theme';
 
 export default function App() {
@@ -26,14 +25,11 @@ export default function App() {
   const loadFromStorage = useMetaStore(s => s.loadFromStorage);
   const pendingUnlock = useMetaStore(s => s.pendingUnlock);
 
-  const [showTutorial, setShowTutorial] = useState<boolean | null>(null);
-
   useEffect(() => {
     loadFromStorage();
-    hasTutorialBeenSeen().then(seen => setShowTutorial(!seen));
   }, [loadFromStorage]);
 
-  if (!fontsLoaded || !metaLoaded || showTutorial === null) {
+  if (!fontsLoaded || !metaLoaded) {
     return (
       <View style={{ flex: 1, backgroundColor: colors.bg, alignItems: 'center', justifyContent: 'center' }}>
         <ActivityIndicator color={colors.cyan} size="large" />
@@ -54,7 +50,6 @@ export default function App() {
         <StatusBar style="light" />
         {screen}
         {pendingUnlock && <UnlockReveal />}
-        {showTutorial && <Tutorial onComplete={() => setShowTutorial(false)} />}
       </SafeAreaView>
     </GestureHandlerRootView>
   );
