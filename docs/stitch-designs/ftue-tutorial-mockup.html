@@ -1,0 +1,578 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;600;700&display=swap" rel="stylesheet">
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    background: #060614;
+    font-family: 'Space Grotesk', sans-serif;
+    color: #fff;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 20px;
+    gap: 40px;
+  }
+
+  h1 {
+    font-size: 14px;
+    letter-spacing: 4px;
+    color: #00E5FF;
+    text-transform: uppercase;
+    text-shadow: 0 0 16px rgba(0,229,255,0.4);
+    margin-bottom: 10px;
+  }
+
+  .phone-frame {
+    width: 375px;
+    min-height: 680px;
+    background: #060614;
+    border: 1px solid #1e1e3a;
+    border-radius: 24px;
+    overflow: hidden;
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .overlay {
+    position: absolute;
+    inset: 0;
+    background: rgba(6,6,20,0.88);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .modal {
+    background: #0a0a1e;
+    border: 1px solid #1e1e3a;
+    border-radius: 16px;
+    padding: 32px 24px;
+    width: 320px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 16px;
+  }
+
+  .step-indicator {
+    display: flex;
+    gap: 6px;
+  }
+  .dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: #1e1e3a;
+  }
+  .dot.active {
+    background: #00E5FF;
+    box-shadow: 0 0 8px rgba(0,229,255,0.4);
+  }
+
+  .modal-title {
+    font-size: 18px;
+    font-weight: 700;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    color: #ffd700;
+    text-shadow: 0 0 12px rgba(255,215,0,0.3);
+    text-align: center;
+  }
+
+  .modal-body {
+    font-size: 14px;
+    color: #ccc;
+    text-align: center;
+    line-height: 1.6;
+  }
+
+  .visual {
+    background: #0d0d20;
+    border: 1px solid #1e1e3a;
+    border-radius: 10px;
+    padding: 16px;
+    width: 100%;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 8px;
+  }
+
+  /* Mini grid for visuals */
+  .mini-grid {
+    display: grid;
+    gap: 2px;
+  }
+  .mini-grid.g5 { grid-template-columns: repeat(5, 1fr); }
+  .mini-grid.g3 { grid-template-columns: repeat(3, 1fr); }
+  .mini-grid.g4 { grid-template-columns: repeat(4, 1fr); }
+
+  .mini-cell {
+    width: 36px;
+    height: 36px;
+    background: #161630;
+    border: 1px solid #1e1e3a;
+    border-radius: 4px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 11px;
+  }
+  .mini-cell.matched {
+    border-color: #ffd700;
+    box-shadow: 0 0 6px rgba(255,215,0,0.3);
+    background: rgba(255,215,0,0.08);
+  }
+  .mini-cell.locked {
+    border-color: rgba(255,215,0,0.35);
+    border-width: 1.5px;
+    background: #1a1a2e;
+  }
+  .mini-cell.empty {
+    background: #0d0d1e;
+    border-style: dashed;
+    border-color: #2a2a50;
+  }
+  .mini-cell.highlight {
+    background: rgba(92,107,192,0.1);
+    border-color: rgba(92,107,192,0.4);
+    border-style: dashed;
+  }
+  .mini-cell.entry {
+    background: rgba(0,229,255,0.08);
+    border-color: rgba(0,229,255,0.4);
+  }
+  .mini-cell.wall {
+    background: #0e0e1e;
+    opacity: 0.5;
+  }
+
+  .sym { display: flex; align-items: center; justify-content: center; }
+  .sym img { width: 24px; height: 24px; }
+  .sym-sm img { width: 18px; height: 18px; }
+  .sym-lg img { width: 30px; height: 30px; }
+
+  .visual-label {
+    font-size: 10px;
+    color: #666;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+  }
+
+  .btn-row {
+    display: flex;
+    gap: 12px;
+    width: 100%;
+  }
+
+  .btn {
+    flex: 1;
+    background: transparent;
+    border: 2px solid #00E5FF;
+    box-shadow: 0 0 12px rgba(0,229,255,0.2);
+    color: #00E5FF;
+    font-family: inherit;
+    font-size: 13px;
+    font-weight: 700;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    padding: 12px;
+    border-radius: 10px;
+    cursor: pointer;
+    text-align: center;
+  }
+  .btn.secondary {
+    border-color: #444;
+    box-shadow: none;
+    color: #888;
+  }
+  .btn.skip {
+    border-color: #333;
+    box-shadow: none;
+    color: #555;
+    flex: 0;
+    padding: 12px 16px;
+  }
+
+  /* Domino tile preview */
+  .domino {
+    display: flex;
+    border: 2px solid #00E5FF;
+    border-radius: 6px;
+    overflow: hidden;
+    box-shadow: 0 0 12px rgba(0,229,255,0.3);
+  }
+  .domino-half {
+    width: 40px;
+    height: 40px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: #161630;
+  }
+  .domino-half + .domino-half {
+    border-left: 1px solid #00E5FF;
+  }
+
+  /* Respin button mock */
+  .respin-mock {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    border: 1px solid #e74c6f;
+    border-radius: 6px;
+    padding: 8px 14px;
+    color: #e74c6f;
+    font-size: 12px;
+    font-weight: 600;
+  }
+  .respin-arrow {
+    font-size: 16px;
+  }
+
+  /* Symbol card mini */
+  .sym-card-row {
+    display: flex;
+    gap: 8px;
+    width: 100%;
+  }
+  .sym-card {
+    flex: 1;
+    background: #0a0a1e;
+    border: 1px solid #1e1e3a;
+    border-radius: 8px;
+    padding: 8px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 4px;
+  }
+  .sym-card .card-name {
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+  }
+  .sym-card .card-ability {
+    font-size: 8px;
+    color: #00E5FF;
+    text-align: center;
+  }
+
+  /* Locked symbol */
+  .locked-card {
+    flex: 1;
+    background: #0a0a1e;
+    border: 1px solid #1e1e3a;
+    border-radius: 8px;
+    padding: 8px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 4px;
+    opacity: 0.5;
+  }
+  .locked-card .q {
+    font-size: 22px;
+    color: #555;
+    font-weight: 700;
+  }
+  .locked-card .hint {
+    font-size: 9px;
+    color: #666;
+    font-style: italic;
+  }
+
+  .step-label {
+    font-size: 10px;
+    color: #555;
+    letter-spacing: 2px;
+    text-align: center;
+  }
+</style>
+</head>
+<body>
+
+<h1>FTUE Tutorial — All 7 Steps</h1>
+
+<!-- STEP 1: Welcome -->
+<div class="phone-frame">
+  <div class="overlay">
+    <div class="modal">
+      <div class="step-indicator">
+        <div class="dot active"></div><div class="dot"></div><div class="dot"></div><div class="dot"></div><div class="dot"></div><div class="dot"></div><div class="dot"></div>
+      </div>
+      <div class="modal-title">Welcome to Slominoes</div>
+      <div class="modal-body">
+        Place domino tiles on the grid. Match 3 or more symbols in a row or column to score points. Beat the target to advance!
+      </div>
+      <div class="visual">
+        <div class="mini-grid g5">
+          <div class="mini-cell empty"></div>
+          <div class="mini-cell"><span class="sym"><img src="../../assets/symbols/lemon.svg"></span></div>
+          <div class="mini-cell empty"></div>
+          <div class="mini-cell empty"></div>
+          <div class="mini-cell empty"></div>
+          <div class="mini-cell empty"></div>
+          <div class="mini-cell matched"><span class="sym"><img src="../../assets/symbols/cherry.svg"></span></div>
+          <div class="mini-cell matched"><span class="sym"><img src="../../assets/symbols/cherry.svg"></span></div>
+          <div class="mini-cell matched"><span class="sym"><img src="../../assets/symbols/cherry.svg"></span></div>
+          <div class="mini-cell empty"></div>
+          <div class="mini-cell empty"></div>
+          <div class="mini-cell"><span class="sym"><img src="../../assets/symbols/bell.svg"></span></div>
+          <div class="mini-cell empty"></div>
+          <div class="mini-cell"><span class="sym"><img src="../../assets/symbols/seven.svg"></span></div>
+          <div class="mini-cell empty"></div>
+        </div>
+        <div class="visual-label">3 cherries in a row = match!</div>
+      </div>
+      <div class="btn-row">
+        <div class="btn skip">Skip</div>
+        <div class="btn">Next →</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- STEP 2: Entry Points -->
+<div class="phone-frame">
+  <div class="overlay">
+    <div class="modal">
+      <div class="step-indicator">
+        <div class="dot"></div><div class="dot active"></div><div class="dot"></div><div class="dot"></div><div class="dot"></div><div class="dot"></div><div class="dot"></div>
+      </div>
+      <div class="modal-title">Entry Points</div>
+      <div class="modal-body">
+        Choose an entry point arrow. You can only place tiles in cells reachable from that entry.
+      </div>
+      <div class="visual">
+        <div style="display:flex; flex-direction:column; align-items:center; gap:4px;">
+          <div><img src="../../assets/symbols/arrow-down.svg" width="24" height="24"></div>
+          <div class="mini-grid g4">
+            <div class="mini-cell highlight"></div>
+            <div class="mini-cell entry"></div>
+            <div class="mini-cell entry"></div>
+            <div class="mini-cell highlight"></div>
+            <div class="mini-cell highlight"></div>
+            <div class="mini-cell highlight"></div>
+            <div class="mini-cell highlight"></div>
+            <div class="mini-cell highlight"></div>
+            <div class="mini-cell"><span class="sym sym-sm"><img src="../../assets/symbols/bar.svg"></span></div>
+            <div class="mini-cell highlight"></div>
+            <div class="mini-cell highlight"></div>
+            <div class="mini-cell wall"><img src="../../assets/symbols/wall.svg" width="18" height="18"></div>
+            <div class="mini-cell highlight"></div>
+            <div class="mini-cell highlight"></div>
+            <div class="mini-cell highlight"></div>
+            <div class="mini-cell highlight"></div>
+          </div>
+        </div>
+        <div class="visual-label">Dashed cells = reachable from top entry</div>
+      </div>
+      <div class="btn-row">
+        <div class="btn secondary">← Back</div>
+        <div class="btn">Next →</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- STEP 3: Tile Placement -->
+<div class="phone-frame">
+  <div class="overlay">
+    <div class="modal">
+      <div class="step-indicator">
+        <div class="dot"></div><div class="dot"></div><div class="dot active"></div><div class="dot"></div><div class="dot"></div><div class="dot"></div><div class="dot"></div>
+      </div>
+      <div class="modal-title">Place Your Tile</div>
+      <div class="modal-body">
+        Tap a cell to place. Tap again to rotate. Hold to confirm placement.
+      </div>
+      <div class="visual">
+        <div style="display:flex; align-items:center; gap:16px;">
+          <div class="domino">
+            <div class="domino-half"><span class="sym sym-sm"><img src="../../assets/symbols/cherry.svg"></span></div>
+            <div class="domino-half"><span class="sym sym-sm"><img src="../../assets/symbols/bell.svg"></span></div>
+          </div>
+          <div style="color:#666; font-size:24px;">→</div>
+          <div class="mini-grid g3" style="gap:2px;">
+            <div class="mini-cell empty"></div>
+            <div class="mini-cell empty"></div>
+            <div class="mini-cell empty"></div>
+            <div class="mini-cell empty"></div>
+            <div class="mini-cell entry"><span class="sym sym-sm"><img src="../../assets/symbols/cherry.svg"></span></div>
+            <div class="mini-cell entry"><span class="sym sym-sm"><img src="../../assets/symbols/bell.svg"></span></div>
+            <div class="mini-cell empty"></div>
+            <div class="mini-cell empty"></div>
+            <div class="mini-cell empty"></div>
+          </div>
+        </div>
+        <div class="visual-label">Tap to rotate · Hold to confirm</div>
+      </div>
+      <div class="btn-row">
+        <div class="btn secondary">← Back</div>
+        <div class="btn">Next →</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- STEP 4: Locking -->
+<div class="phone-frame">
+  <div class="overlay">
+    <div class="modal">
+      <div class="step-indicator">
+        <div class="dot"></div><div class="dot"></div><div class="dot"></div><div class="dot active"></div><div class="dot"></div><div class="dot"></div><div class="dot"></div>
+      </div>
+      <div class="modal-title">Locked Matches</div>
+      <div class="modal-body">
+        When symbols match, they lock in place. Locked cells are protected from respins.
+      </div>
+      <div class="visual">
+        <div class="mini-grid g5">
+          <div class="mini-cell empty"></div>
+          <div class="mini-cell"><span class="sym sym-sm"><img src="../../assets/symbols/lemon.svg"></span></div>
+          <div class="mini-cell empty"></div>
+          <div class="mini-cell empty"></div>
+          <div class="mini-cell empty"></div>
+          <div class="mini-cell empty"></div>
+          <div class="mini-cell locked"><span class="sym sym-sm"><img src="../../assets/symbols/cherry.svg"></span></div>
+          <div class="mini-cell locked"><span class="sym sym-sm"><img src="../../assets/symbols/cherry.svg"></span></div>
+          <div class="mini-cell locked"><span class="sym sym-sm"><img src="../../assets/symbols/cherry.svg"></span></div>
+          <div class="mini-cell empty"></div>
+          <div class="mini-cell empty"></div>
+          <div class="mini-cell"><span class="sym sym-sm"><img src="../../assets/symbols/seven.svg"></span></div>
+          <div class="mini-cell empty"></div>
+          <div class="mini-cell"><span class="sym sym-sm"><img src="../../assets/symbols/bell.svg"></span></div>
+          <div class="mini-cell empty"></div>
+        </div>
+        <div class="visual-label">Gold border = locked · safe from respins</div>
+      </div>
+      <div class="btn-row">
+        <div class="btn secondary">← Back</div>
+        <div class="btn">Next →</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- STEP 5: Respins -->
+<div class="phone-frame">
+  <div class="overlay">
+    <div class="modal">
+      <div class="step-indicator">
+        <div class="dot"></div><div class="dot"></div><div class="dot"></div><div class="dot"></div><div class="dot active"></div><div class="dot"></div><div class="dot"></div>
+      </div>
+      <div class="modal-title">Respins</div>
+      <div class="modal-body">
+        Respin a row or column to shuffle its symbols. Locked cells stay put. Spend score to buy more respins.
+      </div>
+      <div class="visual">
+        <div style="display:flex; align-items:center; gap:12px;">
+          <div class="mini-grid g4" style="gap:2px;">
+            <div class="mini-cell locked"><span class="sym sym-sm"><img src="../../assets/symbols/cherry.svg"></span></div>
+            <div class="mini-cell" style="background:rgba(231,76,111,0.1); border-color:rgba(231,76,111,0.4);"><span class="sym sym-sm"><img src="../../assets/symbols/lemon.svg"></span></div>
+            <div class="mini-cell" style="background:rgba(231,76,111,0.1); border-color:rgba(231,76,111,0.4);"><span class="sym sym-sm"><img src="../../assets/symbols/bar.svg"></span></div>
+            <div class="mini-cell" style="background:rgba(231,76,111,0.1); border-color:rgba(231,76,111,0.4);"><span class="sym sym-sm"><img src="../../assets/symbols/seven.svg"></span></div>
+          </div>
+          <div class="respin-mock">
+            <img src="../../assets/symbols/respin-row.svg" width="20" height="20">
+          </div>
+        </div>
+        <div style="color:#666; font-size:18px;">↓</div>
+        <div class="mini-grid g4" style="gap:2px;">
+          <div class="mini-cell locked"><span class="sym sym-sm"><img src="../../assets/symbols/cherry.svg"></span></div>
+          <div class="mini-cell matched"><span class="sym sym-sm"><img src="../../assets/symbols/cherry.svg"></span></div>
+          <div class="mini-cell matched"><span class="sym sym-sm"><img src="../../assets/symbols/cherry.svg"></span></div>
+          <div class="mini-cell"><span class="sym sym-sm"><img src="../../assets/symbols/bell.svg"></span></div>
+        </div>
+        <div class="visual-label">Locked cherry stays · others shuffle · new match!</div>
+      </div>
+      <div class="btn-row">
+        <div class="btn secondary">← Back</div>
+        <div class="btn">Next →</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- STEP 6: Symbol Abilities -->
+<div class="phone-frame">
+  <div class="overlay">
+    <div class="modal">
+      <div class="step-indicator">
+        <div class="dot"></div><div class="dot"></div><div class="dot"></div><div class="dot"></div><div class="dot"></div><div class="dot active"></div><div class="dot"></div>
+      </div>
+      <div class="modal-title">Symbol Abilities</div>
+      <div class="modal-body">
+        Each symbol has unique stats and powers. Choose your loadout before each run to build combos.
+      </div>
+      <div class="visual">
+        <div class="sym-card-row">
+          <div class="sym-card">
+            <span class="sym sym-lg"><img src="../../assets/symbols/cherry.svg"></span>
+            <div class="card-name" style="color:#FF3B82;">Cherry</div>
+            <div class="card-ability">Match 3 · 10pts</div>
+          </div>
+          <div class="sym-card" style="border-color: #E040A0;">
+            <span class="sym sym-lg"><img src="../../assets/symbols/jam.svg"></span>
+            <div class="card-name" style="color:#E040A0;">Jam</div>
+            <div class="card-ability">2x cherry score in same row</div>
+          </div>
+          <div class="sym-card" style="border-color: #BBBBFF;">
+            <span class="sym sym-lg"><img src="../../assets/symbols/ghost.svg"></span>
+            <div class="card-name" style="color:#BBBBFF;">Ghost</div>
+            <div class="card-ability">Doesn't lock when matched</div>
+          </div>
+        </div>
+      </div>
+      <div class="btn-row">
+        <div class="btn secondary">← Back</div>
+        <div class="btn">Next →</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- STEP 7: Unlocking -->
+<div class="phone-frame">
+  <div class="overlay">
+    <div class="modal">
+      <div class="step-indicator">
+        <div class="dot"></div><div class="dot"></div><div class="dot"></div><div class="dot"></div><div class="dot"></div><div class="dot"></div><div class="dot active"></div>
+      </div>
+      <div class="modal-title">Unlock New Symbols</div>
+      <div class="modal-body">
+        Play to unlock new symbols. Each has a hidden challenge — the hints will guide you.
+      </div>
+      <div class="visual">
+        <div class="sym-card-row">
+          <div class="locked-card">
+            <div class="q">?</div>
+            <div class="hint">Fill the line</div>
+          </div>
+          <div class="locked-card">
+            <div class="q">?</div>
+            <div class="hint">Ring the bell</div>
+          </div>
+          <div class="locked-card">
+            <div class="q">?</div>
+            <div class="hint">Conquer all ten</div>
+          </div>
+        </div>
+        <div class="visual-label">Discover 15 unlockable symbols</div>
+      </div>
+      <div class="btn-row">
+        <div class="btn" style="border-color:#ffd700; color:#ffd700; box-shadow: 0 0 12px rgba(255,215,0,0.3);">Let's Play!</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+</body>
+</html>
