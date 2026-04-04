@@ -1,6 +1,6 @@
 // src/types.ts
 
-export type Symbol = 'cherry' | 'lemon' | 'bar' | 'bell' | 'seven' | 'wall';
+export type Symbol = string;
 
 export interface EntrySpot {
   id: number;

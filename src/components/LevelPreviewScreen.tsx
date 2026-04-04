@@ -4,6 +4,7 @@ import { View, Text, Pressable, ScrollView, StyleSheet } from 'react-native';
 import { colors, fonts } from '../theme';
 import { BOARD_SIZE } from '../constants';
 import { useRunStore } from '../store';
+import { useMetaStore } from '../meta-store';
 import { getEntrySpots } from '../level';
 
 export function LevelPreviewScreen() {
@@ -86,7 +87,10 @@ export function LevelPreviewScreen() {
 
       <Pressable
         style={({ pressed }) => [styles.startButton, pressed && styles.buttonPressed]}
-        onPress={() => useRunStore.getState().startLevel()}
+        onPress={() => {
+          useMetaStore.getState().startLevel();
+          useRunStore.getState().startLevel();
+        }}
       >
         <Text style={styles.startButtonText}>START LEVEL</Text>
       </Pressable>

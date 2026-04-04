@@ -92,7 +92,11 @@ export function DraftScreen() {
   const handleStartRun = () => {
     if (selectedLoadout.length < 1) return;
     metaStartRun();
-    confirmDraft();
+    // Build loadout defs from selected IDs
+    const loadoutDefs = selectedLoadout
+      .map(id => SYMBOL_ROSTER.find(s => s.id === id))
+      .filter(Boolean) as import('../symbols').SymbolDef[];
+    confirmDraft(loadoutDefs);
   };
 
   return (

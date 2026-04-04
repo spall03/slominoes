@@ -1,14 +1,27 @@
 // src/components/GameOverScreen.tsx
-import React from 'react';
+import React, { useEffect, useRef } from 'react';
 import { View, Text, Pressable, StyleSheet } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { colors, fonts } from '../theme';
 import { NUM_LEVELS } from '../constants';
 import { useRunStore } from '../store';
+import { useMetaStore } from '../meta-store';
 
 export function GameOverScreen() {
   const { currentLevel, levelScore, levelConfig } = useRunStore();
+  const endRun = useMetaStore(s => s.endRun);
+  const endRunCalled = useRef(false);
+
   const won = currentLevel >= NUM_LEVELS && levelScore >= 0;
+
+  // Call endRun once when this screen mounts
+  useEffect(() => {
+    if (!endRunCalled.current) {
+      endRunCalled.current = true;
+      endRun(levelScore, currentLevel, won);
+    }
+  }, [endRun, levelScore, currentLevel, won]);
+
   const threshold = levelConfig?.threshold ?? 0;
   const progress = threshold > 0 ? Math.min(1, levelScore / threshold) : 1;
 

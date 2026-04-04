@@ -32,9 +32,19 @@ import {
   generateLevelConfig,
   getEntrySpots,
   generateTileQueue,
+  generateTileQueueFromFreqs,
   getRandomSymbol,
+  getRandomSymbolFromFreqs,
 } from './level';
 import { findMatches, calculateScore, matchKey } from './scoring';
+import { buildFrequencyTable, SYMBOL_ROSTER, type SymbolDef, type SymbolId } from './symbols';
+
+// Lazy import to avoid circular dependency — meta store imports are deferred
+let _metaStore: any = null;
+function getMetaStore() {
+  if (!_metaStore) _metaStore = require('./meta-store').useMetaStore;
+  return _metaStore;
+}
 
 // =============================================================================
 // SHARED REF
@@ -77,6 +87,7 @@ export interface GameState {
   pendingSpinGrid: Grid | null;
   pendingSpinScore: number;
   pendingSpinAnimState: Partial<GameState> | null;
+  loadoutFreqs: Map<string, number> | null;
 
   selectEntry: (index: number) => void;
   deselectEntry: () => void;
@@ -93,11 +104,13 @@ export interface GameState {
   buyRespin: () => void;
   getNextRespinCost: () => number;
   clearSpinAnimation: () => void;
-  resetGame: (config?: LevelConfig) => void;
+  resetGame: (config?: LevelConfig, loadoutFreqs?: Map<string, number>) => void;
 }
 
-export function createInitialState(config: LevelConfig = generateLevelConfig(1)) {
-  const queue = generateTileQueue(config.tilesPerLevel, config.symbolCount);
+export function createInitialState(config: LevelConfig = generateLevelConfig(1), loadoutFreqs?: Map<string, number>) {
+  const queue = loadoutFreqs
+    ? generateTileQueueFromFreqs(config.tilesPerLevel, loadoutFreqs)
+    : generateTileQueue(config.tilesPerLevel, config.symbolCount);
   const spots = getEntrySpots(config.entrySpotCount);
   return {
     levelConfig: config,
@@ -125,6 +138,7 @@ export function createInitialState(config: LevelConfig = generateLevelConfig(1))
     pendingSpinGrid: null as Grid | null,
     pendingSpinScore: 0,
     pendingSpinAnimState: null as Partial<GameState> | null,
+    loadoutFreqs: loadoutFreqs ?? null,
   };
 }
 
@@ -222,6 +236,19 @@ export const useGameStore = create<GameState>((set, get) => ({
     newGrid[row2][col2] = symbolSecond;
 
     const { score: newTotalScore, matches } = calculateScore(newGrid);
+
+    // Record stats for unlock tracking
+    try {
+      const meta = getMetaStore()?.getState();
+      if (meta) {
+        for (const m of matches) {
+          meta.recordMatchLength(m.length);
+          if (m.symbol === 'cherry') meta.recordCherryScore(m.score);
+          if (m.symbol === 'bell') meta.recordBellMatch();
+        }
+        meta.recordLockedCellCount(get().lockedCells.size + matches.reduce((n, m) => n + m.cells.length, 0));
+      }
+    } catch {}
 
     // Lock cells that are part of matches
     const newLocked = new Set(get().lockedCells);
@@ -391,11 +418,15 @@ export const useGameStore = create<GameState>((set, get) => ({
   },
 
   respinLine: (type: 'row' | 'col', index: number) => {
-    const { phase, respinsRemaining, grid, score, matchingCells, spinningCells, lockedCells } = get();
+    const { phase, respinsRemaining, grid, score, matchingCells, spinningCells, lockedCells, loadoutFreqs } = get();
     if (phase !== 'placing' || respinsRemaining <= 0) return;
     if (index < 0 || index >= BOARD_SIZE) return;
     if (matchingCells.size > 0) return; // Block respins during animation
     if (spinningCells.size > 0) return; // Block respins during active spin
+
+    const getSymbol = () => loadoutFreqs
+      ? getRandomSymbolFromFreqs(loadoutFreqs)
+      : getRandomSymbol(get().levelConfig.symbolCount);
 
     const matchesBefore = findMatches(grid);
 
@@ -404,9 +435,9 @@ export const useGameStore = create<GameState>((set, get) => ({
 
     if (type === 'row') {
       for (let col = 0; col < BOARD_SIZE; col++) {
-        if (lockedCells.has(`${index},${col}`)) continue; // Skip locked cells
+        if (lockedCells.has(`${index},${col}`)) continue;
         if (newGrid[index][col] !== null && newGrid[index][col] !== 'wall') {
-          const newSymbol = getRandomSymbol(get().levelConfig.symbolCount);
+          const newSymbol = getSymbol();
           newGrid[index][col] = newSymbol;
           newSpinningCells.set(`${index},${col}`, {
             finalSymbol: newSymbol,
@@ -417,9 +448,9 @@ export const useGameStore = create<GameState>((set, get) => ({
       }
     } else {
       for (let row = 0; row < BOARD_SIZE; row++) {
-        if (lockedCells.has(`${row},${index}`)) continue; // Skip locked cells
+        if (lockedCells.has(`${row},${index}`)) continue;
         if (newGrid[row][index] !== null && newGrid[row][index] !== 'wall') {
-          const newSymbol = getRandomSymbol(get().levelConfig.symbolCount);
+          const newSymbol = getSymbol();
           newGrid[row][index] = newSymbol;
           newSpinningCells.set(`${row},${index}`, {
             finalSymbol: newSymbol,
@@ -511,6 +542,7 @@ export const useGameStore = create<GameState>((set, get) => ({
       respinsRemaining: get().respinsRemaining + 1,
       respinsBought: respinsBought + 1,
     });
+    try { getMetaStore()?.getState()?.recordRespinBought(); } catch {}
   },
 
   clearSpinAnimation: () => {
@@ -536,7 +568,8 @@ export const useGameStore = create<GameState>((set, get) => ({
     });
   },
 
-  resetGame: (config?: LevelConfig) => set(createInitialState(config ?? generateLevelConfig(1))),
+  resetGame: (config?: LevelConfig, loadoutFreqs?: Map<string, number>) =>
+    set(createInitialState(config ?? generateLevelConfig(1), loadoutFreqs ?? get().loadoutFreqs ?? undefined)),
 }));
 
 // =============================================================================
@@ -551,7 +584,7 @@ export interface RunState {
   bonusRespins: number;
 
   startRun: () => void;
-  confirmDraft: () => void;
+  confirmDraft: (loadout: SymbolDef[]) => void;
   startLevel: () => void;
   completeLevel: (score: number, threshold: number, respinsLeft: number) => void;
   failLevel: (score: number) => void;
@@ -574,12 +607,11 @@ export const useRunStore = create<RunState>((set, get) => ({
     });
   },
 
-  confirmDraft: () => {
+  confirmDraft: (loadout: SymbolDef[]) => {
+    const freqs = buildFrequencyTable(loadout);
     const config = generateLevelConfig(1);
-    set({
-      runPhase: 'levelPreview',
-      levelConfig: config,
-    });
+    set({ runPhase: 'levelPreview', levelConfig: config });
+    useGameStore.setState({ loadoutFreqs: freqs });
   },
 
   startLevel: () => {
@@ -588,7 +620,9 @@ export const useRunStore = create<RunState>((set, get) => ({
     const config = bonusRespins > 0
       ? { ...levelConfig, respins: levelConfig.respins + bonusRespins }
       : levelConfig;
-    useGameStore.getState().resetGame(config);
+    // Preserve loadout freqs from previous level
+    const freqs = useGameStore.getState().loadoutFreqs;
+    useGameStore.getState().resetGame(config, freqs ?? undefined);
     set({ runPhase: 'playing' });
   },
 

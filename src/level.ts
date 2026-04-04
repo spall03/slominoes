@@ -106,3 +106,32 @@ export function generateTileQueue(tilesPerLevel: number = TILES_PER_LEVEL, symbo
     generateTile(`tile-${i}`, symbolCount)
   );
 }
+
+// =============================================================================
+// LOADOUT-AWARE TILE GENERATION
+// =============================================================================
+
+/** Generate a random symbol from a frequency table (Map<string, number>) */
+export function getRandomSymbolFromFreqs(freqs: Map<string, number>): Symbol {
+  let total = 0;
+  for (const f of freqs.values()) total += f;
+  let roll = Math.random() * total;
+  for (const [sym, freq] of freqs) {
+    if (sym === 'wall') continue;
+    roll -= freq;
+    if (roll <= 0) return sym as Symbol;
+  }
+  return freqs.keys().next().value as Symbol;
+}
+
+/** Generate a tile queue using a loadout's frequency table */
+export function generateTileQueueFromFreqs(
+  tilesPerLevel: number,
+  freqs: Map<string, number>,
+): Tile[] {
+  return Array.from({ length: tilesPerLevel }, (_, i) => ({
+    id: `tile-${i}`,
+    symbolA: getRandomSymbolFromFreqs(freqs),
+    symbolB: getRandomSymbolFromFreqs(freqs),
+  }));
+}
