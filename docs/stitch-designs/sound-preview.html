@@ -1,0 +1,307 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;600;700&display=swap" rel="stylesheet">
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    background: #060614;
+    font-family: 'Space Grotesk', sans-serif;
+    color: #fff;
+    padding: 40px 20px;
+    max-width: 500px;
+    margin: 0 auto;
+  }
+  h1 {
+    font-size: 16px;
+    letter-spacing: 4px;
+    color: #00E5FF;
+    text-transform: uppercase;
+    text-shadow: 0 0 16px rgba(0,229,255,0.4);
+    text-align: center;
+    margin-bottom: 8px;
+  }
+  h2 {
+    font-size: 11px;
+    letter-spacing: 3px;
+    color: #555;
+    text-transform: uppercase;
+    text-align: center;
+    margin-bottom: 32px;
+  }
+  .sound-list {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+  .sound-btn {
+    background: #0a0a1e;
+    border: 1px solid #1e1e3a;
+    border-radius: 10px;
+    padding: 16px 20px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    cursor: pointer;
+    transition: border-color 0.2s, box-shadow 0.2s;
+  }
+  .sound-btn:hover {
+    border-color: #00E5FF;
+    box-shadow: 0 0 12px rgba(0,229,255,0.2);
+  }
+  .sound-btn:active {
+    background: #111127;
+  }
+  .sound-name {
+    font-size: 14px;
+    font-weight: 600;
+    color: #e6e3f9;
+    letter-spacing: 1px;
+  }
+  .sound-desc {
+    font-size: 11px;
+    color: #666;
+    margin-top: 2px;
+  }
+  .sound-play {
+    font-size: 11px;
+    color: #00E5FF;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    font-weight: 700;
+  }
+  .divider {
+    height: 1px;
+    background: #1e1e3a;
+    margin: 16px 0;
+  }
+</style>
+</head>
+<body>
+
+<h1>Sound Effects Preview</h1>
+<h2>Click each to preview · All synthesized</h2>
+
+<div class="sound-list">
+
+  <div class="sound-btn" onclick="playTilePlace()">
+    <div>
+      <div class="sound-name">Tile Place</div>
+      <div class="sound-desc">Confirming tile placement</div>
+    </div>
+    <div class="sound-play">▶ Play</div>
+  </div>
+
+  <div class="sound-btn" onclick="playMatch()">
+    <div>
+      <div class="sound-name">Match Formed</div>
+      <div class="sound-desc">3+ symbols matched in a row</div>
+    </div>
+    <div class="sound-play">▶ Play</div>
+  </div>
+
+  <div class="sound-btn" onclick="playBigMatch()">
+    <div>
+      <div class="sound-name">Big Match</div>
+      <div class="sound-desc">5+ symbols matched — rare event</div>
+    </div>
+    <div class="sound-play">▶ Play</div>
+  </div>
+
+  <div class="sound-btn" onclick="playLock()">
+    <div>
+      <div class="sound-name">Lock</div>
+      <div class="sound-desc">Cells locking after match</div>
+    </div>
+    <div class="sound-play">▶ Play</div>
+  </div>
+
+  <div class="sound-btn" onclick="playRespin()">
+    <div>
+      <div class="sound-name">Respin</div>
+      <div class="sound-desc">Row/column shuffling</div>
+    </div>
+    <div class="sound-play">▶ Play</div>
+  </div>
+
+  <div class="sound-btn" onclick="playBuyRespin()">
+    <div>
+      <div class="sound-name">Buy Respin</div>
+      <div class="sound-desc">Spending score for a respin</div>
+    </div>
+    <div class="sound-play">▶ Play</div>
+  </div>
+
+  <div class="sound-btn" onclick="playRotate()">
+    <div>
+      <div class="sound-name">Rotate Tile</div>
+      <div class="sound-desc">Rotating tile before placement</div>
+    </div>
+    <div class="sound-play">▶ Play</div>
+  </div>
+
+  <div class="sound-btn" onclick="playButtonTap()">
+    <div>
+      <div class="sound-name">Button Tap</div>
+      <div class="sound-desc">UI button press</div>
+    </div>
+    <div class="sound-play">▶ Play</div>
+  </div>
+
+  <div class="divider"></div>
+
+  <div class="sound-btn" onclick="playLevelWin()">
+    <div>
+      <div class="sound-name">Level Win</div>
+      <div class="sound-desc">Beat the level threshold</div>
+    </div>
+    <div class="sound-play">▶ Play</div>
+  </div>
+
+  <div class="sound-btn" onclick="playLevelLose()">
+    <div>
+      <div class="sound-name">Level Lose</div>
+      <div class="sound-desc">Failed to reach threshold</div>
+    </div>
+    <div class="sound-play">▶ Play</div>
+  </div>
+
+  <div class="sound-btn" onclick="playUnlock()">
+    <div>
+      <div class="sound-name">Symbol Unlock</div>
+      <div class="sound-desc">New symbol unlocked — rare event</div>
+    </div>
+    <div class="sound-play">▶ Play</div>
+  </div>
+
+</div>
+
+<script>
+const ctx = new (window.AudioContext || window.webkitAudioContext)();
+
+function playTone(freq, duration, type = 'sine', volume = 0.3, delay = 0) {
+  const osc = ctx.createOscillator();
+  const gain = ctx.createGain();
+  osc.type = type;
+  osc.frequency.setValueAtTime(freq, ctx.currentTime + delay);
+  gain.gain.setValueAtTime(volume, ctx.currentTime + delay);
+  gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + delay + duration);
+  osc.connect(gain);
+  gain.connect(ctx.destination);
+  osc.start(ctx.currentTime + delay);
+  osc.stop(ctx.currentTime + delay + duration);
+}
+
+function playNoise(duration, volume = 0.1, delay = 0) {
+  const bufferSize = ctx.sampleRate * duration;
+  const buffer = ctx.createBuffer(1, bufferSize, ctx.sampleRate);
+  const data = buffer.getChannelData(0);
+  for (let i = 0; i < bufferSize; i++) {
+    data[i] = Math.random() * 2 - 1;
+  }
+  const source = ctx.createBufferSource();
+  source.buffer = buffer;
+  const gain = ctx.createGain();
+  const filter = ctx.createBiquadFilter();
+  filter.type = 'highpass';
+  filter.frequency.setValueAtTime(4000, ctx.currentTime + delay);
+  gain.gain.setValueAtTime(volume, ctx.currentTime + delay);
+  gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + delay + duration);
+  source.connect(filter);
+  filter.connect(gain);
+  gain.connect(ctx.destination);
+  source.start(ctx.currentTime + delay);
+}
+
+// 1. Tile Place — short, snappy click with a warm tone
+function playTilePlace() {
+  playTone(800, 0.06, 'square', 0.15);
+  playTone(1200, 0.04, 'sine', 0.1, 0.02);
+}
+
+// 2. Match Formed — ascending arpeggio, bright and rewarding
+function playMatch() {
+  playTone(523, 0.12, 'sine', 0.2);       // C5
+  playTone(659, 0.12, 'sine', 0.2, 0.08); // E5
+  playTone(784, 0.18, 'sine', 0.25, 0.16); // G5
+}
+
+// 3. Big Match — longer arpeggio with shimmer
+function playBigMatch() {
+  playTone(523, 0.1, 'sine', 0.2);         // C5
+  playTone(659, 0.1, 'sine', 0.2, 0.07);   // E5
+  playTone(784, 0.1, 'sine', 0.2, 0.14);   // G5
+  playTone(1047, 0.1, 'sine', 0.25, 0.21); // C6
+  playTone(1319, 0.3, 'sine', 0.2, 0.28);  // E6
+  playNoise(0.15, 0.04, 0.28);             // shimmer
+}
+
+// 4. Lock — metallic click
+function playLock() {
+  playTone(2000, 0.03, 'square', 0.1);
+  playTone(1500, 0.05, 'triangle', 0.08, 0.02);
+}
+
+// 5. Respin — descending whir, slot machine feel
+function playRespin() {
+  for (let i = 0; i < 8; i++) {
+    const freq = 1200 - i * 80;
+    playTone(freq, 0.04, 'sawtooth', 0.06, i * 0.035);
+  }
+  playNoise(0.25, 0.03);
+}
+
+// 6. Buy Respin — coin spend: two descending tones
+function playBuyRespin() {
+  playTone(880, 0.08, 'sine', 0.15);
+  playTone(660, 0.08, 'sine', 0.15, 0.06);
+  playTone(440, 0.12, 'triangle', 0.1, 0.12);
+}
+
+// 7. Rotate — quick tick
+function playRotate() {
+  playTone(1400, 0.03, 'triangle', 0.08);
+}
+
+// 8. Button Tap — soft pop
+function playButtonTap() {
+  playTone(600, 0.04, 'sine', 0.1);
+  playTone(900, 0.03, 'sine', 0.06, 0.02);
+}
+
+// 9. Level Win — triumphant fanfare
+function playLevelWin() {
+  playTone(523, 0.15, 'sine', 0.2);        // C5
+  playTone(659, 0.15, 'sine', 0.2, 0.12);  // E5
+  playTone(784, 0.15, 'sine', 0.2, 0.24);  // G5
+  playTone(1047, 0.4, 'sine', 0.3, 0.36);  // C6
+  playTone(1047, 0.4, 'triangle', 0.1, 0.36); // C6 harmony
+  playNoise(0.2, 0.03, 0.36);
+}
+
+// 10. Level Lose — descending sad tone
+function playLevelLose() {
+  playTone(440, 0.2, 'sine', 0.2);         // A4
+  playTone(392, 0.2, 'sine', 0.18, 0.15);  // G4
+  playTone(330, 0.2, 'sine', 0.15, 0.3);   // E4
+  playTone(262, 0.5, 'sine', 0.12, 0.45);  // C4
+}
+
+// 11. Symbol Unlock — magical reveal
+function playUnlock() {
+  // Rising shimmer
+  for (let i = 0; i < 6; i++) {
+    const freq = 400 + i * 150;
+    playTone(freq, 0.15, 'sine', 0.1, i * 0.08);
+  }
+  // Final chord
+  playTone(784, 0.5, 'sine', 0.2, 0.5);   // G5
+  playTone(988, 0.5, 'sine', 0.15, 0.5);  // B5
+  playTone(1175, 0.5, 'sine', 0.15, 0.5); // D6
+  playNoise(0.3, 0.05, 0.5);              // sparkle
+}
+</script>
+
+</body>
+</html>

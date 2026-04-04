@@ -3,6 +3,7 @@ import React, { useEffect, useRef } from 'react';
 import { View, Text, Pressable, Animated, StyleSheet, Platform } from 'react-native';
 import { colors, fonts, symbolColors } from '../theme';
 import { useMetaStore, UNLOCK_CONDITIONS } from '../meta-store';
+import { playUnlock } from '../sound';
 import { SYMBOL_ROSTER, type SymbolId } from '../symbols';
 import { SymbolIcon } from '../symbols/index';
 
@@ -26,6 +27,7 @@ export function UnlockReveal() {
           useNativeDriver: true,
         }),
       ]).start();
+      try { playUnlock(); } catch {}
     } else {
       fadeAnim.setValue(0);
       scaleAnim.setValue(0.8);

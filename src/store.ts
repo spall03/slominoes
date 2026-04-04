@@ -38,6 +38,7 @@ import {
 } from './level';
 import { findMatches, calculateScore, matchKey } from './scoring';
 import { buildFrequencyTable, SYMBOL_ROSTER, hasNoLock, getRespinMatchBonus, getEntrySpotCount, type SymbolDef, type SymbolId } from './symbols';
+import * as Sound from './sound';
 import {
   calculateScoreWithAbilities,
   evaluateOnPlace,
@@ -239,6 +240,7 @@ export const useGameStore = create<GameState>((set, get) => ({
       const newRotation = ((rotation + i) % 4) as Rotation;
       if (canPlaceTileWithEntry(grid, placedPosition.row, placedPosition.col, newRotation, reachableCells, vines)) {
         set({ rotation: newRotation });
+        try { Sound.playRotate(); } catch {}
         return;
       }
     }
@@ -426,6 +428,19 @@ export const useGameStore = create<GameState>((set, get) => ({
     if (extraRespins > 0) {
       set({ respinsRemaining: get().respinsRemaining + extraRespins });
     }
+
+    // Sound effects
+    try {
+      Sound.playTilePlace();
+      if (matches.length > 0) {
+        const maxLen = Math.max(...matches.map(m => m.length));
+        setTimeout(() => {
+          if (maxLen >= 5) Sound.playBigMatch();
+          else Sound.playMatch();
+        }, 50);
+        setTimeout(() => Sound.playLock(), 200);
+      }
+    } catch {}
 
     // Trigger match animation for matches involving newly placed cells
     if (matches.length > 0) {
@@ -623,6 +638,7 @@ export const useGameStore = create<GameState>((set, get) => ({
     }
 
     // Store pending results — grid/score/anim deferred until spin animation completes
+    try { Sound.playRespin(); } catch {}
     set({
       respinsRemaining: newRespins,
       spinningCells: newSpinningCells,
@@ -648,6 +664,7 @@ export const useGameStore = create<GameState>((set, get) => ({
       respinsBought: respinsBought + 1,
     });
     try { getMetaStore()?.getState()?.recordRespinBought(); } catch {}
+    try { Sound.playBuyRespin(); } catch {}
   },
 
   clearSpinAnimation: () => {
@@ -817,9 +834,11 @@ export const useRunStore = create<RunState>((set, get) => ({
     else if (excessPct >= 0.05) bonus = 1;
 
     if (currentLevel >= NUM_LEVELS) {
+      try { Sound.playLevelWin(); } catch {}
       set({ runPhase: 'gameOver', levelScore: score, bonusRespins: 0 });
       return;
     }
+    try { Sound.playLevelWin(); } catch {}
     const nextLevel = currentLevel + 1;
     const config = generateLevelConfig(nextLevel);
     set({
@@ -832,6 +851,7 @@ export const useRunStore = create<RunState>((set, get) => ({
   },
 
   failLevel: (score: number) => {
+    try { Sound.playLevelLose(); } catch {}
     set({ runPhase: 'gameOver', levelScore: score });
   },
 }));
