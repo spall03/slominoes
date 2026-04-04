@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;600;700&display=swap" rel="stylesheet">
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    background: #060614;
+    font-family: 'Space Grotesk', sans-serif;
+    color: #fff;
+    padding: 40px 20px;
+    max-width: 500px;
+    margin: 0 auto;
+  }
+  h1 { font-size: 16px; letter-spacing: 4px; color: #00E5FF; text-transform: uppercase; text-shadow: 0 0 16px rgba(0,229,255,0.4); text-align: center; margin-bottom: 8px; }
+  h2 { font-size: 11px; letter-spacing: 3px; color: #555; text-transform: uppercase; text-align: center; margin-bottom: 32px; }
+  .track {
+    background: #0a0a1e; border: 1px solid #1e1e3a; border-radius: 10px;
+    padding: 14px 16px; margin-bottom: 8px;
+  }
+  .track-name { font-size: 13px; font-weight: 600; color: #e6e3f9; margin-bottom: 8px; }
+  audio { width: 100%; height: 32px; }
+  .divider { height: 1px; background: #1e1e3a; margin: 16px 0; }
+</style>
+</head>
+<body>
+<h1>MusicGen Tracks</h1>
+<h2>AI-generated chiptune · 30s each</h2>
+
+<h2 style="margin-top:24px; margin-bottom:16px; color:#FFD700;">ElevenLabs (MP3)</h2>
+<div class="track"><div class="track-name">Title Screen</div><audio controls loop src="title.mp3"></audio></div>
+<div class="track"><div class="track-name">Draft / Select</div><audio controls loop src="draft.mp3"></audio></div>
+<div class="divider"></div>
+<div class="track"><div class="track-name">Level 1</div><audio controls loop src="level1.mp3"></audio></div>
+<div class="track"><div class="track-name">Level 2</div><audio controls loop src="level2.mp3"></audio></div>
+<div class="track"><div class="track-name">Level 3</div><audio controls loop src="level3.mp3"></audio></div>
+<div class="track"><div class="track-name">Level 4</div><audio controls loop src="level4.mp3"></audio></div>
+<div class="track"><div class="track-name">Level 5</div><audio controls loop src="level5.mp3"></audio></div>
+<div class="track"><div class="track-name">Level 6</div><audio controls loop src="level6.mp3"></audio></div>
+<div class="track"><div class="track-name">Level 7 (pending credits)</div></div>
+<div class="track"><div class="track-name">Level 8 (pending credits)</div></div>
+<div class="track"><div class="track-name">Level 9 (pending credits)</div></div>
+<div class="track"><div class="track-name">Level 10 (pending credits)</div></div>
+<div class="divider"></div>
+<div class="track"><div class="track-name">Loss Screen (pending credits)</div></div>
+
+<h2 style="margin-top:32px; margin-bottom:16px; color:#555;">MusicGen (WAV) — for comparison</h2>
+<div class="track"><div class="track-name">Title Screen</div><audio controls loop src="title.wav"></audio></div>
+<div class="track"><div class="track-name">Level 1</div><audio controls loop src="level1.wav"></audio></div>
+<div class="track"><div class="track-name">Level 5</div><audio controls loop src="level5.wav"></audio></div>
+<div class="track"><div class="track-name">Level 10</div><audio controls loop src="level10.wav"></audio></div>
+<div class="track"><div class="track-name">Loss Screen</div><audio controls loop src="loss.wav"></audio></div>
+</body>
+</html>
