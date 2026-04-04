@@ -37,14 +37,26 @@ import {
   getRandomSymbolFromFreqs,
 } from './level';
 import { findMatches, calculateScore, matchKey } from './scoring';
-import { buildFrequencyTable, SYMBOL_ROSTER, hasNoLock, getRespinMatchBonus, type SymbolDef, type SymbolId } from './symbols';
+import { buildFrequencyTable, SYMBOL_ROSTER, hasNoLock, getRespinMatchBonus, getEntrySpotCount, type SymbolDef, type SymbolId } from './symbols';
 import {
   calculateScoreWithAbilities,
   evaluateOnPlace,
-  canPlaceOnWall,
+  canPlaceOnWall as canSymbolPlaceOnWall,
   type AbilityEffects,
   type Match as AbilityMatch,
 } from './ability-engine';
+
+/** Get the set of symbols that can place on walls (vine) from the loadout */
+function getVineSymbols(loadoutDefs: SymbolDef[] | null): Set<string> | undefined {
+  if (!loadoutDefs) return undefined;
+  const vines = new Set<string>();
+  for (const def of loadoutDefs) {
+    if (def.abilities.some(a => a.trigger === 'on_place' && a.verb === 'place_on_wall')) {
+      vines.add(def.id);
+    }
+  }
+  return vines.size > 0 ? vines : undefined;
+}
 
 // Lazy import to avoid circular dependency — meta store imports are deferred
 let _metaStore: any = null;
@@ -96,6 +108,7 @@ export interface GameState {
   pendingSpinAnimState: Partial<GameState> | null;
   loadoutFreqs: Map<string, number> | null;
   loadoutDefs: SymbolDef[] | null;
+  vineSymbols: Set<string> | undefined;
 
   selectEntry: (index: number) => void;
   deselectEntry: () => void;
@@ -119,7 +132,8 @@ export function createInitialState(config: LevelConfig = generateLevelConfig(1),
   const queue = loadoutFreqs
     ? generateTileQueueFromFreqs(config.tilesPerLevel, loadoutFreqs)
     : generateTileQueue(config.tilesPerLevel, config.symbolCount);
-  const spots = getEntrySpots(config.entrySpotCount);
+  const entryCount = loadoutDefs ? getEntrySpotCount(loadoutDefs) : config.entrySpotCount;
+  const spots = getEntrySpots(entryCount);
   return {
     levelConfig: config,
     grid: createGridFromConfig(config),
@@ -148,6 +162,7 @@ export function createInitialState(config: LevelConfig = generateLevelConfig(1),
     pendingSpinAnimState: null as Partial<GameState> | null,
     loadoutFreqs: loadoutFreqs ?? null,
     loadoutDefs: loadoutDefs ?? null,
+    vineSymbols: getVineSymbols(loadoutDefs ?? null),
   };
 }
 
@@ -180,17 +195,18 @@ export const useGameStore = create<GameState>((set, get) => ({
   },
 
   startPlacement: (row: number, col: number) => {
-    const { phase, currentTile, rotation, grid, reachableCells } = get();
+    const { phase, currentTile, rotation, grid, reachableCells, loadoutDefs } = get();
     if (phase !== 'placing' || !currentTile) return;
+    const vines = getVineSymbols(loadoutDefs);
 
     // Try current rotation first, then others
     let useRotation: Rotation | null = null;
-    if (canPlaceTileWithEntry(grid, row, col, rotation, reachableCells)) {
+    if (canPlaceTileWithEntry(grid, row, col, rotation, reachableCells, vines)) {
       useRotation = rotation;
     } else {
       for (let i = 1; i <= 3; i++) {
         const tryRot = ((rotation + i) % 4) as Rotation;
-        if (canPlaceTileWithEntry(grid, row, col, tryRot, reachableCells)) {
+        if (canPlaceTileWithEntry(grid, row, col, tryRot, reachableCells, vines)) {
           useRotation = tryRot;
           break;
         }
@@ -206,21 +222,22 @@ export const useGameStore = create<GameState>((set, get) => ({
   },
 
   movePlacement: (row: number, col: number) => {
-    const { phase, currentTile, rotation, grid, placementMode, reachableCells } = get();
+    const { phase, currentTile, rotation, grid, placementMode, reachableCells, loadoutDefs } = get();
     if (phase !== 'placing' || !currentTile || placementMode !== 'placed') return;
-    if (!canPlaceTileWithEntry(grid, row, col, rotation, reachableCells)) return;
+    if (!canPlaceTileWithEntry(grid, row, col, rotation, reachableCells, getVineSymbols(loadoutDefs))) return;
 
     set({ placedPosition: { row, col } });
   },
 
   rotatePlacedTile: () => {
-    const { placementMode, placedPosition, rotation, grid, reachableCells } = get();
+    const { placementMode, placedPosition, rotation, grid, reachableCells, loadoutDefs } = get();
     if (placementMode !== 'placed' || !placedPosition) return;
+    const vines = getVineSymbols(loadoutDefs);
 
     // Try each rotation until we find a valid one
     for (let i = 1; i <= 4; i++) {
       const newRotation = ((rotation + i) % 4) as Rotation;
-      if (canPlaceTileWithEntry(grid, placedPosition.row, placedPosition.col, newRotation, reachableCells)) {
+      if (canPlaceTileWithEntry(grid, placedPosition.row, placedPosition.col, newRotation, reachableCells, vines)) {
         set({ rotation: newRotation });
         return;
       }
@@ -228,11 +245,11 @@ export const useGameStore = create<GameState>((set, get) => ({
   },
 
   confirmPlacement: () => {
-    const { phase, currentTile, rotation, grid, tileQueue, placementMode, placedPosition, reachableCells } = get();
+    const { phase, currentTile, rotation, grid, tileQueue, placementMode, placedPosition, reachableCells, loadoutDefs } = get();
     if (phase !== 'placing' || !currentTile || placementMode !== 'placed' || !placedPosition) return;
 
     const { row, col } = placedPosition;
-    if (!canPlaceTileWithEntry(grid, row, col, rotation, reachableCells)) return;
+    if (!canPlaceTileWithEntry(grid, row, col, rotation, reachableCells, getVineSymbols(loadoutDefs))) return;
 
     const [rowOffset, colOffset] = getSecondCellOffset(rotation);
     const row2 = row + rowOffset;
@@ -366,7 +383,7 @@ export const useGameStore = create<GameState>((set, get) => ({
       }
     } else {
       // Check if any entry has valid placements on the new grid
-      const stuck = !anyEntryHasValidPlacement(newGrid, get().entrySpots);
+      const stuck = !anyEntryHasValidPlacement(newGrid, get().entrySpots, getVineSymbols(loadoutDefs));
       if (stuck) {
         // No valid placements remaining — end the game
         const result = newTotalScore >= get().levelConfig.threshold ? 'win' : 'lose';

@@ -56,17 +56,20 @@ export function canPlaceTile(
   grid: Grid,
   row: number,
   col: number,
-  rotation: Rotation
+  rotation: Rotation,
+  vineSymbols?: Set<string>,
 ): boolean {
   if (row < 0 || row >= BOARD_SIZE || col < 0 || col >= BOARD_SIZE) return false;
-  if (grid[row][col] !== null) return false;
+  const cell1 = grid[row][col];
+  if (cell1 !== null && !(cell1 === 'wall' && vineSymbols?.size)) return false;
 
   const [rowOffset, colOffset] = getSecondCellOffset(rotation);
   const row2 = row + rowOffset;
   const col2 = col + colOffset;
 
   if (row2 < 0 || row2 >= BOARD_SIZE || col2 < 0 || col2 >= BOARD_SIZE) return false;
-  if (grid[row2][col2] !== null) return false;
+  const cell2 = grid[row2][col2];
+  if (cell2 !== null && !(cell2 === 'wall' && vineSymbols?.size)) return false;
 
   return true;
 }
@@ -121,22 +124,35 @@ export function canPlaceTileWithEntry(
   col: number,
   rotation: Rotation,
   reachableCells: Set<string> | null,
+  vineSymbols?: Set<string>,
 ): boolean {
   if (!reachableCells) return false;
-  if (!canPlaceTile(grid, row, col, rotation)) return false;
+  if (!canPlaceTile(grid, row, col, rotation, vineSymbols)) return false;
+
+  // For vine placements, also allow cells adjacent to reachable cells
+  if (vineSymbols?.size) {
+    const [ro, co] = getSecondCellOffset(rotation);
+    const r2 = row + ro, c2 = col + co;
+    const key1 = `${row},${col}`;
+    const key2 = `${r2},${c2}`;
+    const cell1Ok = reachableCells.has(key1) || grid[row]?.[col] === 'wall';
+    const cell2Ok = reachableCells.has(key2) || grid[r2]?.[c2] === 'wall';
+    return cell1Ok && cell2Ok;
+  }
+
   return isTilePlacementReachable(reachableCells, row, col, rotation);
 }
 
 // Check if any entry spot has valid placements on the grid
-export function anyEntryHasValidPlacement(grid: Grid, entrySpots: EntrySpot[]): boolean {
+export function anyEntryHasValidPlacement(grid: Grid, entrySpots: EntrySpot[], vineSymbols?: Set<string>): boolean {
   for (const entry of entrySpots) {
     const reachable = computeReachableCells(grid, entry);
-    if (reachable.size < 2) continue;
+    if (reachable.size < 2 && !vineSymbols?.size) continue;
     // Check if any placement works in any rotation
     for (const cellKey of reachable) {
       const [r, c] = cellKey.split(',').map(Number);
       for (let rot = 0; rot < 4; rot++) {
-        if (canPlaceTileWithEntry(grid, r, c, rot as Rotation, reachable)) {
+        if (canPlaceTileWithEntry(grid, r, c, rot as Rotation, reachable, vineSymbols)) {
           return true;
         }
       }
