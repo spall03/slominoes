@@ -15,6 +15,7 @@ import { HUD } from './HUD';
 import { Grid } from './Grid';
 import { BottomBar } from './BottomBar';
 import { HelpPanel } from './HelpPanel';
+import { SettingsScreen } from './SettingsScreen';
 import { startMusic, stopMusic } from '../music';
 import { RespinCol } from '../symbols/RespinCol';
 import { RespinRow } from '../symbols/RespinRow';
@@ -62,6 +63,7 @@ export function PlayingScreen() {
   };
   const entryKeyHint = entrySpots.length > 2 ? '1-4' : '1 or 2';
   const [showHelp, setShowHelp] = useState(false);
+  const [showSettings, setShowSettings] = useState(false);
   const [respinMode, setRespinMode] = useState(false);
 
   // Auto-exit respin mode when respins run out AND can't afford more
@@ -376,17 +378,25 @@ export function PlayingScreen() {
               </View>
             )}
 
-            {/* Help: icon on mobile, panel on desktop */}
-            {isMobile && (
+            {/* Top-right icons: help (mobile only) + settings (always) */}
+            <View style={styles.topRightIcons}>
+              {isMobile && (
+                <Pressable
+                  onPress={() => setShowHelp((h) => !h)}
+                  style={styles.iconButton}
+                >
+                  <Text style={styles.helpIconText}>
+                    {showHelp ? '\u2715' : '\u24d8'}
+                  </Text>
+                </Pressable>
+              )}
               <Pressable
-                onPress={() => setShowHelp((h) => !h)}
-                style={styles.helpIcon}
+                onPress={() => setShowSettings(true)}
+                style={styles.iconButton}
               >
-                <Text style={styles.helpIconText}>
-                  {showHelp ? '\u2715' : '\u24d8'}
-                </Text>
+                <Text style={styles.settingsIconText}>&#x2699;</Text>
               </Pressable>
-            )}
+            </View>
             {isMobile && showHelp && <HelpPanel />}
           </View>
         </View>
@@ -394,6 +404,7 @@ export function PlayingScreen() {
         {/* Right column: rules panel (web desktop only) */}
         {isDesktop && <HelpPanel />}
       </View>
+      {showSettings && <SettingsScreen onClose={() => setShowSettings(false)} />}
     </View>
   );
 }
@@ -574,14 +585,23 @@ const styles = StyleSheet.create({
     letterSpacing: 2,
     textTransform: 'uppercase',
   },
-  helpIcon: {
+  topRightIcons: {
     position: 'absolute',
     top: 0,
     right: 8,
+    flexDirection: 'row',
+    gap: 8,
+  },
+  iconButton: {
     padding: 4,
   },
   helpIconText: {
     fontSize: 18,
+    color: colors.textMuted,
+    fontFamily: fonts.regular,
+  },
+  settingsIconText: {
+    fontSize: 20,
     color: colors.textMuted,
     fontFamily: fonts.regular,
   },
