@@ -151,3 +151,23 @@ export async function loadMusicPreference(): Promise<void> {
     // ignore
   }
 }
+
+// Pause music when the browser tab is hidden, resume when visible again.
+if (typeof document !== 'undefined') {
+  let wasPlayingBeforeHidden = false;
+  document.addEventListener('visibilitychange', () => {
+    if (document.hidden) {
+      if (currentAudio && !currentAudio.paused) {
+        wasPlayingBeforeHidden = true;
+        currentAudio.pause();
+      } else {
+        wasPlayingBeforeHidden = false;
+      }
+    } else {
+      if (wasPlayingBeforeHidden && currentAudio && musicEnabled) {
+        currentAudio.play().catch(() => {});
+      }
+      wasPlayingBeforeHidden = false;
+    }
+  });
+}

@@ -581,6 +581,10 @@ export const useGameStore = create<GameState>((set, get) => ({
       }
     }
 
+    // If nothing can actually be respun (all cells locked/empty/wall), don't
+    // consume a respin — just bail silently.
+    if (newSpinningCells.size === 0) return;
+
     const newRespins = respinsRemaining - 1;
     const matchesAfter = findMatches(newGrid);
     const gridScore = matchesAfter.reduce((sum, m) => sum + m.score, 0);
