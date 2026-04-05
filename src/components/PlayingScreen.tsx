@@ -182,6 +182,7 @@ export function PlayingScreen() {
         respinsRemaining={respinsRemaining}
         respinMode={respinMode}
         nextRespinCost={nextCost}
+        onSettingsPress={() => setShowSettings(true)}
       />
 
       <View style={isDesktop ? styles.mainRow : styles.mobileMain}>
@@ -378,25 +379,17 @@ export function PlayingScreen() {
               </View>
             )}
 
-            {/* Top-right icons: help (mobile only) + settings (always) */}
-            <View style={styles.topRightIcons}>
-              {isMobile && (
-                <Pressable
-                  onPress={() => setShowHelp((h) => !h)}
-                  style={styles.iconButton}
-                >
-                  <Text style={styles.helpIconText}>
-                    {showHelp ? '\u2715' : '\u24d8'}
-                  </Text>
-                </Pressable>
-              )}
+            {/* Help icon (mobile only) */}
+            {isMobile && (
               <Pressable
-                onPress={() => setShowSettings(true)}
-                style={styles.iconButton}
+                onPress={() => setShowHelp((h) => !h)}
+                style={styles.helpIcon}
               >
-                <Text style={styles.settingsIconText}>&#x2699;</Text>
+                <Text style={styles.helpIconText}>
+                  {showHelp ? '\u2715' : '\u24d8'}
+                </Text>
               </Pressable>
-            </View>
+            )}
             {isMobile && showHelp && <HelpPanel />}
           </View>
         </View>
@@ -585,23 +578,14 @@ const styles = StyleSheet.create({
     letterSpacing: 2,
     textTransform: 'uppercase',
   },
-  topRightIcons: {
+  helpIcon: {
     position: 'absolute',
     top: 0,
     right: 8,
-    flexDirection: 'row',
-    gap: 8,
-  },
-  iconButton: {
     padding: 4,
   },
   helpIconText: {
     fontSize: 18,
-    color: colors.textMuted,
-    fontFamily: fonts.regular,
-  },
-  settingsIconText: {
-    fontSize: 20,
     color: colors.textMuted,
     fontFamily: fonts.regular,
   },

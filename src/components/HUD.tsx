@@ -1,8 +1,9 @@
 // src/components/HUD.tsx
 import React from 'react';
-import { View, Text, Platform, StyleSheet } from 'react-native';
+import { View, Text, Pressable, Platform, StyleSheet } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { colors, fonts } from '../theme';
+import { RespinRow } from '../symbols/RespinRow';
 
 interface HUDProps {
   level: number;
@@ -11,9 +12,10 @@ interface HUDProps {
   respinsRemaining: number;
   respinMode: boolean;
   nextRespinCost: number;
+  onSettingsPress?: () => void;
 }
 
-export function HUD({ level, score, threshold, respinsRemaining, respinMode, nextRespinCost }: HUDProps) {
+export function HUD({ level, score, threshold, respinsRemaining, respinMode, nextRespinCost, onSettingsPress }: HUDProps) {
   const progress = Math.min(1, threshold > 0 ? score / threshold : 0);
 
   return (
@@ -24,16 +26,23 @@ export function HUD({ level, score, threshold, respinsRemaining, respinMode, nex
           <Text style={styles.hudScore}>{score}</Text>
           <Text style={styles.hudGoal}> / {threshold}</Text>
         </View>
-        <View style={[styles.respinBadge, respinMode && styles.respinBadgeActive]}>
-          <Text style={[styles.respinBadgeLabel, respinMode && styles.respinBadgeLabelActive]}>
-            {'⟳ '}
-          </Text>
-          {respinsRemaining > 0 ? (
-            <Text style={[styles.respinBadgeText, respinMode && styles.respinBadgeTextActive]}>
-              {respinsRemaining}
-            </Text>
-          ) : (
-            <Text style={styles.respinCostText}>{nextRespinCost}pts</Text>
+        <View style={styles.rightCluster}>
+          <View style={[styles.respinBadge, respinMode && styles.respinBadgeActive]}>
+            <View style={styles.respinIconWrap}>
+              <RespinRow size={18} />
+            </View>
+            {respinsRemaining > 0 ? (
+              <Text style={[styles.respinBadgeText, respinMode && styles.respinBadgeTextActive]}>
+                {respinsRemaining}
+              </Text>
+            ) : (
+              <Text style={styles.respinCostText}>{nextRespinCost}pts</Text>
+            )}
+          </View>
+          {onSettingsPress && (
+            <Pressable onPress={onSettingsPress} style={styles.settingsButton} hitSlop={8}>
+              <Text style={styles.settingsIcon}>&#x2699;</Text>
+            </Pressable>
           )}
         </View>
       </View>
@@ -83,6 +92,11 @@ const styles = StyleSheet.create({
     fontFamily: fonts.regular,
     fontSize: 16,
   },
+  rightCluster: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
   respinBadge: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -90,16 +104,25 @@ const styles = StyleSheet.create({
     borderRadius: 10,
     paddingHorizontal: 8,
     paddingVertical: 2,
+    gap: 4,
   },
   respinBadgeActive: {
     backgroundColor: colors.respin,
   },
-  respinBadgeLabel: {
-    color: colors.respin,
-    fontSize: 13,
+  respinIconWrap: {
+    alignItems: 'center',
+    justifyContent: 'center',
   },
-  respinBadgeLabelActive: {
-    color: colors.textPrimary,
+  settingsButton: {
+    padding: 2,
+  },
+  settingsIcon: {
+    fontSize: 22,
+    color: colors.textMuted,
+    fontFamily: fonts.regular,
+    ...(Platform.OS === 'web' ? {
+      textShadow: `0 0 6px rgba(136,136,136,0.4)`,
+    } as any : {}),
   },
   respinBadgeText: {
     color: colors.textPrimary,

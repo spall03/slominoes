@@ -8,6 +8,11 @@ let ctx: AudioContext | null = null;
 
 function getCtx(): AudioContext {
   if (!ctx) ctx = new (window.AudioContext || (window as any).webkitAudioContext)();
+  // If the context has been suspended (e.g. by HTMLAudioElement pause or tab focus
+  // changes on mobile), resume it so SFX continue to play.
+  if (ctx.state === 'suspended') {
+    ctx.resume().catch(() => {});
+  }
   return ctx;
 }
 

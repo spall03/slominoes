@@ -23,7 +23,7 @@ const TRACK_FILES: Record<string, any> = {
 };
 
 const STORAGE_KEY = 'slominoes_music_enabled';
-const VOLUME = 0.4;
+const VOLUME = 0.2;
 const FADE_MS = 400;
 
 let currentAudio: HTMLAudioElement | null = null;
