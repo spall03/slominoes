@@ -8,7 +8,7 @@ interface Props {
 export function Wall({ size = 64 }: Props) {
   return (
     <Svg width={size} height={size} viewBox="0 0 64 64">
-      <G fill="none" stroke="#3d3d5c" strokeWidth={1.5} strokeLinecap="round" opacity={0.6}>
+      <G fill="none" stroke="#8888aa" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
         {/* brick rows */}
         {/* row 1 */}
         <Rect x={8} y={10} width={22} height={10} rx={1} />

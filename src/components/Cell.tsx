@@ -154,8 +154,9 @@ const styles = StyleSheet.create({
     borderWidth: 1.5,
   },
   wallCell: {
-    backgroundColor: colors.cellWall,
-    opacity: 0.5,
+    backgroundColor: '#1a1a2e',
+    borderColor: '#3d3d5c',
+    borderWidth: 1,
   },
   previewCell: {
     backgroundColor: 'transparent',
