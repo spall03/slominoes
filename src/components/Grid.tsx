@@ -226,8 +226,29 @@ export function Grid() {
           startPlacement(cell.row, cell.col);
         }
       } else if (placementMode === 'placed') {
-        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-        rotatePlacedTile();
+        // If tapping the same cell (or second cell of domino), rotate.
+        // If tapping a different valid cell, jump the tile there.
+        const state = useGameStore.getState();
+        const pp = state.placedPosition;
+        if (pp) {
+          const [ro, co] = getSecondCellOffset(state.rotation);
+          const isSameCell = (cell.row === pp.row && cell.col === pp.col) ||
+            (cell.row === pp.row + ro && cell.col === pp.col + co);
+          if (isSameCell) {
+            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+            rotatePlacedTile();
+          } else {
+            // Try to move tile to the tapped cell
+            const anyRotFits = [0, 1, 2, 3].some(r =>
+              canPlaceTileWithEntry(grid, cell.row, cell.col, r as Rotation, reachableCells, vineSymbols)
+            );
+            if (anyRotFits) {
+              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+              // Re-place at new position (startPlacement handles finding valid rotation)
+              startPlacement(cell.row, cell.col);
+            }
+          }
+        }
       }
     });
 
