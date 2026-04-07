@@ -135,7 +135,7 @@ export const SYMBOL_ROSTER: SymbolDef[] = [
     base: false,
   },
   {
-    id: 'apple', name: 'Apple', matchLength: 3, scoreValue: 25, frequency: 2,
+    id: 'apple', name: 'Apple', matchLength: 3, scoreValue: 10, frequency: 2,
     abilities: [
       {
         trigger: 'wild_match',
