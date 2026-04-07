@@ -42,23 +42,25 @@ function SymbolCard({
           {hint && <Text style={styles.hint}>{hint}</Text>}
         </>
       ) : (
-        <>
+        <View style={styles.cardContent}>
           <View style={Platform.OS === 'web' ? ({
             filter: `drop-shadow(0 0 4px ${symbolColors[def.id] ?? colors.cyan})`,
           } as any) : undefined}>
-            <SymbolIcon symbol={def.id} size={40} />
+            <SymbolIcon symbol={def.id} size={36} />
           </View>
-          <Text style={[
-            styles.name,
-            isSelected && { color: colors.gold },
-          ]}>{def.name}</Text>
-          <Text style={styles.stats}>
-            Match {def.matchLength} | {def.scoreValue}pts | freq {def.frequency}
-          </Text>
-          {abilityText && (
-            <Text style={styles.ability} numberOfLines={2}>{abilityText}</Text>
-          )}
-        </>
+          <View style={styles.cardInfo}>
+            <Text style={[
+              styles.name,
+              isSelected && { color: colors.gold },
+            ]}>{def.name}</Text>
+            <Text style={styles.stats}>
+              Match {def.matchLength}  ·  {def.scoreValue} pts  ·  Freq {def.frequency}
+            </Text>
+            {abilityText && (
+              <Text style={styles.ability} numberOfLines={2}>{abilityText}</Text>
+            )}
+          </View>
+        </View>
       )}
     </Pressable>
   );
@@ -208,14 +210,25 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   card: {
-    width: '31%',
+    width: '47%',
     backgroundColor: '#0a0a1e',
     borderWidth: 1,
     borderColor: colors.border,
-    borderRadius: 8,
-    padding: 10,
+    borderRadius: 10,
+    padding: 12,
     alignItems: 'center',
-    gap: 4,
+    justifyContent: 'center',
+    minHeight: 80,
+  },
+  cardContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    width: '100%',
+  },
+  cardInfo: {
+    flex: 1,
+    gap: 2,
   },
   cardSelected: {
     borderColor: colors.gold,
@@ -230,8 +243,8 @@ const styles = StyleSheet.create({
     fontSize: 28,
     color: '#555',
     fontFamily: fonts.bold,
-    height: 40,
-    lineHeight: 40,
+    height: 36,
+    lineHeight: 36,
   },
   lockedLabel: {
     fontSize: 10,
@@ -239,6 +252,7 @@ const styles = StyleSheet.create({
     letterSpacing: 2,
     fontFamily: fonts.semiBold,
     textTransform: 'uppercase',
+    textAlign: 'center',
   },
   hint: {
     fontSize: 10,
@@ -247,8 +261,8 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   name: {
-    fontSize: 12,
-    fontFamily: fonts.semiBold,
+    fontSize: 13,
+    fontFamily: fonts.bold,
     color: colors.textPrimary,
     letterSpacing: 1,
     textTransform: 'uppercase',
@@ -259,10 +273,10 @@ const styles = StyleSheet.create({
     color: colors.textMuted,
   },
   ability: {
-    fontSize: 9,
+    fontSize: 10,
     fontFamily: fonts.regular,
     color: colors.cyan,
-    textAlign: 'center',
+    lineHeight: 14,
   },
   bottomBar: {
     position: 'absolute',
