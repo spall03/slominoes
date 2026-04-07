@@ -29,6 +29,7 @@ export function PlayingScreen() {
     tileQueue,
     respinsRemaining,
     score,
+    currentGridScore,
     phase,
     result,
     placementMode,
@@ -178,6 +179,7 @@ export function PlayingScreen() {
       <HUD
         level={currentLevel}
         score={score}
+        currentGridScore={currentGridScore}
         threshold={levelConfig.threshold}
         respinsRemaining={respinsRemaining}
         respinMode={respinMode}

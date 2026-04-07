@@ -89,6 +89,7 @@ export interface GameState {
   rotation: Rotation;
   respinsRemaining: number;
   score: number;
+  currentGridScore: number;
   phase: GamePhase;
   result: GameResult;
   placementMode: PlacementMode;
@@ -143,6 +144,7 @@ export function createInitialState(config: LevelConfig = generateLevelConfig(1),
     rotation: 0 as Rotation,
     respinsRemaining: config.respins,
     score: 0,
+    currentGridScore: 0,
     phase: 'placing' as GamePhase,
     result: null as GameResult,
     placementMode: 'idle' as PlacementMode,
@@ -369,6 +371,7 @@ export const useGameStore = create<GameState>((set, get) => ({
         tileQueue: [],
         currentTile: null,
         score: Math.max(get().score, newTotalScore),
+        currentGridScore: newTotalScore,
         lockedCells: newLocked,
         phase: 'ended',
         result,
@@ -394,6 +397,7 @@ export const useGameStore = create<GameState>((set, get) => ({
           tileQueue: newQueue,
           currentTile: nextTile,
           score: Math.max(get().score, newTotalScore),
+        currentGridScore: newTotalScore,
           lockedCells: newLocked,
           phase: 'ended',
           result,
@@ -414,6 +418,7 @@ export const useGameStore = create<GameState>((set, get) => ({
           tileQueue: newQueue,
           currentTile: nextTile,
           score: Math.max(get().score, newTotalScore),
+        currentGridScore: newTotalScore,
           lockedCells: newLocked,
           placementMode: 'idle',
           placedPosition: null,
@@ -756,6 +761,7 @@ export const useGameStore = create<GameState>((set, get) => ({
     set({
       grid: pendingSpinGrid,
       score: Math.max(get().score, finalScore),
+      currentGridScore: finalScore,
       lockedCells: newLocked,
       spinningCells: new Map(),
       pendingSpinGrid: null,

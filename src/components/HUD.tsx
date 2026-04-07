@@ -8,6 +8,7 @@ import { RespinRow } from '../symbols/RespinRow';
 interface HUDProps {
   level: number;
   score: number;
+  currentGridScore: number;
   threshold: number;
   respinsRemaining: number;
   respinMode: boolean;
@@ -15,8 +16,10 @@ interface HUDProps {
   onSettingsPress?: () => void;
 }
 
-export function HUD({ level, score, threshold, respinsRemaining, respinMode, nextRespinCost, onSettingsPress }: HUDProps) {
-  const progress = Math.min(1, threshold > 0 ? score / threshold : 0);
+export function HUD({ level, score, currentGridScore, threshold, respinsRemaining, respinMode, nextRespinCost, onSettingsPress }: HUDProps) {
+  const bestProgress = Math.min(1, threshold > 0 ? score / threshold : 0);
+  const currentProgress = Math.min(1, threshold > 0 ? currentGridScore / threshold : 0);
+  const scoreDiverged = score > currentGridScore;
 
   return (
     <View>
@@ -24,6 +27,9 @@ export function HUD({ level, score, threshold, respinsRemaining, respinMode, nex
         <Text style={styles.hudLevel}>L{level}</Text>
         <View style={styles.hudScoreWrap}>
           <Text style={styles.hudScore}>{score}</Text>
+          {scoreDiverged && (
+            <Text style={styles.hudCurrentScore}> ({currentGridScore})</Text>
+          )}
           <Text style={styles.hudGoal}> / {threshold}</Text>
         </View>
         <View style={styles.rightCluster}>
@@ -46,13 +52,18 @@ export function HUD({ level, score, threshold, respinsRemaining, respinMode, nex
           )}
         </View>
       </View>
-      {/* Progress bar */}
+      {/* Progress bar: current grid score (dim) + best score (bright) */}
       <View style={styles.progressTrack}>
+        {/* Current grid score — dimmer, shows where you are now */}
+        {scoreDiverged && (
+          <View style={[styles.progressCurrentFill, { width: `${Math.round(currentProgress * 100)}%` } as any]} />
+        )}
+        {/* Best score — main bright gradient bar */}
         <LinearGradient
           colors={[colors.pink, colors.cyan]}
           start={{ x: 0, y: 0 }}
           end={{ x: 1, y: 0 }}
-          style={[styles.progressFill, { width: `${Math.round(progress * 100)}%` } as any]}
+          style={[styles.progressFill, { width: `${Math.round(bestProgress * 100)}%` } as any]}
         />
       </View>
     </View>
@@ -86,6 +97,11 @@ const styles = StyleSheet.create({
     color: colors.textPrimary,
     fontFamily: fonts.semiBold,
     fontSize: 18,
+  },
+  hudCurrentScore: {
+    color: colors.textMuted,
+    fontFamily: fonts.regular,
+    fontSize: 13,
   },
   hudGoal: {
     color: colors.textDim,
@@ -139,17 +155,31 @@ const styles = StyleSheet.create({
     fontSize: 11,
   },
   progressTrack: {
-    height: 4,
+    height: 6,
     backgroundColor: colors.border,
-    borderRadius: 2,
+    borderRadius: 3,
     overflow: 'hidden',
     marginHorizontal: 8,
     marginTop: 4,
     marginBottom: 2,
+    position: 'relative',
   },
   progressFill: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
     height: '100%',
-    borderRadius: 2,
+    borderRadius: 3,
     minWidth: 4,
+    zIndex: 2,
+  },
+  progressCurrentFill: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    height: '100%',
+    borderRadius: 3,
+    backgroundColor: 'rgba(255,255,255,0.1)',
+    zIndex: 1,
   },
 });
