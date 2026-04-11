@@ -257,6 +257,12 @@ export const SYMBOL_ROSTER: SymbolDef[] = [
         params: {},
         description: 'Ghost cells don\'t lock when matched — stays respinnable',
       },
+      {
+        trigger: 'on_match',
+        verb: 'free_respin',
+        params: { count: 1 },
+        description: '+1 free respin on match',
+      },
     ],
     base: false,
   },

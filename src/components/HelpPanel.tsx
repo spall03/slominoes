@@ -64,7 +64,7 @@ export function HelpPanel() {
       </Section>
 
       <Section title="Score">
-        <Body>Your score equals the total of all matches currently on the grid. It's recalculated after every placement and respin — not additive. Breaking a match with a respin reduces your score.</Body>
+        <Body>Your score is the highest grid total you've reached this level. It only ever goes up — a bad respin can't lower it. Respin freely to chase bigger matches.</Body>
         <Body>Formula: symbol value × length × multiplier</Body>
       </Section>
 
@@ -82,7 +82,7 @@ export function HelpPanel() {
         <View style={styles.abilityList}>
           <SymbolRow symbol="jam" label="2x cherry matches in same row/column" />
           <SymbolRow symbol="apple" label="Matches with cherry & lemon (Fruit Salad +200)" />
-          <SymbolRow symbol="ghost" label="Doesn't lock when matched — stays respinnable" />
+          <SymbolRow symbol="ghost" label="Doesn't lock when matched, +1 free respin on match" />
           <SymbolRow symbol="bomb" label="Clears unlocked adjacent cells on match" />
           <SymbolRow symbol="oil_can" label="Unlocks entire row & column on match (ML1)" />
           <SymbolRow symbol="egg" label="Adds 3 extra tiles on match (needs 4 in a row)" />
@@ -115,7 +115,7 @@ export function HelpPanel() {
       <Section title="Tips">
         <Body>• Place tiles near existing symbols to set up matches before they lock.</Body>
         <Body>• Save respins for rows/columns with near-matches (2 in a row).</Body>
-        <Body>• Locked cells protect your score — build matches early.</Body>
+        <Body>• Your score can't go down — respin aggressively when you see potential.</Body>
         <Body>• Buying respins is a gamble — only worth it if you can see a likely match.</Body>
         <Body>• Try different symbol loadouts — combos like cherry + jam or bell + magnet change the game.</Body>
       </Section>

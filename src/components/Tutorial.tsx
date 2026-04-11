@@ -185,7 +185,7 @@ function buildSteps(): TutorialStep[] {
           <View style={[styles.symCard, { borderColor: '#BBBBFF' }]}>
             <SymbolIcon symbol="ghost" size={28} />
             <Text style={[styles.cardName, { color: '#BBBBFF' }]}>Ghost</Text>
-            <Text style={styles.cardAbility}>No lock on match</Text>
+            <Text style={styles.cardAbility}>+1 respin on match</Text>
           </View>
         </View>
       ),

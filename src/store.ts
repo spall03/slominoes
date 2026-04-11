@@ -98,7 +98,6 @@ export interface GameState {
   matchingCells: Set<string>;
   highlightColor: 'gold' | 'red' | 'blue';
   scorePopups: ScorePopup[];
-  pendingPhase2: { cells: Set<string>; popups: ScorePopup[] } | null;
   entrySpots: EntrySpot[];
   selectedEntry: number | null;
   reachableCells: Set<string> | null;
@@ -153,7 +152,6 @@ export function createInitialState(config: LevelConfig = generateLevelConfig(1),
     matchingCells: new Set<string>(),
     highlightColor: 'gold' as 'gold' | 'red' | 'blue',
     scorePopups: [] as ScorePopup[],
-    pendingPhase2: null as { cells: Set<string>; popups: ScorePopup[] } | null,
     entrySpots: spots,
     selectedEntry: null as number | null,
     reachableCells: null as Set<string> | null,
@@ -522,18 +520,7 @@ export const useGameStore = create<GameState>((set, get) => ({
   },
 
   clearMatchAnimation: () => {
-    const { pendingPhase2 } = get();
-    if (pendingPhase2) {
-      // Advance to phase 2
-      set({
-        matchingCells: pendingPhase2.cells,
-        highlightColor: 'blue',
-        scorePopups: pendingPhase2.popups,
-        pendingPhase2: null,
-      });
-    } else {
-      set({ matchingCells: new Set<string>(), highlightColor: 'gold' });
-    }
+    set({ matchingCells: new Set<string>(), highlightColor: 'gold' });
   },
 
   removeScorePopup: (id: string) => {
@@ -595,16 +582,14 @@ export const useGameStore = create<GameState>((set, get) => ({
     const gridScore = matchesAfter.reduce((sum, m) => sum + m.score, 0);
     const newScore = gridScore;
 
-    // Diff matches: broken = before only, new = after only
+    // Only animate new matches (blue highlight + positive popups).
+    // Broken matches are no longer shown — score can only go up, so red
+    // negative popups would be misleading.
     const beforeKeys = new Set(matchesBefore.map(matchKey));
-    const afterKeys = new Set(matchesAfter.map(matchKey));
-    const brokenMatches = matchesBefore.filter(m => !afterKeys.has(matchKey(m)));
     const newMatches = matchesAfter.filter(m => !beforeKeys.has(matchKey(m)));
 
-    // Compute animation state inline so we can set everything atomically
     let animState: Partial<GameState> = {};
-    if (brokenMatches.length > 0 || newMatches.length > 0) {
-      // Build phase 2 data (blue highlight + positive popups)
+    if (newMatches.length > 0) {
       const phase2Cells = new Set<string>();
       const phase2PopupMap = new Map<string, number>();
       newMatches.forEach((match) => {
@@ -620,30 +605,7 @@ export const useGameStore = create<GameState>((set, get) => ({
         const [r, c] = key.split(',').map(Number);
         phase2Popups.push({ id: `popup-p2-${Date.now()}-${idx++}`, score: totalScore, row: r, col: c });
       });
-
-      if (brokenMatches.length === 0) {
-        // No broken matches — skip to phase 2 directly
-        animState = { matchingCells: phase2Cells, highlightColor: 'blue', scorePopups: phase2Popups, pendingPhase2: null };
-      } else {
-        // Build phase 1 data (red highlight + negative popups)
-        const phase1Cells = new Set<string>();
-        const phase1PopupMap = new Map<string, number>();
-        brokenMatches.forEach((match) => {
-          match.cells.forEach(([r, c]) => phase1Cells.add(`${r},${c}`));
-          const ci = Math.floor(match.cells.length / 2);
-          const [cr, cc] = match.cells[ci];
-          const key = `${cr},${cc}`;
-          phase1PopupMap.set(key, (phase1PopupMap.get(key) ?? 0) + match.score);
-        });
-        let idx1 = 0;
-        const phase1Popups: ScorePopup[] = [];
-        phase1PopupMap.forEach((totalScore, key) => {
-          const [r, c] = key.split(',').map(Number);
-          phase1Popups.push({ id: `popup-p1-${Date.now()}-${idx1++}`, score: -totalScore, row: r, col: c });
-        });
-        const pending = phase2Cells.size > 0 ? { cells: phase2Cells, popups: phase2Popups } : null;
-        animState = { matchingCells: phase1Cells, highlightColor: 'red', scorePopups: phase1Popups, pendingPhase2: pending };
-      }
+      animState = { matchingCells: phase2Cells, highlightColor: 'blue', scorePopups: phase2Popups };
     }
 
     // Store pending results — grid/score/anim deferred until spin animation completes
