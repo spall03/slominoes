@@ -4,6 +4,7 @@ import { View, Animated, Easing, StyleSheet } from 'react-native';
 import { CELL_SIZE, CELL_MARGIN, SYMBOLS } from '../constants';
 import { SymbolIcon } from '../symbols/index';
 import { colors } from '../theme';
+import { useGameStore } from '../store';
 import type { Symbol } from '../types';
 
 interface SpinCellProps {
@@ -18,10 +19,19 @@ export function SpinCell({ finalSymbol, cycles, delay, onComplete }: SpinCellPro
   const onCompleteRef = useRef(onComplete);
   onCompleteRef.current = onComplete;
 
-  // Build the symbol strip: SYMBOLS repeated `cycles` times, then finalSymbol at the end
+  // Use the player's actual loadout symbols for the spin strip so the
+  // animation matches what can actually land. Fall back to the default
+  // SYMBOLS constant if no loadout is active (shouldn't happen in a live
+  // level, but safe).
+  const loadoutFreqs = useGameStore(s => s.loadoutFreqs);
+  const stripSymbols: Symbol[] = loadoutFreqs && loadoutFreqs.size > 0
+    ? (Array.from(loadoutFreqs.keys()) as Symbol[])
+    : SYMBOLS;
+
+  // Build the symbol strip: stripSymbols repeated `cycles` times, then finalSymbol at the end
   const strip: Symbol[] = [];
   for (let i = 0; i < cycles; i++) {
-    for (const s of SYMBOLS) {
+    for (const s of stripSymbols) {
       strip.push(s);
     }
   }
