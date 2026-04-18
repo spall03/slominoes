@@ -57,7 +57,12 @@ function SymbolCard({
               Match {def.matchLength}  ·  {def.scoreValue} pts  ·  Freq {def.frequency}
             </Text>
             {abilityText && (
-              <Text style={styles.ability} numberOfLines={2}>{abilityText}</Text>
+              <Text
+                style={styles.ability}
+                numberOfLines={isSelected ? undefined : 2}
+              >
+                {abilityText}
+              </Text>
             )}
           </View>
         </View>
@@ -237,18 +242,18 @@ const styles = StyleSheet.create({
     } as any : {}),
   },
   cardLocked: {
-    opacity: 0.4,
+    opacity: 0.75,
   },
   lockedIcon: {
     fontSize: 28,
-    color: '#555',
+    color: colors.textMuted,
     fontFamily: fonts.bold,
     height: 36,
     lineHeight: 36,
   },
   lockedLabel: {
     fontSize: 10,
-    color: '#555',
+    color: colors.textMuted,
     letterSpacing: 2,
     fontFamily: fonts.semiBold,
     textTransform: 'uppercase',
@@ -256,9 +261,10 @@ const styles = StyleSheet.create({
   },
   hint: {
     fontSize: 10,
-    color: '#666',
+    color: '#aaaaaa',
     fontStyle: 'italic',
     textAlign: 'center',
+    marginTop: 4,
   },
   name: {
     fontSize: 13,
