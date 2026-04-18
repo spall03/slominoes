@@ -1,8 +1,9 @@
 // src/components/SettingsScreen.tsx
-import React from 'react';
+import React, { useState } from 'react';
 import { View, Text, Pressable, StyleSheet, Platform } from 'react-native';
 import { colors, fonts } from '../theme';
 import { useSettingsStore } from '../settings-store';
+import { useRunStore } from '../store';
 
 interface Props {
   onClose: () => void;
@@ -24,6 +25,17 @@ export function SettingsScreen({ onClose }: Props) {
   const sfxEnabled = useSettingsStore(s => s.sfxEnabled);
   const toggleMusic = useSettingsStore(s => s.toggleMusic);
   const toggleSfx = useSettingsStore(s => s.toggleSfx);
+  const [confirmingAbandon, setConfirmingAbandon] = useState(false);
+
+  const handleAbandon = () => {
+    if (!confirmingAbandon) {
+      setConfirmingAbandon(true);
+      return;
+    }
+    setConfirmingAbandon(false);
+    useRunStore.getState().abandonRun();
+    onClose();
+  };
 
   return (
     <View style={styles.overlay}>
@@ -36,8 +48,29 @@ export function SettingsScreen({ onClose }: Props) {
         </View>
 
         <Pressable
-          style={({ pressed }) => [styles.closeButton, pressed && styles.closeButtonPressed]}
-          onPress={onClose}
+          style={({ pressed }) => [
+            styles.abandonButton,
+            confirmingAbandon && styles.abandonButtonConfirm,
+            pressed && styles.buttonPressed,
+          ]}
+          onPress={handleAbandon}
+        >
+          <Text
+            style={[
+              styles.abandonText,
+              confirmingAbandon && styles.abandonTextConfirm,
+            ]}
+          >
+            {confirmingAbandon ? 'TAP AGAIN TO CONFIRM' : 'ABANDON RUN'}
+          </Text>
+        </Pressable>
+
+        <Pressable
+          style={({ pressed }) => [styles.closeButton, pressed && styles.buttonPressed]}
+          onPress={() => {
+            setConfirmingAbandon(false);
+            onClose();
+          }}
         >
           <Text style={styles.closeText}>CLOSE</Text>
         </Pressable>
@@ -133,6 +166,30 @@ const styles = StyleSheet.create({
       boxShadow: `0 0 6px rgba(255,215,0,0.5)`,
     } as any : {}),
   },
+  abandonButton: {
+    borderWidth: 1,
+    borderColor: colors.respin,
+    borderRadius: 10,
+    paddingVertical: 10,
+    paddingHorizontal: 20,
+    marginBottom: 12,
+    minWidth: 220,
+    alignItems: 'center',
+  },
+  abandonButtonConfirm: {
+    backgroundColor: colors.respinTint,
+    borderColor: colors.pink,
+  },
+  abandonText: {
+    color: colors.respin,
+    fontFamily: fonts.bold,
+    fontSize: 13,
+    letterSpacing: 2,
+    textTransform: 'uppercase',
+  },
+  abandonTextConfirm: {
+    color: colors.pink,
+  },
   closeButton: {
     borderWidth: 1,
     borderColor: colors.indigo,
@@ -140,14 +197,14 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
     paddingHorizontal: 32,
   },
-  closeButtonPressed: {
-    opacity: 0.7,
-  },
   closeText: {
     color: colors.indigo,
     fontFamily: fonts.bold,
     fontSize: 14,
     letterSpacing: 2,
     textTransform: 'uppercase',
+  },
+  buttonPressed: {
+    opacity: 0.7,
   },
 });

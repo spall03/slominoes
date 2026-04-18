@@ -820,6 +820,7 @@ export interface RunState {
   startLevel: () => void;
   completeLevel: (score: number, threshold: number, respinsLeft: number) => void;
   failLevel: (score: number) => void;
+  abandonRun: () => void;
 }
 
 export const useRunStore = create<RunState>((set, get) => ({
@@ -889,5 +890,13 @@ export const useRunStore = create<RunState>((set, get) => ({
   failLevel: (score: number) => {
     try { Sound.playLevelLose(); } catch {}
     set({ runPhase: 'gameOver', levelScore: score });
+  },
+
+  abandonRun: () => {
+    // Player-initiated exit. Route through gameOver so GameOverScreen records
+    // stats via endRun() and shows the summary. Use the current in-progress
+    // score, not the prior level's levelScore.
+    const currentScore = useGameStore.getState().score;
+    set({ runPhase: 'gameOver', levelScore: currentScore });
   },
 }));
