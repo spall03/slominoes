@@ -2,7 +2,7 @@
 import React, { useMemo } from 'react';
 import { View, Text, StyleSheet } from 'react-native';
 import { colors, fonts, symbolColors } from '../theme';
-import { useGameStore } from '../store';
+import { useGameStore, computeBiasedRespinFreqs } from '../store';
 import { SymbolIcon } from '../symbols/index';
 import type { SymbolId } from '../symbols';
 
@@ -15,31 +15,57 @@ interface Props {
 
 export function SymbolPoolStrip({ variant = 'full', showLabel }: Props) {
   const loadoutFreqs = useGameStore(s => s.loadoutFreqs);
+  const respinTarget = useGameStore(s => s.respinTarget);
+  const grid = useGameStore(s => s.grid);
+  const lockedCells = useGameStore(s => s.lockedCells);
+
+  // If the player has armed a respin, show the biased pool that would actually
+  // roll for that line (locked cells pull their own symbol). Otherwise show
+  // the base pool.
+  const effectiveFreqs = useMemo(() => {
+    if (!loadoutFreqs) return null;
+    if (!respinTarget) return loadoutFreqs;
+    return computeBiasedRespinFreqs(loadoutFreqs, grid, lockedCells, respinTarget);
+  }, [loadoutFreqs, respinTarget, grid, lockedCells]);
 
   const pool = useMemo(() => {
-    if (!loadoutFreqs || loadoutFreqs.size === 0) return [];
+    if (!effectiveFreqs || effectiveFreqs.size === 0) return [];
     let total = 0;
-    for (const v of loadoutFreqs.values()) total += v;
+    for (const v of effectiveFreqs.values()) total += v;
     if (total === 0) return [];
-    return Array.from(loadoutFreqs.entries())
+    return Array.from(effectiveFreqs.entries())
       .map(([id, freq]) => ({ id: id as SymbolId, freq, pct: (freq / total) * 100 }))
       .sort((a, b) => b.freq - a.freq);
-  }, [loadoutFreqs]);
+  }, [effectiveFreqs]);
+
+  const biased = respinTarget !== null;
 
   if (pool.length === 0) return null;
 
   const isCompact = variant === 'compact';
-  const shouldShowLabel = showLabel ?? !isCompact;
+  // Compact strip normally stays label-less to save room, but surfaces the
+  // "RESPIN → ROW N" label when armed so the player sees the bias origin.
+  const shouldShowLabel = showLabel ?? (!isCompact || biased);
   const iconSize = isCompact ? 14 : 18;
+
+  const labelText = biased && respinTarget
+    ? `RESPIN → ${respinTarget.type === 'row' ? 'ROW' : 'COL'} ${respinTarget.index + 1}`
+    : 'SYMBOL POOL';
 
   return (
     <View style={[styles.section, isCompact && styles.sectionCompact]}>
-      {shouldShowLabel && <Text style={styles.label}>SYMBOL POOL</Text>}
+      {shouldShowLabel && (
+        <Text style={[styles.label, biased && styles.labelBiased]}>{labelText}</Text>
+      )}
       <View style={[styles.row, isCompact && styles.rowCompact]}>
         {pool.map(({ id, pct }) => (
           <View
             key={id}
-            style={[styles.pill, isCompact && styles.pillCompact]}
+            style={[
+              styles.pill,
+              isCompact && styles.pillCompact,
+              biased && styles.pillBiased,
+            ]}
           >
             <SymbolIcon symbol={id} size={iconSize} />
             <Text
@@ -74,6 +100,13 @@ const styles = StyleSheet.create({
     letterSpacing: 2,
     textTransform: 'uppercase',
     marginBottom: 8,
+  },
+  labelBiased: {
+    color: colors.respin,
+  },
+  pillBiased: {
+    borderColor: colors.respinBorder,
+    backgroundColor: colors.respinTint,
   },
   row: {
     flexDirection: 'row',

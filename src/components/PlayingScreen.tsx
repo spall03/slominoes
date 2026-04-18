@@ -1,5 +1,5 @@
 // src/components/PlayingScreen.tsx
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
 import { View, Text, Pressable, Platform, StyleSheet } from 'react-native';
 import { colors, fonts } from '../theme';
 import {
@@ -53,8 +53,9 @@ export function PlayingScreen() {
   }, [currentLevel]);
 
   const tilesRemaining = tileQueue.length + (currentTile ? 1 : 0);
+  const respinTarget = useGameStore(s => s.respinTarget);
 
-  const handleRespin = (type: 'row' | 'col', index: number) => {
+  const fireRespin = (type: 'row' | 'col', index: number) => {
     const state = useGameStore.getState();
     if (state.respinsRemaining === 0) {
       state.buyRespin();
@@ -62,6 +63,19 @@ export function PlayingScreen() {
       if (useGameStore.getState().respinsRemaining === 0) return;
     }
     useGameStore.getState().respinLine(type, index);
+  };
+
+  // Tap a respin button: first tap arms (shows biased pool preview), second
+  // tap on same line fires. Tap a different line to re-arm.
+  const handleRespinTap = (type: 'row' | 'col', index: number) => {
+    const state = useGameStore.getState();
+    const target = state.respinTarget;
+    const isArmed = target?.type === type && target.index === index;
+    if (isArmed) {
+      fireRespin(type, index);
+    } else {
+      state.setRespinTarget({ type, index });
+    }
   };
   const entryKeyHint = entrySpots.length > 2 ? '1-4' : '1 or 2';
   const [showHelp, setShowHelp] = useState(false);
@@ -84,19 +98,30 @@ export function PlayingScreen() {
     }
   }, [placementMode]);
 
+  // Clear armed respin target whenever the player leaves respin mode (mobile)
+  // or places a tile, so a stale target doesn't linger into the next action.
+  useEffect(() => {
+    if (!respinMode || placementMode === 'placed') {
+      useGameStore.getState().setRespinTarget(null);
+    }
+  }, [respinMode, placementMode]);
+
   // Keep module-level ref in sync for Grid gesture handler
   respinModeRef.current = respinMode;
 
-  // Respin keyboard cursor (web only)
-  const [respinCursor, setRespinCursor] = useState<{
-    type: 'row' | 'col';
-    index: number;
-  }>({ type: 'row', index: 0 });
-  const respinCursorRef = useRef(respinCursor);
-  respinCursorRef.current = respinCursor;
-
+  // Keyboard respin controls (web only). Arrow keys move the armed target
+  // (previewing the biased pool); 'r' fires at the armed target, defaulting
+  // to row 0 if nothing is armed yet.
   useEffect(() => {
     if (Platform.OS !== 'web') return;
+
+    const moveTarget = (
+      nextFor: (current: { type: 'row' | 'col'; index: number }) => { type: 'row' | 'col'; index: number },
+    ) => {
+      const state = useGameStore.getState();
+      const current = state.respinTarget ?? { type: 'row' as const, index: 0 };
+      state.setRespinTarget(nextFor(current));
+    };
 
     const handleRespinKey = (e: KeyboardEvent) => {
       const state = useGameStore.getState();
@@ -107,7 +132,7 @@ export function PlayingScreen() {
       switch (e.key) {
         case 'ArrowUp':
           e.preventDefault();
-          setRespinCursor((c) =>
+          moveTarget((c) =>
             c.type === 'row'
               ? { type: 'row', index: (c.index - 1 + BOARD_SIZE) % BOARD_SIZE }
               : { type: 'col', index: c.index },
@@ -115,7 +140,7 @@ export function PlayingScreen() {
           break;
         case 'ArrowDown':
           e.preventDefault();
-          setRespinCursor((c) =>
+          moveTarget((c) =>
             c.type === 'row'
               ? { type: 'row', index: (c.index + 1) % BOARD_SIZE }
               : { type: 'col', index: c.index },
@@ -123,18 +148,15 @@ export function PlayingScreen() {
           break;
         case 'ArrowLeft':
           e.preventDefault();
-          setRespinCursor((c) =>
+          moveTarget((c) =>
             c.type === 'col'
-              ? {
-                  type: 'col',
-                  index: (c.index - 1 + BOARD_SIZE) % BOARD_SIZE,
-                }
+              ? { type: 'col', index: (c.index - 1 + BOARD_SIZE) % BOARD_SIZE }
               : { type: 'col', index: 0 },
           );
           break;
         case 'ArrowRight':
           e.preventDefault();
-          setRespinCursor((c) =>
+          moveTarget((c) =>
             c.type === 'col'
               ? { type: 'col', index: (c.index + 1) % BOARD_SIZE }
               : { type: 'col', index: 0 },
@@ -142,16 +164,10 @@ export function PlayingScreen() {
           break;
         case 'Tab':
           e.preventDefault();
-          setRespinCursor((c) =>
+          moveTarget((c) =>
             c.type === 'row'
-              ? {
-                  type: 'col',
-                  index: c.index < BOARD_SIZE ? c.index : 0,
-                }
-              : {
-                  type: 'row',
-                  index: c.index < BOARD_SIZE ? c.index : 0,
-                },
+              ? { type: 'col', index: c.index < BOARD_SIZE ? c.index : 0 }
+              : { type: 'row', index: c.index < BOARD_SIZE ? c.index : 0 },
           );
           break;
         case 'r':
@@ -159,10 +175,8 @@ export function PlayingScreen() {
           e.preventDefault();
           if (state.respinsRemaining === 0) state.buyRespin();
           if (useGameStore.getState().respinsRemaining > 0) {
-            useGameStore.getState().respinLine(
-              respinCursorRef.current.type,
-              respinCursorRef.current.index,
-            );
+            const target = useGameStore.getState().respinTarget ?? { type: 'row' as const, index: 0 };
+            useGameStore.getState().respinLine(target.type, target.index);
           }
           break;
       }
@@ -208,14 +222,14 @@ export function PlayingScreen() {
                       key={`col-${col}`}
                       style={[
                         styles.respinButton,
-                        respinCursor.type === 'col' &&
-                          respinCursor.index === col &&
+                        respinTarget?.type === 'col' &&
+                          respinTarget.index === col &&
                           styles.respinButtonSelected,
                         (placementMode === 'placed' || isSpinning) &&
                           styles.respinButtonDisabled,
                       ]}
                       onPress={() =>
-                        placementMode !== 'placed' && handleRespin('col', col)
+                        placementMode !== 'placed' && handleRespinTap('col', col)
                       }
                       disabled={
                         placementMode === 'placed' ||
@@ -242,14 +256,14 @@ export function PlayingScreen() {
                         key={`row-btn-${row}`}
                         style={[
                           styles.respinButton,
-                          respinCursor.type === 'row' &&
-                            respinCursor.index === row &&
+                          respinTarget?.type === 'row' &&
+                            respinTarget.index === row &&
                             styles.respinButtonSelected,
                           (placementMode === 'placed' || isSpinning) &&
                             styles.respinButtonDisabled,
                         ]}
                         onPress={() =>
-                          placementMode !== 'placed' && handleRespin('row', row)
+                          placementMode !== 'placed' && handleRespinTap('row', row)
                         }
                         disabled={
                           placementMode === 'placed' ||

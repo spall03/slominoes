@@ -110,6 +110,8 @@ export interface GameState {
   loadoutFreqs: Map<string, number> | null;
   loadoutDefs: SymbolDef[] | null;
   vineSymbols: Set<string> | undefined;
+  /** Line the player has "armed" for respin. First tap arms; second tap fires. Null when no line is armed. */
+  respinTarget: { type: 'row' | 'col'; index: number } | null;
 
   selectEntry: (index: number) => void;
   deselectEntry: () => void;
@@ -123,6 +125,7 @@ export interface GameState {
   clearMatchAnimation: () => void;
   removeScorePopup: (id: string) => void;
   respinLine: (type: 'row' | 'col', index: number) => void;
+  setRespinTarget: (target: { type: 'row' | 'col'; index: number } | null) => void;
   buyRespin: () => void;
   getNextRespinCost: () => number;
   clearSpinAnimation: () => void;
@@ -164,7 +167,35 @@ export function createInitialState(config: LevelConfig = generateLevelConfig(1),
     loadoutFreqs: loadoutFreqs ?? null,
     loadoutDefs: loadoutDefs ?? null,
     vineSymbols: getVineSymbols(loadoutDefs ?? null),
+    respinTarget: null as { type: 'row' | 'col'; index: number } | null,
   };
+}
+
+/**
+ * Build the effective frequency map for a respin on a specific line, applying
+ * the locked-combo bias: each locked cell in the line adds +1 to its own
+ * symbol's weight in the pool for this roll. Empty/wall cells are ignored.
+ * Returns a fresh Map — does not mutate the input.
+ */
+export function computeBiasedRespinFreqs(
+  baseFreqs: Map<string, number>,
+  grid: Grid,
+  lockedCells: Set<string>,
+  target: { type: 'row' | 'col'; index: number },
+): Map<string, number> {
+  const biased = new Map(baseFreqs);
+  const iterate = (r: number, c: number) => {
+    if (!lockedCells.has(`${r},${c}`)) return;
+    const sym = grid[r][c];
+    if (!sym || sym === 'wall') return;
+    biased.set(sym, (biased.get(sym) ?? 0) + 1);
+  };
+  if (target.type === 'row') {
+    for (let c = 0; c < BOARD_SIZE; c++) iterate(target.index, c);
+  } else {
+    for (let r = 0; r < BOARD_SIZE; r++) iterate(r, target.index);
+  }
+  return biased;
 }
 
 export const useGameStore = create<GameState>((set, get) => ({
@@ -542,8 +573,14 @@ export const useGameStore = create<GameState>((set, get) => ({
     if (matchingCells.size > 0) return; // Block respins during animation
     if (spinningCells.size > 0) return; // Block respins during active spin
 
-    const getSymbol = () => loadoutFreqs
-      ? getRandomSymbolFromFreqs(loadoutFreqs)
+    // Apply locked-combo bias: locked cells in the respun line pull their own
+    // symbol. Each locked cell of symbol X adds +1 to X's weight for this roll.
+    const biasedFreqs = loadoutFreqs
+      ? computeBiasedRespinFreqs(loadoutFreqs, grid, lockedCells, { type, index })
+      : null;
+
+    const getSymbol = () => biasedFreqs
+      ? getRandomSymbolFromFreqs(biasedFreqs)
       : getRandomSymbol(get().levelConfig.symbolCount);
 
     const matchesBefore = findMatches(grid);
@@ -622,8 +659,11 @@ export const useGameStore = create<GameState>((set, get) => ({
       pendingSpinGrid: newGrid,
       pendingSpinScore: newScore,
       pendingSpinAnimState: animState,
+      respinTarget: null, // committed; disarm
     });
   },
+
+  setRespinTarget: (target) => set({ respinTarget: target }),
 
   getNextRespinCost: () => {
     return BASE_RESPIN_COST + get().respinsBought * RESPIN_COST_STEP;
