@@ -16,6 +16,7 @@ import { Grid } from './Grid';
 import { BottomBar } from './BottomBar';
 import { HelpPanel } from './HelpPanel';
 import { SettingsScreen } from './SettingsScreen';
+import { SymbolPoolStrip } from './SymbolPoolStrip';
 import { startMusic, stopMusic } from '../music';
 import { RespinCol } from '../symbols/RespinCol';
 import { RespinRow } from '../symbols/RespinRow';
@@ -268,6 +269,7 @@ export function PlayingScreen() {
           <View style={styles.controls}>
             {phase === 'placing' && currentTile && !respinMode && (
               <>
+                <SymbolPoolStrip variant="compact" />
                 {/* Bottom bar: tile preview + count + respin toggle */}
                 {placementMode !== 'placed' ? (
                   <BottomBar
