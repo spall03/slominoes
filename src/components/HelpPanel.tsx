@@ -104,12 +104,13 @@ export function HelpPanel() {
       </Section>
 
       <Section title="Bonus Respins">
-        <Body>Beat a level's threshold by a wide margin and earn bonus respins for the next level:</Body>
+        <Body>Beat a level's threshold by a wide margin and earn bonus respins that stack across levels:</Body>
         <View style={styles.table}>
           <Text style={styles.tableRow}>+5% over threshold   +1 respin</Text>
           <Text style={styles.tableRow}>+10% over threshold  +2 respins</Text>
-          <Text style={styles.tableRow}>+15% over threshold  +3 respins</Text>
+          <Text style={styles.tableRow}>+15% over threshold  +3 respins (auto-ends level)</Text>
         </View>
+        <Body>Bonus respins bank across levels — there's no cap. Earn up to 3 per level.</Body>
       </Section>
 
       <Section title="Tips">

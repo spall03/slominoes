@@ -81,7 +81,7 @@ export function LevelPreviewScreen() {
 
       {bonusRespins > 0 && (
         <Text style={styles.bonusText}>
-          +{bonusRespins} BONUS RESPINS EARNED
+          +{bonusRespins} BONUS RESPINS BANKED
         </Text>
       )}
 

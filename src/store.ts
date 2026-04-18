@@ -362,8 +362,14 @@ export const useGameStore = create<GameState>((set, get) => ({
     const nextTile = tileQueue[0] ?? null;
     const isComplete = nextTile === null;
 
-    if (isComplete) {
-      const result = newTotalScore >= get().levelConfig.threshold ? 'win' : 'lose';
+    // Auto-end: once the player has enough score to earn the max +3 bonus respins
+    // (≥ 15% over threshold), cut the level short — playing out is boring when
+    // the outcome is decided.
+    const threshold = get().levelConfig.threshold;
+    const autoEndForBonus = !isComplete && newTotalScore >= threshold * 1.15;
+
+    if (isComplete || autoEndForBonus) {
+      const result = newTotalScore >= threshold ? 'win' : 'lose';
       set({
         grid: newGrid,
         tileQueue: [],
@@ -380,7 +386,7 @@ export const useGameStore = create<GameState>((set, get) => ({
         reachableCells: null,
       });
       if (result === 'win') {
-        useRunStore.getState().completeLevel(newTotalScore, get().levelConfig.threshold, get().respinsRemaining);
+        useRunStore.getState().completeLevel(newTotalScore, threshold, get().respinsRemaining);
       } else {
         useRunStore.getState().failLevel(newTotalScore);
       }
@@ -720,9 +726,10 @@ export const useGameStore = create<GameState>((set, get) => ({
       });
     }
 
+    const committedScore = Math.max(get().score, finalScore);
     set({
       grid: pendingSpinGrid,
-      score: Math.max(get().score, finalScore),
+      score: committedScore,
       currentGridScore: finalScore,
       lockedCells: newLocked,
       spinningCells: new Map(),
@@ -731,6 +738,22 @@ export const useGameStore = create<GameState>((set, get) => ({
       pendingSpinAnimState: null,
       ...(pendingSpinAnimState ?? {}),
     });
+
+    // Auto-end: if the respin pushed us past +15% over threshold, end the level
+    // now. Max bonus respins are locked in — playing out is boring.
+    const threshold = get().levelConfig?.threshold;
+    if (threshold && get().phase === 'placing' && committedScore >= threshold * 1.15) {
+      set({
+        phase: 'ended',
+        result: 'win',
+        placementMode: 'idle',
+        placedPosition: null,
+        holdReady: false,
+        selectedEntry: null,
+        reachableCells: null,
+      });
+      useRunStore.getState().completeLevel(committedScore, threshold, get().respinsRemaining);
+    }
   },
 
   resetGame: (config?: LevelConfig, loadoutFreqs?: Map<string, number>, loadoutDefs?: SymbolDef[]) =>
@@ -817,7 +840,8 @@ export const useRunStore = create<RunState>((set, get) => ({
       currentLevel: nextLevel,
       levelConfig: config,
       levelScore: score,
-      bonusRespins: bonus,
+      // Bonus respins stack across levels — earn up to +3 per level, no global cap.
+      bonusRespins: get().bonusRespins + bonus,
       runPhase: 'levelPreview',
     });
   },
