@@ -1,17 +1,32 @@
 // src/components/LevelPreviewScreen.tsx
 import React, { useMemo } from 'react';
 import { View, Text, Pressable, ScrollView, StyleSheet } from 'react-native';
-import { colors, fonts } from '../theme';
+import { colors, fonts, symbolColors } from '../theme';
 import { BOARD_SIZE } from '../constants';
-import { useRunStore } from '../store';
+import { useRunStore, useGameStore } from '../store';
 import { useMetaStore } from '../meta-store';
 import { getEntrySpots } from '../level';
+import { SymbolIcon } from '../symbols/index';
+import type { SymbolId } from '../symbols';
 
 export function LevelPreviewScreen() {
   const { currentLevel, levelConfig, bonusRespins } = useRunStore();
+  const loadoutFreqs = useGameStore(s => s.loadoutFreqs);
   if (!levelConfig) return null;
   const config = levelConfig;
   const entrySpots = getEntrySpots(config.entrySpotCount);
+
+  // Build sorted pool entries (highest-weight first) with effective probability.
+  // loadoutFreqs already includes passive modifiers like magnet's bell+2.
+  const pool = useMemo(() => {
+    if (!loadoutFreqs || loadoutFreqs.size === 0) return [];
+    let total = 0;
+    for (const v of loadoutFreqs.values()) total += v;
+    if (total === 0) return [];
+    return Array.from(loadoutFreqs.entries())
+      .map(([id, freq]) => ({ id: id as SymbolId, freq, pct: (freq / total) * 100 }))
+      .sort((a, b) => b.freq - a.freq);
+  }, [loadoutFreqs]);
 
   const entryCellSet = useMemo(() => {
     const set = new Set<string>();
@@ -51,6 +66,27 @@ export function LevelPreviewScreen() {
           </Text>
         </View>
       </View>
+
+      {pool.length > 0 && (
+        <View style={styles.poolSection}>
+          <Text style={styles.poolLabel}>SYMBOL POOL</Text>
+          <View style={styles.poolRow}>
+            {pool.map(({ id, pct }) => (
+              <View key={id} style={styles.poolPill}>
+                <SymbolIcon symbol={id} size={18} />
+                <Text
+                  style={[
+                    styles.poolPct,
+                    { color: symbolColors[id] ?? colors.textPrimary },
+                  ]}
+                >
+                  {Math.round(pct)}%
+                </Text>
+              </View>
+            ))}
+          </View>
+        </View>
+      )}
 
       {/* Mini grid preview */}
       <View style={styles.miniGrid}>
@@ -145,6 +181,40 @@ const styles = StyleSheet.create({
     color: colors.textPrimary,
     fontFamily: fonts.bold,
     fontSize: 18,
+  },
+  poolSection: {
+    alignItems: 'center',
+    marginBottom: 4,
+  },
+  poolLabel: {
+    color: colors.textMuted,
+    fontFamily: fonts.semiBold,
+    fontSize: 10,
+    letterSpacing: 2,
+    textTransform: 'uppercase',
+    marginBottom: 8,
+  },
+  poolRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'center',
+    gap: 6,
+    maxWidth: 360,
+  },
+  poolPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: colors.hudBg,
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: 8,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+  },
+  poolPct: {
+    fontFamily: fonts.bold,
+    fontSize: 11,
   },
   miniGrid: {
     flexDirection: 'column',
