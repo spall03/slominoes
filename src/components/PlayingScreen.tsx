@@ -281,9 +281,13 @@ export function PlayingScreen() {
 
           {/* Controls area */}
           <View style={styles.controls}>
+            {/* Pool strip is always visible during placement, including respin
+                mode — it's where the biased-pool preview appears. */}
+            {phase === 'placing' && currentTile && placementMode !== 'placed' && (
+              <SymbolPoolStrip variant="compact" />
+            )}
             {phase === 'placing' && currentTile && !respinMode && (
               <>
-                <SymbolPoolStrip variant="compact" />
                 {/* Bottom bar: tile preview + count + respin toggle */}
                 {placementMode !== 'placed' ? (
                   <BottomBar
@@ -478,9 +482,12 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   respinButtonSelected: {
-    backgroundColor: colors.respinTint,
+    backgroundColor: colors.gold,
     borderWidth: 2,
-    borderColor: colors.respin,
+    borderColor: colors.gold,
+    ...(Platform.OS === 'web' ? ({
+      boxShadow: '0 0 12px rgba(255,215,0,0.6)',
+    } as any) : {}),
   },
   respinButtonDisabled: {
     opacity: 0.3,

@@ -46,6 +46,7 @@ export function Grid() {
     spinningCells,
     clearSpinAnimation,
   } = useGameStore();
+  const respinTarget = useGameStore(s => s.respinTarget);
 
   const [animationKey, setAnimationKey] = useState(0);
 
@@ -392,6 +393,10 @@ export function Grid() {
                   const isLocked = lockedCells.has(cellKey);
                   const isReachable = reachableCells?.has(cellKey) ?? false;
                   const entryCellDir = entryCellMap.get(cellKey) ?? null;
+                  const isInRespinTarget = respinTarget !== null && (
+                    (respinTarget.type === 'row' && respinTarget.index === rowIndex) ||
+                    (respinTarget.type === 'col' && respinTarget.index === colIndex)
+                  );
                   return (
                     <Cell
                       key={`cell-${rowIndex}-${colIndex}-${animationKey}`}
@@ -404,6 +409,7 @@ export function Grid() {
                       isLocked={isLocked}
                       isReachable={isReachable}
                       isEntryCell={entryCellDir}
+                      isInRespinTarget={isInRespinTarget}
                       highlightColor={isMatching ? highlightColor : undefined}
                       previewSymbol={previewSymbol}
                       onMatchAnimationComplete={() => handleMatchAnimationComplete(cellKey)}

@@ -16,6 +16,8 @@ interface CellProps {
   isLocked?: boolean;
   isReachable?: boolean;
   isEntryCell?: 'down' | 'up' | 'left' | 'right' | null;
+  /** True when this cell is part of the row/col armed for the next respin. */
+  isInRespinTarget?: boolean;
   highlightColor?: 'gold' | 'red' | 'blue';
   previewSymbol?: Symbol;
   onMatchAnimationComplete?: () => void;
@@ -31,6 +33,7 @@ export function Cell({
   isLocked,
   isReachable,
   isEntryCell,
+  isInRespinTarget,
   highlightColor,
   previewSymbol,
   onMatchAnimationComplete,
@@ -99,6 +102,10 @@ export function Cell({
         { transform: [{ scale: scaleAnim }], overflow: 'hidden' },
       ]}
     >
+      {/* Respin-target overlay: tints every cell in the armed row/col */}
+      {isInRespinTarget && (
+        <View style={styles.respinTargetOverlay} pointerEvents="none" />
+      )}
       {/* Highlight overlay */}
       <Animated.View
         style={[
@@ -182,6 +189,14 @@ const styles = StyleSheet.create({
   },
   highlightOverlay: {
     ...StyleSheet.absoluteFillObject,
+    borderRadius: 4,
+    zIndex: 1,
+  },
+  respinTargetOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: colors.respinTint,
+    borderWidth: 1,
+    borderColor: colors.respinBorder,
     borderRadius: 4,
     zIndex: 1,
   },
