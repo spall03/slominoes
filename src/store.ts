@@ -836,7 +836,9 @@ export const useRunStore = create<RunState>((set, get) => ({
       currentLevel: 1,
       levelScore: 0,
       levelConfig: null,
-      bonusRespins: 0,
+      // Seed the bank with 5 so level 1 isn't zero-respin; everything after
+      // that is earned via the bonus tiers (and carries across levels).
+      bonusRespins: 5,
     });
   },
 
