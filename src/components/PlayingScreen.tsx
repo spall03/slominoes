@@ -1,5 +1,5 @@
 // src/components/PlayingScreen.tsx
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { View, Text, Pressable, Platform, StyleSheet } from 'react-native';
 import { colors, fonts } from '../theme';
 import {
@@ -8,20 +8,18 @@ import {
   CELL_TOTAL,
   CELL_MARGIN,
   GRID_PADDING,
+  TILES_PER_LEVEL,
   isMobile,
 } from '../constants';
 import { useGameStore, useRunStore, respinModeRef } from '../store';
 import { HUD } from './HUD';
 import { Grid } from './Grid';
-import { BottomBar } from './BottomBar';
 import { HelpPanel } from './HelpPanel';
 import { SettingsScreen } from './SettingsScreen';
 import { SymbolPoolStrip } from './SymbolPoolStrip';
 import { startMusic, stopMusic } from '../music';
 import { RespinCol } from '../symbols/RespinCol';
 import { RespinRow } from '../symbols/RespinRow';
-import { SymbolIcon } from '../symbols/index';
-import type { Dimensions as RNDimensions } from 'react-native';
 
 export function PlayingScreen() {
   const {
@@ -52,7 +50,6 @@ export function PlayingScreen() {
     return () => { try { stopMusic(); } catch {} };
   }, [currentLevel]);
 
-  const tilesRemaining = tileQueue.length + (currentTile ? 1 : 0);
   const respinTarget = useGameStore(s => s.respinTarget);
 
   const fireRespin = (type: 'row' | 'col', index: number) => {
@@ -81,6 +78,43 @@ export function PlayingScreen() {
   const [showHelp, setShowHelp] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
   const [respinMode, setRespinMode] = useState(false);
+
+  // ==========================================================================
+  // Hint decay (Move 02): hints show on level 1 turns 1–3 always, and on later
+  // levels only after the player has been idle for 5 seconds.
+  // ==========================================================================
+  const tilesRemaining = tileQueue.length + (currentTile ? 1 : 0);
+  const turnsPlayed = TILES_PER_LEVEL - tilesRemaining;
+  const showHintsEagerly = currentLevel === 1 && turnsPlayed <= 2;
+  const [idleHintVisible, setIdleHintVisible] = useState(false);
+  const idleTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => {
+    // Any interaction resets the idle timer & hides the idle hint.
+    setIdleHintVisible(false);
+    if (idleTimerRef.current) clearTimeout(idleTimerRef.current);
+    if (!showHintsEagerly) {
+      idleTimerRef.current = setTimeout(() => setIdleHintVisible(true), 5000);
+    }
+    return () => {
+      if (idleTimerRef.current) clearTimeout(idleTimerRef.current);
+    };
+  }, [placementMode, selectedEntry, respinMode, tilesRemaining, showHintsEagerly]);
+  const hintVisible = showHintsEagerly || idleHintVisible;
+  const hintText = (() => {
+    if (placementMode === 'placed') {
+      return isMobile
+        ? 'Drag to move · Tap to rotate · Hold to confirm'
+        : 'Arrows: move | R: rotate | Enter: confirm | Esc: cancel';
+    }
+    if (selectedEntry === null) {
+      return isMobile
+        ? 'Tap an entry point arrow'
+        : `Press ${entryKeyHint} to select an entry point`;
+    }
+    return isMobile
+      ? 'Tap highlighted area to place tile'
+      : 'Click highlighted area to place tile | Esc: change entry';
+  })();
 
   // Auto-exit respin mode when respins run out AND can't afford more
   const nextCost = getNextRespinCost();
@@ -190,7 +224,7 @@ export function PlayingScreen() {
 
   return (
     <View style={styles.screenContainer}>
-      {/* Compact HUD */}
+      {/* Compact HUD — next-tile preview, respin entry, score, settings */}
       <HUD
         level={currentLevel}
         score={score}
@@ -199,6 +233,12 @@ export function PlayingScreen() {
         respinsRemaining={respinsRemaining}
         respinMode={respinMode}
         nextRespinCost={nextCost}
+        nextTileA={currentTile?.symbolA ?? null}
+        nextTileB={currentTile?.symbolB ?? null}
+        tilesRemaining={tilesRemaining}
+        canAffordRespin={canBuy}
+        onRespinToggle={() => setRespinMode(v => !v)}
+        onBuyRespin={() => { buyRespin(); setRespinMode(true); }}
         onSettingsPress={() => setShowSettings(true)}
       />
 
@@ -281,65 +321,33 @@ export function PlayingScreen() {
 
           {/* Controls area */}
           <View style={styles.controls}>
-            {/* Pool strip is always visible during placement, including respin
-                mode — it's where the biased-pool preview appears. */}
+            {/* Pool strip always visible during placement (including respin
+                mode — it's where the biased-pool preview appears) */}
             {phase === 'placing' && currentTile && placementMode !== 'placed' && (
               <SymbolPoolStrip variant="compact" />
             )}
-            {phase === 'placing' && currentTile && !respinMode && (
-              <>
-                {/* Bottom bar: tile preview + count + respin toggle */}
-                {placementMode !== 'placed' ? (
-                  <BottomBar
-                    symbolA={currentTile.symbolA}
-                    symbolB={currentTile.symbolB}
-                    tilesRemaining={tilesRemaining}
-                    respinsRemaining={respinsRemaining}
-                    nextRespinCost={getNextRespinCost()}
-                    canAffordRespin={score >= getNextRespinCost()}
-                    onRespinToggle={() => setRespinMode(true)}
-                    onBuyRespin={() => { buyRespin(); setRespinMode(true); }}
-                  />
-                ) : (
-                  <View style={styles.placementButtons}>
-                    <Pressable
-                      style={({ pressed }) => [styles.confirmButton, pressed && styles.buttonPressed]}
-                      onPress={useGameStore.getState().confirmPlacement}
-                    >
-                      <Text style={styles.confirmText}>CONFIRM</Text>
-                    </Pressable>
-                    <Pressable
-                      style={({ pressed }) => [styles.cancelButton, pressed && styles.buttonPressed]}
-                      onPress={useGameStore.getState().cancelPlacement}
-                    >
-                      <Text style={styles.cancelText}>CANCEL</Text>
-                    </Pressable>
-                  </View>
-                )}
 
-                {/* Hint text */}
-                {placementMode === 'idle' && selectedEntry === null && (
-                  <Text style={styles.hintText}>
-                    {isMobile
-                      ? 'Tap an entry point arrow'
-                      : `Press ${entryKeyHint} to select an entry point`}
-                  </Text>
-                )}
-                {placementMode === 'idle' && selectedEntry !== null && (
-                  <Text style={styles.hintText}>
-                    {isMobile
-                      ? 'Tap highlighted area to place tile'
-                      : 'Click highlighted area to place tile | Esc: change entry'}
-                  </Text>
-                )}
-                {placementMode === 'placed' && (
-                  <Text style={styles.hintText}>
-                    {isMobile
-                      ? 'Drag to move \u00b7 Tap to rotate \u00b7 Hold to confirm'
-                      : 'Arrows: move | R: rotate | Enter: confirm | Esc: cancel'}
-                  </Text>
-                )}
-              </>
+            {/* Confirm/Cancel buttons when a tile is placed (mobile + desktop) */}
+            {phase === 'placing' && currentTile && placementMode === 'placed' && !respinMode && (
+              <View style={styles.placementButtons}>
+                <Pressable
+                  style={({ pressed }) => [styles.confirmButton, pressed && styles.buttonPressed]}
+                  onPress={useGameStore.getState().confirmPlacement}
+                >
+                  <Text style={styles.confirmText}>CONFIRM</Text>
+                </Pressable>
+                <Pressable
+                  style={({ pressed }) => [styles.cancelButton, pressed && styles.buttonPressed]}
+                  onPress={useGameStore.getState().cancelPlacement}
+                >
+                  <Text style={styles.cancelText}>CANCEL</Text>
+                </Pressable>
+              </View>
+            )}
+
+            {/* Decayed hint — visible on level 1 turns 1–3, or after 5s idle */}
+            {phase === 'placing' && currentTile && !respinMode && hintVisible && hintText && (
+              <Text style={styles.hintText}>{hintText}</Text>
             )}
 
             {/* Respin mode controls */}
