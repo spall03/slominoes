@@ -170,7 +170,7 @@ const styles = StyleSheet.create({
     backgroundColor: colors.cellWall,
   },
   miniCellEntry: {
-    backgroundColor: colors.indigo,
+    backgroundColor: colors.cyan,
   },
   bonusText: {
     color: colors.gold,

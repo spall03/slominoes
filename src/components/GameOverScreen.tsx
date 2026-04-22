@@ -40,10 +40,12 @@ export function GameOverScreen() {
       <Text
         style={[
           styles.heading,
-          { color: won ? colors.cyan : colors.pink },
+          // Move 03: VICTORY uses gold (value hue, reinforces reward symbology);
+          // GAME OVER uses inkMute (loss is the absence of color, not a scold).
+          { color: won ? colors.gold : colors.inkMute },
           won
-            ? { textShadowColor: colors.cyan, textShadowRadius: 20 }
-            : { textShadowColor: colors.pink, textShadowRadius: 20 },
+            ? { textShadowColor: colors.gold, textShadowRadius: 20 }
+            : { textShadowColor: 'transparent', textShadowRadius: 0 },
         ]}
       >
         {won ? 'VICTORY' : 'GAME OVER'}
@@ -65,7 +67,7 @@ export function GameOverScreen() {
         </View>
         <View style={styles.statRow}>
           <Text style={styles.statLabel}>LEVEL</Text>
-          <Text style={[styles.statValue, { color: colors.cyan }]}>
+          <Text style={[styles.statValue, { color: colors.ink }]}>
             {currentLevel} / {NUM_LEVELS}
           </Text>
         </View>
@@ -77,7 +79,7 @@ export function GameOverScreen() {
             </View>
             <View style={styles.progressTrack}>
               <LinearGradient
-                colors={won ? [colors.cyan, colors.cyan] : [colors.pink, colors.cyan]}
+                colors={won ? [colors.gold, colors.gold] : [colors.inkMute, colors.inkDim]}
                 start={{ x: 0, y: 0 }}
                 end={{ x: 1, y: 0 }}
                 style={[styles.progressFill, { width: `${Math.round(progress * 100)}%` } as any]}
@@ -156,31 +158,30 @@ const styles = StyleSheet.create({
     fontSize: 20,
   },
   playAgainButton: {
+    // Primary CTA — cyan (the action color)
     backgroundColor: 'transparent',
     borderWidth: 2,
-    borderColor: colors.pink,
+    borderColor: colors.cyan,
     borderRadius: 10,
     paddingVertical: 14,
     paddingHorizontal: 32,
     marginBottom: 16,
   },
   playAgainText: {
-    color: colors.pink,
+    color: colors.cyan,
     fontFamily: fonts.bold,
     fontSize: 18,
     letterSpacing: 2,
     textTransform: 'uppercase',
   },
   mainMenuButton: {
+    // Secondary — text button, no outline (audit Move 03)
     backgroundColor: 'transparent',
-    borderWidth: 1,
-    borderColor: colors.indigo,
-    borderRadius: 10,
     paddingVertical: 10,
     paddingHorizontal: 24,
   },
   mainMenuText: {
-    color: colors.indigo,
+    color: colors.inkDim,
     fontFamily: fonts.semiBold,
     fontSize: 14,
     letterSpacing: 2,

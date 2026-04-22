@@ -528,7 +528,7 @@ const styles = StyleSheet.create({
   // Respin button mock
   respinMock: {
     borderWidth: 1,
-    borderColor: colors.respin,
+    borderColor: colors.pink,
     borderRadius: 6,
     padding: 8,
   },

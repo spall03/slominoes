@@ -3,7 +3,7 @@ import React, { useRef, useEffect } from 'react';
 import { View, Animated, StyleSheet, Platform } from 'react-native';
 import { colors, symbolColors } from '../theme';
 import { CELL_SIZE, CELL_MARGIN } from '../constants';
-import { SymbolIcon, Arrow } from '../symbols/index';
+import { SymbolIcon } from '../symbols/index';
 import type { Symbol } from '../types';
 
 interface CellProps {
@@ -114,27 +114,23 @@ export function Cell({
         ]}
         pointerEvents="none"
       />
-      {isEntryCell && isEmpty && !isPreview ? (
-        <View style={styles.entryCellArrow}>
-          <Arrow direction={isEntryCell} size={CELL_SIZE - 8} />
-        </View>
-      ) : (
-        <View style={[styles.symbolContainer, isPreview && !isPlaced && styles.previewOpacity]}>
-          {displaySymbol ? (
-            <View
-              style={
-                Platform.OS === 'web' && displaySymbol !== 'wall'
-                  ? ({
-                      filter: `drop-shadow(0 0 4px ${symbolColors[displaySymbol]})`,
-                    } as any)
-                  : undefined
-              }
-            >
-              <SymbolIcon symbol={displaySymbol} size={CELL_SIZE - 4} />
-            </View>
-          ) : null}
-        </View>
-      )}
+      {/* Move 02: entry affordance lives on external buttons, not in-grid.
+          Empty entry cells render as plain empty cells. */}
+      <View style={[styles.symbolContainer, isPreview && !isPlaced && styles.previewOpacity]}>
+        {displaySymbol ? (
+          <View
+            style={
+              Platform.OS === 'web' && displaySymbol !== 'wall'
+                ? ({
+                    filter: `drop-shadow(0 0 4px ${symbolColors[displaySymbol]})`,
+                  } as any)
+                : undefined
+            }
+          >
+            <SymbolIcon symbol={displaySymbol} size={CELL_SIZE - 4} />
+          </View>
+        ) : null}
+      </View>
     </Animated.View>
   );
 }
@@ -183,9 +179,9 @@ const styles = StyleSheet.create({
   },
   reachableCell: {
     borderWidth: 1,
-    borderColor: colors.indigoBorder,
+    borderColor: colors.cyanBorder,
     borderStyle: 'dashed',
-    backgroundColor: colors.indigoTint,
+    backgroundColor: colors.cyanWash,
   },
   highlightOverlay: {
     ...StyleSheet.absoluteFillObject,
@@ -193,10 +189,13 @@ const styles = StyleSheet.create({
     zIndex: 1,
   },
   respinTargetOverlay: {
+    // Respin-as-state (audit Move 01): outline treatment, no fill hue.
+    // Subtle pink tint + pink border signals "this line is armed" without
+    // introducing a sixth accent color.
     ...StyleSheet.absoluteFillObject,
-    backgroundColor: colors.respinTint,
+    backgroundColor: colors.pinkTint,
     borderWidth: 1,
-    borderColor: colors.respinBorder,
+    borderColor: colors.pinkBorder,
     borderRadius: 4,
     zIndex: 1,
   },
@@ -207,11 +206,5 @@ const styles = StyleSheet.create({
   },
   previewOpacity: {
     opacity: 0.6,
-  },
-  entryCellArrow: {
-    zIndex: 2,
-    opacity: 0.7,
-    alignItems: 'center',
-    justifyContent: 'center',
   },
 });

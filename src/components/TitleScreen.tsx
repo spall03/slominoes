@@ -96,15 +96,13 @@ const styles = StyleSheet.create({
     textTransform: 'uppercase',
   },
   howToPlayButton: {
+    // Secondary — text button, no outline (audit Move 03)
     backgroundColor: 'transparent',
-    borderWidth: 1,
-    borderColor: colors.indigo,
-    borderRadius: 10,
     paddingVertical: 10,
     paddingHorizontal: 24,
   },
   howToPlayText: {
-    color: colors.indigo,
+    color: colors.inkDim,
     fontFamily: fonts.semiBold,
     fontSize: 14,
     letterSpacing: 2,

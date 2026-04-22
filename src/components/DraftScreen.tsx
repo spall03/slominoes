@@ -8,6 +8,23 @@ import { SYMBOL_ROSTER, type SymbolId, type SymbolDef } from '../symbols';
 import { SymbolIcon } from '../symbols/index';
 import { startMusic, stopMusic } from '../music';
 
+/**
+ * Split ability text so numeric payloads render in cyan bold while the rest
+ * reads as ink body (audit Move 03). Matches "+N", "+N%", "Nx", "+50pts", etc.
+ */
+const NUMERIC_SPLIT = /([+-]?\d+(?:\.\d+)?(?:%|x|pts?)?)/g;
+const NUMERIC_TEST = /^[+-]?\d+(?:\.\d+)?(?:%|x|pts?)?$/;
+function renderAbilityText(text: string) {
+  const parts = text.split(NUMERIC_SPLIT);
+  return parts.map((part, i) =>
+    NUMERIC_TEST.test(part) ? (
+      <Text key={i} style={styles.abilityNumeric}>{part}</Text>
+    ) : (
+      <Text key={i}>{part}</Text>
+    )
+  );
+}
+
 function SymbolCard({
   def,
   isSelected,
@@ -61,7 +78,7 @@ function SymbolCard({
                 style={styles.ability}
                 numberOfLines={isSelected ? undefined : 2}
               >
-                {abilityText}
+                {renderAbilityText(abilityText)}
               </Text>
             )}
           </View>
@@ -279,10 +296,16 @@ const styles = StyleSheet.create({
     color: colors.textMuted,
   },
   ability: {
-    fontSize: 10,
+    // Move 01/03: body copy uses ink, not cyan. Numeric payload gets inline
+    // cyan (see abilityNumeric style) — rendered via splitAbilityText helper.
+    fontSize: 11,
     fontFamily: fonts.regular,
+    color: colors.ink,
+    lineHeight: 15,
+  },
+  abilityNumeric: {
     color: colors.cyan,
-    lineHeight: 14,
+    fontFamily: fonts.semiBold,
   },
   bottomBar: {
     position: 'absolute',

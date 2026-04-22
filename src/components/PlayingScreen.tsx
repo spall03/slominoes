@@ -452,7 +452,7 @@ const styles = StyleSheet.create({
   },
   gridContainerRespin: {
     borderWidth: 1,
-    borderColor: colors.respinBorder,
+    borderColor: colors.pinkBorder,
     borderRadius: 12,
   },
   colButtons: {
@@ -475,18 +475,20 @@ const styles = StyleSheet.create({
     height: CELL_SIZE,
     backgroundColor: 'transparent',
     borderWidth: 1,
-    borderColor: colors.respin,
+    borderColor: colors.pink,
     margin: CELL_MARGIN,
     borderRadius: 4,
     alignItems: 'center',
     justifyContent: 'center',
   },
   respinButtonSelected: {
-    backgroundColor: colors.gold,
+    // Armed = pink outline glow (state, not a fill hue). Gold is reserved
+    // for value/score per the new palette.
+    backgroundColor: colors.pinkTint,
     borderWidth: 2,
-    borderColor: colors.gold,
+    borderColor: colors.pink,
     ...(Platform.OS === 'web' ? ({
-      boxShadow: '0 0 12px rgba(255,215,0,0.6)',
+      boxShadow: '0 0 12px rgba(255,59,130,0.6)',
     } as any) : {}),
   },
   respinButtonDisabled: {
@@ -540,7 +542,7 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   hintTextRespin: {
-    color: colors.respin,
+    color: colors.pink,
     fontFamily: fonts.regular,
     fontSize: 13,
   },
@@ -553,7 +555,7 @@ const styles = StyleSheet.create({
     marginBottom: 4,
   },
   respinDoneButton: {
-    backgroundColor: colors.respin,
+    backgroundColor: colors.pink,
     borderRadius: 6,
     paddingHorizontal: 10,
     paddingVertical: 4,
@@ -590,14 +592,14 @@ const styles = StyleSheet.create({
   restartButton: {
     backgroundColor: 'transparent',
     borderWidth: 2,
-    borderColor: colors.indigo,
+    borderColor: colors.cyan,
     paddingHorizontal: 24,
     paddingVertical: 12,
     borderRadius: 10,
     marginTop: 8,
   },
   restartText: {
-    color: colors.indigo,
+    color: colors.cyan,
     fontFamily: fonts.bold,
     fontSize: 16,
     letterSpacing: 2,

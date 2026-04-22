@@ -167,8 +167,10 @@ const styles = StyleSheet.create({
     } as any : {}),
   },
   abandonButton: {
+    // Abandon IS destructive, so pink is semantically correct under the new
+    // palette rule (pink = loss/danger in UI chrome only).
     borderWidth: 1,
-    borderColor: colors.respin,
+    borderColor: colors.pink,
     borderRadius: 10,
     paddingVertical: 10,
     paddingHorizontal: 20,
@@ -177,11 +179,11 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   abandonButtonConfirm: {
-    backgroundColor: colors.respinTint,
+    backgroundColor: colors.pinkTint,
     borderColor: colors.pink,
   },
   abandonText: {
-    color: colors.respin,
+    color: colors.pink,
     fontFamily: fonts.bold,
     fontSize: 13,
     letterSpacing: 2,
@@ -191,14 +193,15 @@ const styles = StyleSheet.create({
     color: colors.pink,
   },
   closeButton: {
+    // Secondary action — neutral ink, no strong accent.
     borderWidth: 1,
-    borderColor: colors.indigo,
+    borderColor: colors.line,
     borderRadius: 10,
     paddingVertical: 10,
     paddingHorizontal: 32,
   },
   closeText: {
-    color: colors.indigo,
+    color: colors.inkDim,
     fontFamily: fonts.bold,
     fontSize: 14,
     letterSpacing: 2,

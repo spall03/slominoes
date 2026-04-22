@@ -102,11 +102,11 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   labelBiased: {
-    color: colors.respin,
+    color: colors.pink,
   },
   pillBiased: {
-    borderColor: colors.respinBorder,
-    backgroundColor: colors.respinTint,
+    borderColor: colors.pinkBorder,
+    backgroundColor: colors.pinkTint,
   },
   row: {
     flexDirection: 'row',

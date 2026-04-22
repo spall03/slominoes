@@ -123,7 +123,7 @@ const styles = StyleSheet.create({
     gap: 4,
   },
   respinBadgeActive: {
-    backgroundColor: colors.respin,
+    backgroundColor: colors.pink,
   },
   respinIconWrap: {
     alignItems: 'center',

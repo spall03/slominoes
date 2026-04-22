@@ -107,13 +107,13 @@ const styles = StyleSheet.create({
   respinToggle: {
     backgroundColor: 'transparent',
     borderWidth: 1,
-    borderColor: colors.respin,
+    borderColor: colors.cyan,
     borderRadius: 6,
     paddingHorizontal: 14,
     paddingVertical: 6,
   },
   respinToggleText: {
-    color: colors.respin,
+    color: colors.cyan,
     fontFamily: fonts.semiBold,
     fontSize: 13,
   },
