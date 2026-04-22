@@ -4,7 +4,7 @@ import type { Symbol } from './types';
 
 export const BOARD_SIZE = 8;
 export const TILES_PER_LEVEL = 16;
-export const RESPINS_PER_LEVEL = 5;
+export const RESPINS_PER_LEVEL = 0;
 export const WIN_THRESHOLD = 3000;
 export const MIN_MATCH_LENGTH = 3;
 
