@@ -71,6 +71,10 @@ export interface CumulativeStats {
   respinsBought: number;
   uniqueSymbolsUsed: Set<string>;
   totalRuns: number;
+  /** Deepest level reached across all runs (1-based, 1..NUM_LEVELS). */
+  furthestLevel: number;
+  /** Highest single-run final score. */
+  bestRunScore: number;
 }
 
 /** Per-run/per-level stats for unlock condition checking */
@@ -106,6 +110,8 @@ function defaultCumulativeStats(): CumulativeStats {
     respinsBought: 0,
     uniqueSymbolsUsed: new Set(),
     totalRuns: 0,
+    furthestLevel: 0,
+    bestRunScore: 0,
   };
 }
 
@@ -123,6 +129,8 @@ interface PersistedMeta {
   respinsBought: number;
   uniqueSymbolsUsed: string[];
   totalRuns: number;
+  furthestLevel?: number;   // added in v2; absent on old saves
+  bestRunScore?: number;    // added in v2; absent on old saves
 }
 
 async function loadMeta(): Promise<{ unlocked: Set<string>; stats: CumulativeStats }> {
@@ -139,6 +147,8 @@ async function loadMeta(): Promise<{ unlocked: Set<string>; stats: CumulativeSta
         respinsBought: data.respinsBought,
         uniqueSymbolsUsed: new Set(data.uniqueSymbolsUsed),
         totalRuns: data.totalRuns,
+        furthestLevel: data.furthestLevel ?? 0,
+        bestRunScore: data.bestRunScore ?? 0,
       },
     };
   } catch {
@@ -155,6 +165,8 @@ async function saveMeta(unlocked: Set<string>, stats: CumulativeStats) {
     respinsBought: stats.respinsBought,
     uniqueSymbolsUsed: [...stats.uniqueSymbolsUsed],
     totalRuns: stats.totalRuns,
+    furthestLevel: stats.furthestLevel,
+    bestRunScore: stats.bestRunScore,
   };
   await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(data));
 }
@@ -348,7 +360,10 @@ export const useMetaStore = create<MetaState>((set, get) => ({
       wonFullRunWithoutBuyingRespins: wonFullRun && currentRunStats.respinsBoughtThisRun === 0,
     };
 
-    // Update cumulative stats
+    // Update cumulative stats.
+    // Note: `levelsWon` param from the caller is actually "currentLevel at end
+    // of run" (level reached), not number-of-levels-won-this-run. Kept the
+    // param name for back-compat.
     const newStats: CumulativeStats = {
       cumulativeScore: cumulativeStats.cumulativeScore + finalScore,
       levelsWon: cumulativeStats.levelsWon + levelsWon,
@@ -356,6 +371,8 @@ export const useMetaStore = create<MetaState>((set, get) => ({
       respinsBought: cumulativeStats.respinsBought + currentRunStats.respinsBoughtThisRun,
       uniqueSymbolsUsed: cumulativeStats.uniqueSymbolsUsed,
       totalRuns: cumulativeStats.totalRuns + 1,
+      furthestLevel: Math.max(cumulativeStats.furthestLevel, levelsWon),
+      bestRunScore: Math.max(cumulativeStats.bestRunScore, finalScore),
     };
 
     // Check unlock conditions (max 1 per run)

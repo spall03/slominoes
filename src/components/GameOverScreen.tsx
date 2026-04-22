@@ -5,13 +5,20 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { colors, fonts } from '../theme';
 import { NUM_LEVELS } from '../constants';
 import { useRunStore } from '../store';
-import { useMetaStore } from '../meta-store';
+import { useMetaStore, UNLOCK_CONDITIONS } from '../meta-store';
+import { SYMBOL_ROSTER } from '../symbols';
 import { startMusic, stopMusic } from '../music';
 
 export function GameOverScreen() {
   const { currentLevel, levelScore, levelConfig } = useRunStore();
   const endRun = useMetaStore(s => s.endRun);
+  const unlockedSymbols = useMetaStore(s => s.unlockedSymbols);
   const endRunCalled = useRef(false);
+
+  // Count non-base unlockable symbols
+  const totalUnlockable = UNLOCK_CONDITIONS.length;
+  const unlockedCount = UNLOCK_CONDITIONS.filter(c => unlockedSymbols.has(c.symbolId)).length;
+  const allUnlocked = unlockedCount >= totalUnlockable;
 
   const won = currentLevel >= NUM_LEVELS && levelScore >= 0;
 
@@ -87,6 +94,28 @@ export function GameOverScreen() {
             </View>
           </>
         )}
+
+        {/* Unlock progress — retention anchor per the design audit. */}
+        <View style={styles.unlockRow}>
+          <Text style={styles.statLabel}>UNLOCKS</Text>
+          <Text style={[
+            styles.statValue,
+            { color: allUnlocked ? colors.gold : colors.ink },
+          ]}>
+            {unlockedCount} / {totalUnlockable}
+          </Text>
+        </View>
+        <View style={styles.unlockTrack}>
+          <LinearGradient
+            colors={[colors.cyan, colors.cyan]}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 0 }}
+            style={[
+              styles.unlockFill,
+              { width: `${Math.round((unlockedCount / totalUnlockable) * 100)}%` } as any,
+            ]}
+          />
+        </View>
       </View>
 
       <Pressable
@@ -186,6 +215,25 @@ const styles = StyleSheet.create({
     fontSize: 14,
     letterSpacing: 2,
     textTransform: 'uppercase',
+  },
+  unlockRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingVertical: 6,
+    marginTop: 6,
+  },
+  unlockTrack: {
+    height: 4,
+    backgroundColor: colors.line,
+    borderRadius: 2,
+    overflow: 'hidden',
+    marginBottom: 2,
+  },
+  unlockFill: {
+    height: '100%',
+    borderRadius: 2,
+    minWidth: 2,
   },
   progressLabelRow: {
     flexDirection: 'row',

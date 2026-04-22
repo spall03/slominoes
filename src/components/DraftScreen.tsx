@@ -25,6 +25,24 @@ function renderAbilityText(text: string) {
   );
 }
 
+/** Render a 5-dot frequency indicator (●●○○○ pattern for freq=2). */
+function FrequencyDots({ freq }: { freq: number }) {
+  const filled = Math.min(5, Math.max(0, freq));
+  return (
+    <Text style={styles.chipValue}>
+      {'●'.repeat(filled)}
+      <Text style={styles.chipValueDim}>{'○'.repeat(5 - filled)}</Text>
+    </Text>
+  );
+}
+
+/** Look up tier for a symbol. Base symbols are tier 0; unlockables come from UNLOCK_CONDITIONS. */
+function getTierLabel(id: SymbolId): string {
+  const cond = UNLOCK_CONDITIONS.find(c => c.symbolId === id);
+  if (!cond) return 'CORE';
+  return `TIER ${cond.tier}`;
+}
+
 function SymbolCard({
   def,
   isSelected,
@@ -60,19 +78,45 @@ function SymbolCard({
         </>
       ) : (
         <View style={styles.cardContent}>
-          <View style={Platform.OS === 'web' ? ({
-            filter: `drop-shadow(0 0 4px ${symbolColors[def.id] ?? colors.cyan})`,
-          } as any) : undefined}>
+          <View
+            style={[
+              styles.iconBlock,
+              Platform.OS === 'web' ? ({
+                filter: `drop-shadow(0 0 4px ${symbolColors[def.id] ?? colors.cyan})`,
+              } as any) : undefined,
+            ]}
+          >
             <SymbolIcon symbol={def.id} size={36} />
           </View>
           <View style={styles.cardInfo}>
-            <Text style={[
-              styles.name,
-              isSelected && { color: colors.gold },
-            ]}>{def.name}</Text>
-            <Text style={styles.stats}>
-              Match {def.matchLength}  ·  {def.scoreValue} pts  ·  Freq {def.frequency}
-            </Text>
+            {/* Eyebrow + title row with right-aligned points */}
+            <View style={styles.headerRow}>
+              <View style={styles.headerLeft}>
+                <Text style={styles.eyebrow}>{getTierLabel(def.id)}</Text>
+                <Text style={[
+                  styles.name,
+                  isSelected && { color: colors.gold },
+                ]}>{def.name}</Text>
+              </View>
+              <View style={styles.pointsBlock}>
+                <Text style={styles.points}>{def.scoreValue}</Text>
+                <Text style={styles.pointsEyebrow}>PTS</Text>
+              </View>
+            </View>
+
+            {/* Meta chips: MATCH / FREQ */}
+            <View style={styles.chipRow}>
+              <View style={styles.chip}>
+                <Text style={styles.chipLabel}>MATCH</Text>
+                <Text style={styles.chipValue}>·{def.matchLength}</Text>
+              </View>
+              <View style={styles.chip}>
+                <Text style={styles.chipLabel}>FREQ</Text>
+                <FrequencyDots freq={def.frequency} />
+              </View>
+            </View>
+
+            {/* Ability sentence — ink body with inline cyan numeric highlights */}
             {abilityText && (
               <Text
                 style={styles.ability}
@@ -283,12 +327,79 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     marginTop: 4,
   },
+  iconBlock: {
+    alignSelf: 'flex-start',
+    paddingTop: 2,
+  },
+  headerRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    justifyContent: 'space-between',
+    gap: 8,
+    marginBottom: 6,
+  },
+  headerLeft: {
+    flex: 1,
+    gap: 1,
+  },
+  eyebrow: {
+    fontSize: 9,
+    fontFamily: fonts.semiBold,
+    color: colors.inkMute,
+    letterSpacing: 2,
+  },
   name: {
     fontSize: 13,
     fontFamily: fonts.bold,
-    color: colors.textPrimary,
+    color: colors.ink,
     letterSpacing: 1,
     textTransform: 'uppercase',
+  },
+  pointsBlock: {
+    alignItems: 'flex-end',
+  },
+  points: {
+    fontSize: 16,
+    fontFamily: fonts.bold,
+    color: colors.gold,
+    fontVariant: ['tabular-nums'],
+  },
+  pointsEyebrow: {
+    fontSize: 8,
+    fontFamily: fonts.semiBold,
+    color: colors.inkMute,
+    letterSpacing: 2,
+    marginTop: -2,
+  },
+  chipRow: {
+    flexDirection: 'row',
+    gap: 4,
+    marginBottom: 4,
+    flexWrap: 'wrap',
+  },
+  chip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3,
+    backgroundColor: colors.surface2,
+    borderRadius: 3,
+    paddingHorizontal: 5,
+    paddingVertical: 2,
+  },
+  chipLabel: {
+    fontSize: 9,
+    fontFamily: fonts.semiBold,
+    color: colors.inkMute,
+    letterSpacing: 1,
+  },
+  chipValue: {
+    fontSize: 9,
+    fontFamily: fonts.bold,
+    color: colors.ink,
+    letterSpacing: 0.5,
+  },
+  chipValueDim: {
+    color: colors.inkMute,
   },
   stats: {
     fontSize: 10,
