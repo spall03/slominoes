@@ -1,5 +1,5 @@
-import React, { useEffect } from 'react';
-import { View, ActivityIndicator, SafeAreaView } from 'react-native';
+import React, { useEffect, useState } from 'react';
+import { View, ActivityIndicator, Text, SafeAreaView, Platform, StyleSheet } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { useFonts, SpaceGrotesk_400Regular, SpaceGrotesk_600SemiBold, SpaceGrotesk_700Bold } from '@expo-google-fonts/space-grotesk';
@@ -12,7 +12,8 @@ import { LevelPreviewScreen } from './src/components/LevelPreviewScreen';
 import { PlayingScreen } from './src/components/PlayingScreen';
 import { GameOverScreen } from './src/components/GameOverScreen';
 import { UnlockReveal } from './src/components/UnlockReveal';
-import { colors } from './src/theme';
+import { initializeAdServices } from './src/ad-init';
+import { colors, fonts } from './src/theme';
 
 export default function App() {
   const [fontsLoaded] = useFonts({
@@ -28,15 +29,60 @@ export default function App() {
   const settingsLoaded = useSettingsStore(s => s.loaded);
   const loadSettings = useSettingsStore(s => s.loadSettings);
 
+  const adServiceReady = useMetaStore(s => s.adServiceReady);
+  const adServiceFailed = useMetaStore(s => s.adServiceFailed);
+  const setAdServiceReady = useMetaStore(s => s.setAdServiceReady);
+  const setAdServiceFailed = useMetaStore(s => s.setAdServiceFailed);
+
+  // Step 1: load persisted stores
   useEffect(() => {
     loadFromStorage();
     loadSettings();
   }, [loadFromStorage, loadSettings]);
 
+  // Step 2: after meta loads, run the ad init state machine.
+  // On web this is an immediate no-op that resolves ready=true.
+  // On native: ATT → UMP → AdMob → Analytics → Crashlytics → IAP cold-start.
+  const [initStarted, setInitStarted] = useState(false);
+  useEffect(() => {
+    if (!metaLoaded || initStarted) return;
+    setInitStarted(true);
+    (async () => {
+      const result = await initializeAdServices();
+      if (result.ready) {
+        setAdServiceReady({
+          attStatus: result.attStatus,
+          removeAdsEntitled: result.removeAdsEntitled,
+        });
+      } else {
+        setAdServiceFailed(result.error ?? 'unknown');
+      }
+    })();
+  }, [metaLoaded, initStarted, setAdServiceReady, setAdServiceFailed]);
+
+  // Boot states. Render order:
+  //   1. fonts loading → spinner
+  //   2. meta/settings loading → spinner
+  //   3. ad init in progress → "Initializing…" (only on native, instant on web)
+  //   4. ready → game
+  //
+  // Note: ad init failure is not fatal — game still renders, ad-using
+  // components see adServiceFailed=true and gracefully hide their CTAs.
+
   if (!fontsLoaded || !metaLoaded || !settingsLoaded) {
     return (
-      <View style={{ flex: 1, backgroundColor: colors.bg, alignItems: 'center', justifyContent: 'center' }}>
+      <View style={styles.boot}>
         <ActivityIndicator color={colors.cyan} size="large" />
+      </View>
+    );
+  }
+
+  const adInitInFlight = Platform.OS !== 'web' && !adServiceReady && !adServiceFailed;
+  if (adInitInFlight) {
+    return (
+      <View style={styles.boot}>
+        <ActivityIndicator color={colors.cyan} size="large" />
+        <Text style={styles.bootLabel}>INITIALIZING</Text>
       </View>
     );
   }
@@ -58,3 +104,19 @@ export default function App() {
     </GestureHandlerRootView>
   );
 }
+
+const styles = StyleSheet.create({
+  boot: {
+    flex: 1,
+    backgroundColor: colors.bg,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 16,
+  },
+  bootLabel: {
+    color: colors.inkMute,
+    fontFamily: fonts.semiBold,
+    fontSize: 11,
+    letterSpacing: 4,
+  },
+});

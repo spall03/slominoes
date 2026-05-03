@@ -129,14 +129,31 @@ interface PersistedMeta {
   respinsBought: number;
   uniqueSymbolsUsed: string[];
   totalRuns: number;
-  furthestLevel?: number;   // added in v2; absent on old saves
-  bestRunScore?: number;    // added in v2; absent on old saves
+  furthestLevel?: number;        // added in v2; absent on old saves
+  bestRunScore?: number;         // added in v2; absent on old saves
+  removeAdsEntitled?: boolean;   // ad-support: persisted entitlement cache
+  firstRunCompleted?: boolean;   // ad-support: gate for first-run-no-interstitial guardrail
 }
 
-async function loadMeta(): Promise<{ unlocked: Set<string>; stats: CumulativeStats }> {
+interface PersistedAds {
+  removeAdsEntitled: boolean;
+  firstRunCompleted: boolean;
+}
+
+async function loadMeta(): Promise<{
+  unlocked: Set<string>;
+  stats: CumulativeStats;
+  ads: PersistedAds;
+}> {
   try {
     const raw = await AsyncStorage.getItem(STORAGE_KEY);
-    if (!raw) return { unlocked: new Set(), stats: defaultCumulativeStats() };
+    if (!raw) {
+      return {
+        unlocked: new Set(),
+        stats: defaultCumulativeStats(),
+        ads: { removeAdsEntitled: false, firstRunCompleted: false },
+      };
+    }
     const data: PersistedMeta = JSON.parse(raw);
     return {
       unlocked: new Set(data.unlockedSymbols),
@@ -150,13 +167,25 @@ async function loadMeta(): Promise<{ unlocked: Set<string>; stats: CumulativeSta
         furthestLevel: data.furthestLevel ?? 0,
         bestRunScore: data.bestRunScore ?? 0,
       },
+      ads: {
+        removeAdsEntitled: data.removeAdsEntitled ?? false,
+        firstRunCompleted: data.firstRunCompleted ?? false,
+      },
     };
   } catch {
-    return { unlocked: new Set(), stats: defaultCumulativeStats() };
+    return {
+      unlocked: new Set(),
+      stats: defaultCumulativeStats(),
+      ads: { removeAdsEntitled: false, firstRunCompleted: false },
+    };
   }
 }
 
-async function saveMeta(unlocked: Set<string>, stats: CumulativeStats) {
+async function saveMeta(
+  unlocked: Set<string>,
+  stats: CumulativeStats,
+  ads: PersistedAds,
+) {
   const data: PersistedMeta = {
     unlockedSymbols: [...unlocked],
     cumulativeScore: stats.cumulativeScore,
@@ -167,6 +196,8 @@ async function saveMeta(unlocked: Set<string>, stats: CumulativeStats) {
     totalRuns: stats.totalRuns,
     furthestLevel: stats.furthestLevel,
     bestRunScore: stats.bestRunScore,
+    removeAdsEntitled: ads.removeAdsEntitled,
+    firstRunCompleted: ads.firstRunCompleted,
   };
   await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(data));
 }
@@ -177,6 +208,8 @@ async function saveMeta(unlocked: Set<string>, stats: CumulativeStats) {
 
 const BASE_SYMBOL_IDS: SymbolId[] = ['cherry', 'lemon', 'bar', 'bell', 'seven'];
 
+export type ATTStatus = 'granted' | 'denied' | 'restricted' | 'not_determined' | 'unsupported';
+
 export interface MetaState {
   loaded: boolean;
   unlockedSymbols: Set<string>;
@@ -185,6 +218,18 @@ export interface MetaState {
   currentRunStats: RunStats;
   pendingUnlock: SymbolId | null;
   unlockQueue: SymbolId[];
+
+  // Ad-support state
+  // Persisted:
+  removeAdsEntitled: boolean;
+  firstRunCompleted: boolean;
+  // In-memory only (reset on cold start):
+  adServiceReady: boolean;
+  adServiceFailed: boolean;
+  adServiceError: string | null;
+  attStatus: ATTStatus;
+  /** Timestamp of last interstitial show. Used for the 120s cooldown guardrail. */
+  lastInterstitialAt: number;
 
   // Actions
   loadFromStorage: () => Promise<void>;
@@ -210,6 +255,16 @@ export interface MetaState {
   // End of run
   endRun: (finalScore: number, levelsWon: number, wonFullRun: boolean) => void;
   dismissUnlock: () => void;
+
+  // Ad-support actions
+  setAdServiceReady: (params: {
+    attStatus: ATTStatus;
+    removeAdsEntitled: boolean;
+  }) => void;
+  setAdServiceFailed: (error: string) => void;
+  setRemoveAdsEntitled: (entitled: boolean) => void;
+  markInterstitialShown: () => void;
+  markFirstRunCompleted: () => void;
 }
 
 export const useMetaStore = create<MetaState>((set, get) => ({
@@ -221,9 +276,25 @@ export const useMetaStore = create<MetaState>((set, get) => ({
   pendingUnlock: null,
   unlockQueue: [],
 
+  // Ad-support — persisted (overwritten by loadFromStorage)
+  removeAdsEntitled: false,
+  firstRunCompleted: false,
+  // Ad-support — in-memory
+  adServiceReady: false,
+  adServiceFailed: false,
+  adServiceError: null,
+  attStatus: 'not_determined' as ATTStatus,
+  lastInterstitialAt: 0,
+
   loadFromStorage: async () => {
-    const { unlocked, stats } = await loadMeta();
-    set({ loaded: true, unlockedSymbols: unlocked, cumulativeStats: stats });
+    const { unlocked, stats, ads } = await loadMeta();
+    set({
+      loaded: true,
+      unlockedSymbols: unlocked,
+      cumulativeStats: stats,
+      removeAdsEntitled: ads.removeAdsEntitled,
+      firstRunCompleted: ads.firstRunCompleted,
+    });
   },
 
   selectSymbol: (id: SymbolId) => {
@@ -404,10 +475,64 @@ export const useMetaStore = create<MetaState>((set, get) => ({
     });
 
     // Persist
-    saveMeta(newUnlocked, newStats);
+    saveMeta(newUnlocked, newStats, {
+      removeAdsEntitled: get().removeAdsEntitled,
+      firstRunCompleted: get().firstRunCompleted,
+    });
   },
 
   dismissUnlock: () => {
     set({ pendingUnlock: null });
+  },
+
+  // ==========================================================================
+  // Ad-support actions
+  // ==========================================================================
+
+  setAdServiceReady: ({ attStatus, removeAdsEntitled }) => {
+    set({
+      adServiceReady: true,
+      adServiceFailed: false,
+      adServiceError: null,
+      attStatus,
+      removeAdsEntitled,
+    });
+    // Persist the entitlement value the cold-start auto-restore returned
+    const { unlockedSymbols, cumulativeStats, firstRunCompleted } = get();
+    saveMeta(unlockedSymbols, cumulativeStats, {
+      removeAdsEntitled,
+      firstRunCompleted,
+    });
+  },
+
+  setAdServiceFailed: (error: string) => {
+    set({
+      adServiceReady: false,
+      adServiceFailed: true,
+      adServiceError: error,
+    });
+  },
+
+  setRemoveAdsEntitled: (entitled: boolean) => {
+    set({ removeAdsEntitled: entitled });
+    const { unlockedSymbols, cumulativeStats, firstRunCompleted } = get();
+    saveMeta(unlockedSymbols, cumulativeStats, {
+      removeAdsEntitled: entitled,
+      firstRunCompleted,
+    });
+  },
+
+  markInterstitialShown: () => {
+    set({ lastInterstitialAt: Date.now() });
+  },
+
+  markFirstRunCompleted: () => {
+    if (get().firstRunCompleted) return; // idempotent
+    set({ firstRunCompleted: true });
+    const { unlockedSymbols, cumulativeStats, removeAdsEntitled } = get();
+    saveMeta(unlockedSymbols, cumulativeStats, {
+      removeAdsEntitled,
+      firstRunCompleted: true,
+    });
   },
 }));
