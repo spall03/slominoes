@@ -1,6 +1,6 @@
 {
   "expo": {
-    "name": "slominoes",
+    "name": "Slominoes",
     "slug": "slominoes",
     "version": "1.0.0",
     "orientation": "portrait",
@@ -11,15 +11,22 @@
     "splash": {
       "image": "./assets/splash-icon.png",
       "resizeMode": "contain",
-      "backgroundColor": "#ffffff"
+      "backgroundColor": "#060614"
     },
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "bundleIdentifier": "com.2ndstrike.slominoes",
+      "buildNumber": "1",
+      "infoPlist": {
+        "NSUserTrackingUsageDescription": "We use this to show you ads relevant to your interests. You can opt out and the game still works fully — rewarded ads stay available either way."
+      }
     },
     "android": {
+      "package": "com.2ndstrike.slominoes",
+      "versionCode": 1,
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
-        "backgroundColor": "#ffffff"
+        "backgroundColor": "#060614"
       },
       "edgeToEdgeEnabled": true,
       "predictiveBackGestureEnabled": false
@@ -33,7 +40,18 @@
       "baseUrl": "/slominoes"
     },
     "plugins": [
-      "expo-font"
+      "expo-font",
+      [
+        "react-native-google-mobile-ads",
+        {
+          "ios_app_id": "ca-app-pub-3940256099942544~1458002511",
+          "android_app_id": "ca-app-pub-3940256099942544~3347511713",
+          "user_tracking_usage_description": "We use this to show you ads relevant to your interests. You can opt out and the game still works fully.",
+          "delay_app_measurement_init": true,
+          "optimize_initialization": true,
+          "optimize_ad_loading": true
+        }
+      ]
     ]
   }
 }
