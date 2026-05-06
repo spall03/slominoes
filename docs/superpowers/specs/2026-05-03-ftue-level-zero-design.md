@@ -88,28 +88,47 @@ TUTORIAL_LEVEL_CONFIG = {
     { row: 5, col: 4, symbol: 'cherry' },
     { row: 3, col: 1, symbol: 'bar' },
   ],
-  entrySpotCount: 1,         // single entry, top of board
+  entrySpotCount: 2,         // top + bottom entries (matches normal Level 1+ shape)
   boardMask: null,
 };
 ```
+
+### Two entries instead of one
+
+The spec went through one revision on this. Initial design used a single top entry to minimize choice surface. Updated to **top + bottom (both at cols 3–4)** because:
+
+- Matches the entry configuration of real Level 1+ runs — player learns against the right shape from turn 1
+- The choice between entries is the lesson — neither is "wrong," both reach the cherry pair at row 5
+- Tutorial hint copy can point this out inline: *"Tap an entry arrow on the top or bottom"*
 
 ### Forced loadout
 
 Level 0 uses the 5 base symbols only (no abilities, no draft). The player has not yet been to the draft screen — first draft happens *after* Level 0 completes.
 
+### Hint visual styles
+
+Two styles. No tooltip-with-arrow visual — words do the pointing.
+
+| Style | When | Renders as |
+|---|---|---|
+| **Banner** | Default for all instructional hints | Text in the hint-area above the grid (reuses Move-02 `styles.hintText` region — same place Level 1+ idle hints appear) |
+| **Centered overlay** | "Wow moment" beats only — match celebrations, respin completion | Semi-transparent ink-tinted backdrop over the grid, large gold text, 2s linger then fade |
+
+For the respin-badge pulse: the badge itself pulses (subtle scale + cyan glow) while the banner hint copy points at it in plain language ("Tap the RESPIN button — top right"). No separate tooltip rendering.
+
 ### Hint sequence
 
-The Level 0 hint flow uses the existing hint-decay system from Move 02 but with a custom script that fires per-placement-step (not on idle):
+The Level 0 hint flow uses the existing hint-decay infrastructure from Move 02 but with a custom script that fires per-placement-step (not on idle):
 
-| Step | Trigger | Hint text | Position |
+| Step | Trigger | Style | Copy |
 |---|---|---|---|
-| 1 | Mount | "Tap the blue arrow to place your first tile" | Above grid |
-| 2 | Tile placed at (5,5), 3-cherry match resolves | "✨ Three cherries match! Locked cells stay safe from respins." | Centered, fades after 2s |
-| 3 | Tile #2 placed (any cell) | "Not every move is a match. Place tiles to set up future combos." | Above grid |
-| 4 | Tile #3 placed | "Tap RESPIN to shuffle a row or column." | Pulses on respin badge |
-| 5 | Respin button tapped | "Pick the row with your bars to try for a match." | Pulses on a row button |
-| 6 | Respin completes (whether or not match formed) | "That's a respin! Now finish strong." | Centered |
-| 7 | Level threshold met or queue empty | "VICTORY — now pick your loadout!" | GameOverScreen |
+| 1 | Mount | Banner | "Tap an entry arrow on the top or bottom to place your first tile." |
+| 2 | Tile placed, 3-cherry match resolves | Centered overlay (2s) | "✨ Three cherries match! Locked cells stay safe from respins." |
+| 3 | Tile #2 placed | Banner | "Not every move is a match. Set up future combos." |
+| 4 | Tile #3 placed | Banner + respin-badge pulse | "Tap the RESPIN button (top right) to shuffle a row or column." |
+| 5 | Respin mode entered | Banner | "Pick the row with your bars." |
+| 6 | Respin completes (regardless of outcome) | Centered overlay (2s) | "That's a respin! Now finish strong." |
+| 7 | Level threshold met or queue empty | GameOverScreen text | "TUTORIAL COMPLETE — pick your loadout!" |
 
 ### Why threshold = 30
 
@@ -195,11 +214,27 @@ completeLevel: (score, threshold, respinsLeft) => {
 
 ### Component changes
 
-- `LevelPreviewScreen.tsx` — when `currentLevel === 0`, show a different UI: "TUTORIAL" header, simpler stat row, "START TUTORIAL" CTA copy
+- `LevelPreviewScreen.tsx` — when `currentLevel === 0`, show a tutorial-specific layout:
+  - Header: **TUTORIAL** in cyan
+  - Body: "60-second walkthrough of how Slominoes works."
+  - Primary CTA: **START** (cyan outline button)
+  - Secondary text button: **SKIP — I've played before** (inkDim, no outline)
 - `Grid.tsx` — no behavioral change; just renders the pre-seeded board
 - New: `TutorialHints.tsx` — manages the scripted hint sequence, listens to game-store state changes
-- `PlayingScreen.tsx` — when `currentLevel === 0`, render `<TutorialHints>` instead of the normal hint-decay flow
+- `PlayingScreen.tsx` — when `currentLevel === 0`, render `<TutorialHints>` instead of the normal hint-decay flow; HUD respin badge gets pulse animation when tutorial step 4 fires
 - `GameOverScreen.tsx` — when `currentLevel === 0`, show different copy: "TUTORIAL COMPLETE — pick your symbols!" → "CONTINUE" CTA → routes to Draft
+
+### Skip flow
+
+Tapping **SKIP** on the LevelPreview Level-0 screen:
+
+1. Sets `useMetaStore.hasTutorialBeenSeen = true` (persisted)
+2. Routes directly to `runPhase: 'draft'`, `currentLevel: 1`
+3. No confirmation dialog — player has already self-selected by tapping the secondary button
+
+This positions skip as opt-in self-selection ("I've played before"), not friction-removal. Players who've played the web build on github.io can skip cleanly; first-timers see START as the primary action.
+
+Skip is **only** offered before Level 0 starts, not during it. Once the tutorial begins, the player commits to the 60-second walkthrough.
 
 ### Settings replay
 
@@ -240,11 +275,11 @@ completeLevel: (score, threshold, respinsLeft) => {
 
 ## Open questions
 
-1. **Single entry spot in Level 0 or two?** Two entries teach the entry-choice mechanic; one is simpler. Lean: **one** (simpler is better for first-touch).
-2. **Should the hint text use Slominoes' neon palette colors, or stick to ink for legibility?** Lean: **ink + occasional cyan accent on action verbs ("tap RESPIN")**.
+1. ~~Single entry spot in Level 0 or two?~~ **Resolved: two entries** (top + bottom at cols 3-4). Matches Level 1+ shape.
+2. **Should the hint text use Slominoes' neon palette colors, or stick to ink for legibility?** Resolved: **ink body + occasional cyan accent on action verbs** ("tap **RESPIN**"). Centered "wow moment" overlays use gold (value hue) on a semi-transparent ink backdrop.
 3. **Tutorial replay: should it count toward unlock progress / stats?** Lean: **no** — replays don't bump `totalRuns`, `cumulativeScore`, etc. Pure tutorial.
-4. **What does the LevelPreviewScreen show for Level 0?** Pre-built layout? Threshold (30) and respin (1) badges? Recommend a stripped-down preview labeled "TUTORIAL" that just says "Tap START to begin."
-5. **Skip option?** Lean: **no skip in v1**. Tutorial is short. Replay path means it's never permanently inflicted.
+4. ~~LevelPreviewScreen for Level 0?~~ **Resolved**: TUTORIAL header / 60-second walkthrough body / START primary / SKIP secondary text button.
+5. ~~Skip option?~~ **Resolved: include skip on LevelPreview only** ("SKIP — I've played before"). Self-selection. No confirm dialog. Not available during Level 0 itself.
 
 ---
 
