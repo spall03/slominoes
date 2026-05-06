@@ -42,7 +42,62 @@ export function getEntrySpots(count: number): EntrySpot[] {
 // LEVEL GENERATION
 // =============================================================================
 
+/**
+ * Hand-crafted Level 0 (FTUE tutorial) config. Soft rails — pre-seeded board
+ * + carefully-chosen tile queue (in generateTutorialTileQueue) guarantee the
+ * scripted teaching beats fire reliably without hard-rails / forced moves.
+ *
+ * Spec: docs/superpowers/specs/2026-05-03-ftue-level-zero-design.md (v3)
+ */
+export const TUTORIAL_LEVEL_CONFIG: LevelConfig = {
+  level: 0,
+  // Threshold = 30 means a single 3-cherry match (10 × 3) wins the level
+  // immediately — instant dopamine, "I figured it out."
+  threshold: 30,
+  // 1 respin so the tutorial can teach the respin mechanic, not so many that
+  // the player can spam-respin and avoid learning placement.
+  respins: 1,
+  tilesPerLevel: 4,
+  symbolCount: 5,
+  // Pre-seeded board: 2 cherries adjacent at row 5 (begging for a 3-match)
+  // + 1 isolated bar at (3, 1) that will be the respin-lesson setup.
+  obstacles: [
+    { row: 5, col: 3, symbol: 'cherry' },
+    { row: 5, col: 4, symbol: 'cherry' },
+    { row: 3, col: 1, symbol: 'bar' },
+  ],
+  entrySpotCount: 2,
+  boardMask: null,
+  // CRITICAL — without this, +15% auto-end fires at score >= 34.5 (single
+  // cherry match = 30, any incidental pickup tips it over) and the level
+  // ends before the respin lesson on tile 3.
+  disableAutoEnd: true,
+  isTutorial: true,
+};
+
+/**
+ * Hand-crafted tile queue for Level 0. Spec v3 design:
+ *   - tile 1 (cherry+lemon): completes the seeded cherry pair → 3-match → lock
+ *   - tile 2 (bell+seven):   both symbols absent from current board →
+ *                            STRUCTURALLY non-matching, lesson "not every move
+ *                            is a match" can't be undermined by luck
+ *   - tile 3 (bar+bell):     bar adjacent to seeded (3, 1) bar → near-match,
+ *                            sets up the respin lesson
+ *   - tile 4 (seven+lemon):  cleanup tile after the respin lesson
+ */
+export function generateTutorialTileQueue(): Tile[] {
+  return [
+    { id: 't0-1', symbolA: 'cherry', symbolB: 'lemon' },
+    { id: 't0-2', symbolA: 'bell',   symbolB: 'seven' },
+    { id: 't0-3', symbolA: 'bar',    symbolB: 'bell'  },
+    { id: 't0-4', symbolA: 'seven',  symbolB: 'lemon' },
+  ];
+}
+
 export function generateLevelConfig(level: number): LevelConfig {
+  // Tutorial — hand-crafted, no procedural generation.
+  if (level === 0) return TUTORIAL_LEVEL_CONFIG;
+
   const wallCount = Math.floor(level * WALL_SCALAR);
 
   // Place walls randomly, avoiding entry spot cells

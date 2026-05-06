@@ -33,6 +33,7 @@ import {
   getEntrySpots,
   generateTileQueue,
   generateTileQueueFromFreqs,
+  generateTutorialTileQueue,
   getRandomSymbol,
   getRandomSymbolFromFreqs,
 } from './level';
@@ -133,9 +134,13 @@ export interface GameState {
 }
 
 export function createInitialState(config: LevelConfig = generateLevelConfig(1), loadoutFreqs?: Map<string, number>, loadoutDefs?: SymbolDef[]) {
-  const queue = loadoutFreqs
-    ? generateTileQueueFromFreqs(config.tilesPerLevel, loadoutFreqs)
-    : generateTileQueue(config.tilesPerLevel, config.symbolCount);
+  // Level 0 (FTUE) uses a hand-crafted tile queue. Order matters for the
+  // scripted teaching beats — see TUTORIAL_LEVEL_CONFIG / spec v3.
+  const queue = config.isTutorial
+    ? generateTutorialTileQueue()
+    : loadoutFreqs
+      ? generateTileQueueFromFreqs(config.tilesPerLevel, loadoutFreqs)
+      : generateTileQueue(config.tilesPerLevel, config.symbolCount);
   const entryCount = loadoutDefs ? getEntrySpotCount(loadoutDefs) : config.entrySpotCount;
   const spots = getEntrySpots(entryCount);
   return {
@@ -836,6 +841,33 @@ export const useRunStore = create<RunState>((set, get) => ({
   bonusRespins: 0,
 
   startRun: () => {
+    // Lazy-require meta-store + analytics to avoid circular import.
+    const meta = require('./meta-store').useMetaStore.getState();
+    const events = require('./analytics-events');
+
+    if (!meta.hasTutorialBeenSeen) {
+      // FTUE path: route directly to Level 0 (skip Draft).
+      // Forced base-symbol loadout — player hasn't drafted yet.
+      const { SYMBOL_ROSTER } = require('./symbols');
+      const tutorialLoadout = SYMBOL_ROSTER.filter((s: SymbolDef) => s.base);
+      const freqs = buildFrequencyTable(tutorialLoadout);
+      const config = generateLevelConfig(0);
+      set({
+        runPhase: 'levelPreview',
+        currentLevel: 0,
+        levelScore: 0,
+        levelConfig: config,
+        bonusRespins: 0,
+      });
+      useGameStore.setState({
+        loadoutFreqs: freqs,
+        loadoutDefs: tutorialLoadout,
+      });
+      events.tutorialStarted();
+      return;
+    }
+
+    // Normal path: route to Draft.
     set({
       runPhase: 'draft',
       currentLevel: 1,
@@ -868,6 +900,26 @@ export const useRunStore = create<RunState>((set, get) => ({
 
   completeLevel: (score: number, threshold: number, _respinsLeft: number) => {
     const { currentLevel } = get();
+
+    // FTUE: Level 0 completion routes to GameOver with custom Tutorial-complete
+    // copy. The GameOverScreen Level 0 variant routes onward to Draft. Don't
+    // call useMetaStore.endRun() — Level 0 is meta-progression-neutral.
+    if (currentLevel === 0) {
+      try { Sound.playLevelWin(); } catch {}
+      const meta = require('./meta-store').useMetaStore.getState();
+      const events = require('./analytics-events');
+      // respin_used: TUTORIAL_LEVEL_CONFIG starts with 1 respin available;
+      // if respinsRemaining < 1 at level end, the player consumed it.
+      const respinUsed = useGameStore.getState().respinsRemaining < 1;
+      meta.setTutorialSeen();
+      events.tutorialCompleted({ respin_used: respinUsed });
+      set({
+        runPhase: 'gameOver',
+        levelScore: score,
+        bonusRespins: 0,
+      });
+      return;
+    }
 
     // Calculate bonus respins for next level based on how much score exceeds threshold
     const excessPct = (score - threshold) / threshold;
