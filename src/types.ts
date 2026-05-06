@@ -24,6 +24,13 @@ export interface LevelConfig {
   obstacles: ObstacleCell[];
   entrySpotCount: number;
   boardMask: boolean[][] | null;
+  /** When true, the engine never auto-ends the level on +15% over threshold.
+   *  Used by Level 0 (FTUE) so the scripted tutorial can complete its beats
+   *  even if the player overscores incidentally. */
+  disableAutoEnd?: boolean;
+  /** When true, this level is the FTUE tutorial. Stat tracking, ads, unlock
+   *  checks, and run analytics are all gated on this flag. */
+  isTutorial?: boolean;
 }
 
 export interface Tile {

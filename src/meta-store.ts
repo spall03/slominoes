@@ -133,6 +133,8 @@ interface PersistedMeta {
   bestRunScore?: number;         // added in v2; absent on old saves
   removeAdsEntitled?: boolean;   // ad-support: persisted entitlement cache
   firstRunCompleted?: boolean;   // ad-support: gate for first-run-no-interstitial guardrail
+  hasTutorialBeenSeen?: boolean; // FTUE: gate for routing NEW RUN to Level 0
+  hasSeenDraftIntro?: boolean;   // FTUE: gate for first-draft-visit overlay
 }
 
 interface PersistedAds {
@@ -140,11 +142,37 @@ interface PersistedAds {
   firstRunCompleted: boolean;
 }
 
+interface PersistedFtue {
+  hasTutorialBeenSeen: boolean;
+  hasSeenDraftIntro: boolean;
+}
+
+/**
+ * One-time migration from the old Tutorial.tsx AsyncStorage key
+ * (`slominoes_tutorial_seen`) to the new useMetaStore flag.
+ *
+ * Idempotent. Old key is preserved (not deleted) for rollback safety —
+ * v1.1 can clean it up once we're confident migration succeeded for all
+ * users.
+ */
+async function readLegacyTutorialFlag(): Promise<boolean> {
+  try {
+    const raw = await AsyncStorage.getItem('slominoes_tutorial_seen');
+    return raw === 'true';
+  } catch {
+    return false;
+  }
+}
+
 async function loadMeta(): Promise<{
   unlocked: Set<string>;
   stats: CumulativeStats;
   ads: PersistedAds;
+  ftue: PersistedFtue;
 }> {
+  // Legacy migration runs even when the new persisted blob is fresh — captures
+  // existing players who saw the old slide-deck Tutorial.tsx.
+  const legacyTutorialSeen = await readLegacyTutorialFlag();
   try {
     const raw = await AsyncStorage.getItem(STORAGE_KEY);
     if (!raw) {
@@ -152,6 +180,10 @@ async function loadMeta(): Promise<{
         unlocked: new Set(),
         stats: defaultCumulativeStats(),
         ads: { removeAdsEntitled: false, firstRunCompleted: false },
+        ftue: {
+          hasTutorialBeenSeen: legacyTutorialSeen,
+          hasSeenDraftIntro: false,
+        },
       };
     }
     const data: PersistedMeta = JSON.parse(raw);
@@ -171,12 +203,22 @@ async function loadMeta(): Promise<{
         removeAdsEntitled: data.removeAdsEntitled ?? false,
         firstRunCompleted: data.firstRunCompleted ?? false,
       },
+      ftue: {
+        // OR-merge legacy and new — covers (a) fresh installs with legacy key,
+        // (b) updated installs with new flag set, (c) edge case of both
+        hasTutorialBeenSeen: data.hasTutorialBeenSeen ?? legacyTutorialSeen,
+        hasSeenDraftIntro: data.hasSeenDraftIntro ?? false,
+      },
     };
   } catch {
     return {
       unlocked: new Set(),
       stats: defaultCumulativeStats(),
       ads: { removeAdsEntitled: false, firstRunCompleted: false },
+      ftue: {
+        hasTutorialBeenSeen: legacyTutorialSeen,
+        hasSeenDraftIntro: false,
+      },
     };
   }
 }
@@ -185,6 +227,7 @@ async function saveMeta(
   unlocked: Set<string>,
   stats: CumulativeStats,
   ads: PersistedAds,
+  ftue: PersistedFtue,
 ) {
   const data: PersistedMeta = {
     unlockedSymbols: [...unlocked],
@@ -198,6 +241,8 @@ async function saveMeta(
     bestRunScore: stats.bestRunScore,
     removeAdsEntitled: ads.removeAdsEntitled,
     firstRunCompleted: ads.firstRunCompleted,
+    hasTutorialBeenSeen: ftue.hasTutorialBeenSeen,
+    hasSeenDraftIntro: ftue.hasSeenDraftIntro,
   };
   await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(data));
 }
@@ -230,6 +275,10 @@ export interface MetaState {
   attStatus: ATTStatus;
   /** Timestamp of last interstitial show. Used for the 120s cooldown guardrail. */
   lastInterstitialAt: number;
+
+  // FTUE state (persisted)
+  hasTutorialBeenSeen: boolean;
+  hasSeenDraftIntro: boolean;
 
   // Actions
   loadFromStorage: () => Promise<void>;
@@ -265,6 +314,11 @@ export interface MetaState {
   setRemoveAdsEntitled: (entitled: boolean) => void;
   markInterstitialShown: () => void;
   markFirstRunCompleted: () => void;
+
+  // FTUE actions
+  setTutorialSeen: () => void;
+  resetTutorialSeen: () => void;       // for Settings → Replay Tutorial
+  setDraftIntroSeen: () => void;
 }
 
 export const useMetaStore = create<MetaState>((set, get) => ({
@@ -286,14 +340,20 @@ export const useMetaStore = create<MetaState>((set, get) => ({
   attStatus: 'not_determined' as ATTStatus,
   lastInterstitialAt: 0,
 
+  // FTUE — persisted (overwritten by loadFromStorage)
+  hasTutorialBeenSeen: false,
+  hasSeenDraftIntro: false,
+
   loadFromStorage: async () => {
-    const { unlocked, stats, ads } = await loadMeta();
+    const { unlocked, stats, ads, ftue } = await loadMeta();
     set({
       loaded: true,
       unlockedSymbols: unlocked,
       cumulativeStats: stats,
       removeAdsEntitled: ads.removeAdsEntitled,
       firstRunCompleted: ads.firstRunCompleted,
+      hasTutorialBeenSeen: ftue.hasTutorialBeenSeen,
+      hasSeenDraftIntro: ftue.hasSeenDraftIntro,
     });
   },
 
@@ -340,6 +400,13 @@ export const useMetaStore = create<MetaState>((set, get) => ({
   },
 
   startRun: () => {
+    // Tutorial runs (Level 0) don't reset per-run stats or record symbols
+    // used — they're meta-progression-neutral.
+    try {
+      const runStore = require('./store').useRunStore;
+      if (runStore?.getState?.().currentLevel === 0) return;
+    } catch { /* fail open */ }
+
     const { selectedLoadout, cumulativeStats } = get();
     // Record symbols used
     const newUsed = new Set(cumulativeStats.uniqueSymbolsUsed);
@@ -422,6 +489,14 @@ export const useMetaStore = create<MetaState>((set, get) => ({
   },
 
   endRun: (finalScore: number, levelsWon: number, wonFullRun: boolean) => {
+    // Tutorial completion does NOT bump cumulative stats or trigger unlock
+    // checks — Level 0 is meta-progression-neutral. Caller (typically
+    // GameOverScreen) is also gated, but defending here for safety.
+    try {
+      const runStore = require('./store').useRunStore;
+      if (runStore?.getState?.().currentLevel === 0) return;
+    } catch { /* fail open */ }
+
     const { cumulativeStats, currentRunStats, unlockedSymbols } = get();
 
     // Update run stats for final checks
@@ -475,10 +550,18 @@ export const useMetaStore = create<MetaState>((set, get) => ({
     });
 
     // Persist
-    saveMeta(newUnlocked, newStats, {
-      removeAdsEntitled: get().removeAdsEntitled,
-      firstRunCompleted: get().firstRunCompleted,
-    });
+    saveMeta(
+      newUnlocked,
+      newStats,
+      {
+        removeAdsEntitled: get().removeAdsEntitled,
+        firstRunCompleted: get().firstRunCompleted,
+      },
+      {
+        hasTutorialBeenSeen: get().hasTutorialBeenSeen,
+        hasSeenDraftIntro: get().hasSeenDraftIntro,
+      },
+    );
   },
 
   dismissUnlock: () => {
@@ -498,11 +581,13 @@ export const useMetaStore = create<MetaState>((set, get) => ({
       removeAdsEntitled,
     });
     // Persist the entitlement value the cold-start auto-restore returned
-    const { unlockedSymbols, cumulativeStats, firstRunCompleted } = get();
-    saveMeta(unlockedSymbols, cumulativeStats, {
-      removeAdsEntitled,
-      firstRunCompleted,
-    });
+    const { unlockedSymbols, cumulativeStats, firstRunCompleted, hasTutorialBeenSeen, hasSeenDraftIntro } = get();
+    saveMeta(
+      unlockedSymbols,
+      cumulativeStats,
+      { removeAdsEntitled, firstRunCompleted },
+      { hasTutorialBeenSeen, hasSeenDraftIntro },
+    );
   },
 
   setAdServiceFailed: (error: string) => {
@@ -515,11 +600,13 @@ export const useMetaStore = create<MetaState>((set, get) => ({
 
   setRemoveAdsEntitled: (entitled: boolean) => {
     set({ removeAdsEntitled: entitled });
-    const { unlockedSymbols, cumulativeStats, firstRunCompleted } = get();
-    saveMeta(unlockedSymbols, cumulativeStats, {
-      removeAdsEntitled: entitled,
-      firstRunCompleted,
-    });
+    const { unlockedSymbols, cumulativeStats, firstRunCompleted, hasTutorialBeenSeen, hasSeenDraftIntro } = get();
+    saveMeta(
+      unlockedSymbols,
+      cumulativeStats,
+      { removeAdsEntitled: entitled, firstRunCompleted },
+      { hasTutorialBeenSeen, hasSeenDraftIntro },
+    );
   },
 
   markInterstitialShown: () => {
@@ -527,12 +614,67 @@ export const useMetaStore = create<MetaState>((set, get) => ({
   },
 
   markFirstRunCompleted: () => {
+    // Tutorial completion does NOT trip first-run-completed — Level 0 isn't
+    // a real run for the interstitial first-run guardrail. Lazy-require the
+    // run store to avoid a circular import (store.ts already lazy-requires
+    // this module).
+    try {
+      const runStore = require('./store').useRunStore;
+      if (runStore?.getState?.().currentLevel === 0) return;
+    } catch {
+      // If the lazy require fails, treat as non-tutorial (fail open).
+    }
     if (get().firstRunCompleted) return; // idempotent
     set({ firstRunCompleted: true });
-    const { unlockedSymbols, cumulativeStats, removeAdsEntitled } = get();
-    saveMeta(unlockedSymbols, cumulativeStats, {
-      removeAdsEntitled,
-      firstRunCompleted: true,
-    });
+    const { unlockedSymbols, cumulativeStats, removeAdsEntitled, hasTutorialBeenSeen, hasSeenDraftIntro } = get();
+    saveMeta(
+      unlockedSymbols,
+      cumulativeStats,
+      { removeAdsEntitled, firstRunCompleted: true },
+      { hasTutorialBeenSeen, hasSeenDraftIntro },
+    );
+  },
+
+  // ==========================================================================
+  // FTUE actions
+  // ==========================================================================
+
+  setTutorialSeen: () => {
+    if (get().hasTutorialBeenSeen) return; // idempotent
+    set({ hasTutorialBeenSeen: true });
+    const { unlockedSymbols, cumulativeStats, removeAdsEntitled, firstRunCompleted, hasSeenDraftIntro } = get();
+    saveMeta(
+      unlockedSymbols,
+      cumulativeStats,
+      { removeAdsEntitled, firstRunCompleted },
+      { hasTutorialBeenSeen: true, hasSeenDraftIntro },
+    );
+  },
+
+  resetTutorialSeen: () => {
+    // Settings → Replay Tutorial path. Allows the player to redo Level 0
+    // without nuking other progress. Tutorial replays do NOT bump totalRuns
+    // or any cumulative stats — that gating happens via isTutorialRun() in
+    // the run lifecycle paths.
+    set({ hasTutorialBeenSeen: false });
+    const { unlockedSymbols, cumulativeStats, removeAdsEntitled, firstRunCompleted, hasSeenDraftIntro } = get();
+    saveMeta(
+      unlockedSymbols,
+      cumulativeStats,
+      { removeAdsEntitled, firstRunCompleted },
+      { hasTutorialBeenSeen: false, hasSeenDraftIntro },
+    );
+  },
+
+  setDraftIntroSeen: () => {
+    if (get().hasSeenDraftIntro) return; // idempotent
+    set({ hasSeenDraftIntro: true });
+    const { unlockedSymbols, cumulativeStats, removeAdsEntitled, firstRunCompleted, hasTutorialBeenSeen } = get();
+    saveMeta(
+      unlockedSymbols,
+      cumulativeStats,
+      { removeAdsEntitled, firstRunCompleted },
+      { hasTutorialBeenSeen, hasSeenDraftIntro: true },
+    );
   },
 }));

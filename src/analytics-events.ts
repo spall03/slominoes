@@ -130,6 +130,25 @@ export const iapRestored = (trigger: IapRestoreTrigger) =>
 export const unlockTriggered = (symbolId: SymbolId) =>
   analyticsApi.logEvent('unlock_triggered', { symbol_id: symbolId });
 
+// ---------------------------------------------------------------------------
+// Tutorial (FTUE Level 0) — separate event family per spec v3.
+// Level 0 does NOT fire run_started / run_ended / level_ended.
+// ---------------------------------------------------------------------------
+
+export type TutorialStep = 1 | 1.5 | 2 | 3 | 4 | 5 | 6;
+
+export const tutorialStarted = () =>
+  analyticsApi.logEvent('tutorial_started');
+
+export const tutorialStepAdvanced = (step: TutorialStep) =>
+  analyticsApi.logEvent('tutorial_step_advanced', { step });
+
+export const tutorialCompleted = (params: { respin_used: boolean }) =>
+  analyticsApi.logEvent('tutorial_completed', params);
+
+export const tutorialSkipped = () =>
+  analyticsApi.logEvent('tutorial_skipped');
+
 // -----------------------------------------------------------------------------
 // Helper: build comma-separated sorted loadout string
 // -----------------------------------------------------------------------------

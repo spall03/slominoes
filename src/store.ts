@@ -395,9 +395,12 @@ export const useGameStore = create<GameState>((set, get) => ({
 
     // Auto-end: once the player has enough score to earn the max +3 bonus respins
     // (≥ 15% over threshold), cut the level short — playing out is boring when
-    // the outcome is decided.
+    // the outcome is decided. Disabled for Level 0 (FTUE) so the tutorial can
+    // complete its scripted beats even if the player overscores incidentally.
     const threshold = get().levelConfig.threshold;
-    const autoEndForBonus = !isComplete && newTotalScore >= threshold * 1.15;
+    const autoEndForBonus = !get().levelConfig.disableAutoEnd
+      && !isComplete
+      && newTotalScore >= threshold * 1.15;
 
     if (isComplete || autoEndForBonus) {
       const result = newTotalScore >= threshold ? 'win' : 'lose';
@@ -781,8 +784,10 @@ export const useGameStore = create<GameState>((set, get) => ({
 
     // Auto-end: if the respin pushed us past +15% over threshold, end the level
     // now. Max bonus respins are locked in — playing out is boring.
+    // Disabled in Level 0 (FTUE) so the tutorial completes its beats.
     const threshold = get().levelConfig?.threshold;
-    if (threshold && get().phase === 'placing' && committedScore >= threshold * 1.15) {
+    const autoEndAllowed = !get().levelConfig?.disableAutoEnd;
+    if (autoEndAllowed && threshold && get().phase === 'placing' && committedScore >= threshold * 1.15) {
       set({
         phase: 'ended',
         result: 'win',
