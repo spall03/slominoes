@@ -15,6 +15,8 @@ export function GameOverScreen() {
   const unlockedSymbols = useMetaStore(s => s.unlockedSymbols);
   const endRunCalled = useRef(false);
 
+  const isTutorial = currentLevel === 0;
+
   // Count non-base unlockable symbols
   const totalUnlockable = UNLOCK_CONDITIONS.length;
   const unlockedCount = UNLOCK_CONDITIONS.filter(c => unlockedSymbols.has(c.symbolId)).length;
@@ -23,24 +25,51 @@ export function GameOverScreen() {
   const won = currentLevel >= NUM_LEVELS && levelScore >= 0;
 
   useEffect(() => {
-    if (won) {
+    if (isTutorial || won) {
       try { stopMusic(); } catch {}
     } else {
       try { startMusic('loss'); } catch {}
     }
     return () => { try { stopMusic(); } catch {} };
-  }, [won]);
+  }, [won, isTutorial]);
 
-  // Call endRun once when this screen mounts
+  // Call endRun once when this screen mounts — but NOT for the tutorial,
+  // which is meta-progression-neutral. (useMetaStore.endRun() also self-gates,
+  // but defending here too.)
   useEffect(() => {
+    if (isTutorial) return;
     if (!endRunCalled.current) {
       endRunCalled.current = true;
       endRun(levelScore, currentLevel, won);
     }
-  }, [endRun, levelScore, currentLevel, won]);
+  }, [endRun, levelScore, currentLevel, won, isTutorial]);
 
   const threshold = levelConfig?.threshold ?? 0;
   const progress = threshold > 0 ? Math.min(1, levelScore / threshold) : 1;
+
+  // Tutorial-complete variant: stripped down, single CONTINUE CTA → Draft.
+  if (isTutorial) {
+    return (
+      <View style={styles.container}>
+        <Text
+          style={[
+            styles.heading,
+            { color: colors.cyan },
+            { textShadowColor: colors.cyan, textShadowRadius: 16 },
+          ]}
+        >
+          TUTORIAL{'\n'}COMPLETE
+        </Text>
+        <Text style={styles.subtitle}>Now pick your loadout.</Text>
+        <Pressable
+          style={({ pressed }) => [styles.playAgainButton, pressed && styles.buttonPressed]}
+          onPress={() => useRunStore.getState().startRun()}
+        >
+          <Text style={styles.playAgainText}>CONTINUE</Text>
+        </Pressable>
+      </View>
+    );
+  }
 
   return (
     <View style={styles.container}>

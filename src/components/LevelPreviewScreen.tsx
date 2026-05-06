@@ -7,12 +7,26 @@ import { useRunStore } from '../store';
 import { useMetaStore } from '../meta-store';
 import { getEntrySpots } from '../level';
 import { SymbolPoolStrip } from './SymbolPoolStrip';
+import { tutorialSkipped } from '../analytics-events';
 
 export function LevelPreviewScreen() {
   const { currentLevel, levelConfig, bonusRespins } = useRunStore();
   if (!levelConfig) return null;
   const config = levelConfig;
   const entrySpots = getEntrySpots(config.entrySpotCount);
+  const isTutorial = currentLevel === 0;
+
+  const handleSkipTutorial = () => {
+    useMetaStore.getState().setTutorialSeen();
+    tutorialSkipped();
+    useRunStore.setState({
+      runPhase: 'draft',
+      currentLevel: 1,
+      levelScore: 0,
+      levelConfig: null,
+      bonusRespins: 5,
+    });
+  };
 
   const entryCellSet = useMemo(() => {
     const set = new Set<string>();
@@ -31,6 +45,40 @@ export function LevelPreviewScreen() {
     }
     return set;
   }, [config.obstacles]);
+
+  // Tutorial (Level 0) gets a stripped-down preview: TUTORIAL header,
+  // motivation copy, START primary, SKIP-I've-played-before secondary.
+  // No threshold/respin badges; no symbol pool strip; no mini-grid.
+  if (isTutorial) {
+    return (
+      <ScrollView
+        contentContainerStyle={styles.container}
+        style={styles.scrollBg}
+      >
+        <Text style={styles.tutorialEyebrow}>TUTORIAL</Text>
+        <Text style={styles.tutorialBody}>
+          Playable 60-second tutorial.
+        </Text>
+
+        <Pressable
+          style={({ pressed }) => [styles.startButton, pressed && styles.buttonPressed]}
+          onPress={() => {
+            useMetaStore.getState().startLevel();
+            useRunStore.getState().startLevel();
+          }}
+        >
+          <Text style={styles.startButtonText}>START</Text>
+        </Pressable>
+
+        <Pressable
+          style={({ pressed }) => [styles.skipButton, pressed && styles.buttonPressed]}
+          onPress={handleSkipTutorial}
+        >
+          <Text style={styles.skipButtonText}>SKIP — I've played before</Text>
+        </Pressable>
+      </ScrollView>
+    );
+  }
 
   return (
     <ScrollView
@@ -197,5 +245,34 @@ const styles = StyleSheet.create({
   },
   buttonPressed: {
     opacity: 0.7,
+  },
+  // Tutorial (Level 0) variant
+  tutorialEyebrow: {
+    color: colors.cyan,
+    fontFamily: fonts.bold,
+    fontSize: 14,
+    letterSpacing: 4,
+    textTransform: 'uppercase',
+    marginBottom: 12,
+  },
+  tutorialBody: {
+    color: colors.ink,
+    fontFamily: fonts.regular,
+    fontSize: 16,
+    textAlign: 'center',
+    marginBottom: 32,
+    paddingHorizontal: 8,
+  },
+  skipButton: {
+    backgroundColor: 'transparent',
+    paddingVertical: 12,
+    paddingHorizontal: 20,
+    marginTop: 12,
+  },
+  skipButtonText: {
+    color: colors.inkDim,
+    fontFamily: fonts.semiBold,
+    fontSize: 12,
+    letterSpacing: 1.5,
   },
 });
