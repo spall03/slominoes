@@ -17,6 +17,8 @@ import { Grid } from './Grid';
 import { HelpPanel } from './HelpPanel';
 import { SettingsScreen } from './SettingsScreen';
 import { SymbolPoolStrip } from './SymbolPoolStrip';
+import { TutorialHints } from './TutorialHints';
+import { useTutorialHints } from '../tutorial-hints-store';
 import { startMusic, stopMusic } from '../music';
 import { RespinCol } from '../symbols/RespinCol';
 import { RespinRow } from '../symbols/RespinRow';
@@ -221,9 +223,13 @@ export function PlayingScreen() {
   }, []);
 
   const isDesktop = Platform.OS === 'web' && !isMobile;
+  const isTutorial = currentLevel === 0;
+  const tutorialFocus = useTutorialHints(s => s.focus);
 
   return (
     <View style={styles.screenContainer}>
+      {isTutorial && <TutorialHints />}
+
       {/* Compact HUD — next-tile preview, respin entry, score, settings */}
       <HUD
         level={currentLevel}
@@ -240,6 +246,7 @@ export function PlayingScreen() {
         onRespinToggle={() => setRespinMode(v => !v)}
         onBuyRespin={() => { buyRespin(); setRespinMode(true); }}
         onSettingsPress={() => setShowSettings(true)}
+        pulseHint={tutorialFocus === 'respin-badge'}
       />
 
       <View style={isDesktop ? styles.mainRow : styles.mobileMain}>
@@ -346,7 +353,7 @@ export function PlayingScreen() {
             )}
 
             {/* Decayed hint — visible on level 1 turns 1–3, or after 5s idle */}
-            {phase === 'placing' && currentTile && !respinMode && hintVisible && hintText && (
+            {phase === 'placing' && currentTile && !respinMode && !isTutorial && hintVisible && hintText && (
               <Text style={styles.hintText}>{hintText}</Text>
             )}
 

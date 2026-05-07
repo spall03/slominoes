@@ -13,6 +13,7 @@ import { useGameStore, respinModeRef } from '../store';
 import { Cell } from './Cell';
 import { SpinCell } from './SpinCell';
 import { EntrySpotButton } from './EntrySpotButton';
+import { useTutorialHints } from '../tutorial-hints-store';
 import { ScorePopup } from './ScorePopup';
 import type { Grid as GridType, Rotation, Symbol } from '../types';
 
@@ -47,6 +48,8 @@ export function Grid() {
     clearSpinAnimation,
   } = useGameStore();
   const respinTarget = useGameStore(s => s.respinTarget);
+  const tutorialFocus = useTutorialHints(s => s.focus);
+  const pulseEntries = tutorialFocus === 'entry';
 
   const [animationKey, setAnimationKey] = useState(0);
 
@@ -349,6 +352,7 @@ export function Grid() {
                 isSelected={selectedEntry === entry.id}
                 isBlocked={entryBlocked[entry.id]}
                 onPress={() => selectEntry(entry.id)}
+                pulseHint={pulseEntries}
               />
             ))}
         </View>
@@ -364,6 +368,7 @@ export function Grid() {
                 isSelected={selectedEntry === entry.id}
                 isBlocked={entryBlocked[entry.id]}
                 onPress={() => selectEntry(entry.id)}
+                pulseHint={pulseEntries}
               />
             ))}
           </View>
@@ -441,6 +446,7 @@ export function Grid() {
                 isSelected={selectedEntry === entry.id}
                 isBlocked={entryBlocked[entry.id]}
                 onPress={() => selectEntry(entry.id)}
+                pulseHint={pulseEntries}
               />
             ))}
           </View>
@@ -458,6 +464,7 @@ export function Grid() {
                 isSelected={selectedEntry === entry.id}
                 isBlocked={entryBlocked[entry.id]}
                 onPress={() => selectEntry(entry.id)}
+                pulseHint={pulseEntries}
               />
             ))}
         </View>

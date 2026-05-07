@@ -8,37 +8,32 @@ import { SYMBOL_ROSTER, type SymbolId } from '../symbols';
 import { SymbolIcon } from '../symbols/index';
 import { Logo } from '../symbols/Logo';
 import { Domino } from '../symbols/Domino';
-import { Tutorial, hasTutorialBeenSeen } from './Tutorial';
 import { SettingsScreen } from './SettingsScreen';
 import { startMusic, stopMusic } from '../music';
 
 export function TitleScreen() {
-  const [showTutorial, setShowTutorial] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
 
   const unlockedSymbols = useMetaStore(s => s.unlockedSymbols);
   const stats = useMetaStore(s => s.cumulativeStats);
-
-  useEffect(() => {
-    hasTutorialBeenSeen(); // warm the promise chain
-  }, []);
+  const hasTutorialBeenSeen = useMetaStore(s => s.hasTutorialBeenSeen);
 
   useEffect(() => {
     try { startMusic('title'); } catch {}
     return () => { try { stopMusic(); } catch {} };
   }, []);
 
-  const handleNewGame = async () => {
-    const seen = await hasTutorialBeenSeen();
-    if (!seen) {
-      setShowTutorial(true);
-    } else {
-      useRunStore.getState().startRun();
-    }
+  const handleNewGame = () => {
+    // useRunStore.startRun() handles routing — sends to Level 0 (FTUE) when
+    // hasTutorialBeenSeen is false, otherwise to Draft.
+    useRunStore.getState().startRun();
   };
 
-  const handleTutorialComplete = () => {
-    setShowTutorial(false);
+  const handleReplayTutorial = () => {
+    // Reset the seen flag and start a run — startRun sees the flag is now
+    // false and routes to Level 0 again. Replays don't bump cumulative stats
+    // (the meta-store actions are gated on isTutorialRun).
+    useMetaStore.getState().resetTutorialSeen();
     useRunStore.getState().startRun();
   };
 
@@ -117,15 +112,17 @@ export function TitleScreen() {
         <Text style={styles.newGameText}>NEW RUN</Text>
       </Pressable>
 
-      {/* Secondary — text button (no outline) per Move 03 */}
-      <Pressable
-        style={({ pressed }) => [styles.howToPlayButton, pressed && styles.buttonPressed]}
-        onPress={() => setShowTutorial(true)}
-      >
-        <Text style={styles.howToPlayText}>HOW TO PLAY</Text>
-      </Pressable>
+      {/* Secondary — only shown after tutorial has been seen. Replays Level 0
+          via resetTutorialSeen + startRun. Replays don't affect stats. */}
+      {hasTutorialBeenSeen && (
+        <Pressable
+          style={({ pressed }) => [styles.howToPlayButton, pressed && styles.buttonPressed]}
+          onPress={handleReplayTutorial}
+        >
+          <Text style={styles.howToPlayText}>REPLAY TUTORIAL</Text>
+        </Pressable>
+      )}
 
-      {showTutorial && <Tutorial onComplete={handleTutorialComplete} />}
       {showSettings && <SettingsScreen onClose={() => setShowSettings(false)} />}
     </View>
   );

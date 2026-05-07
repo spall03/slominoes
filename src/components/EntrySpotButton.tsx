@@ -13,6 +13,8 @@ interface EntrySpotButtonProps {
   onPress: () => void;
   /** When true, plays a one-time attention pulse on mount (used on first appearance per level). */
   pulseOnMount?: boolean;
+  /** When true, runs a continuous attention pulse — used by Level 0 hints. */
+  pulseHint?: boolean;
 }
 
 export function EntrySpotButton({
@@ -21,9 +23,11 @@ export function EntrySpotButton({
   isBlocked,
   onPress,
   pulseOnMount,
+  pulseHint,
 }: EntrySpotButtonProps) {
   const isSide = entry.arrowDirection === 'left' || entry.arrowDirection === 'right';
   const pulseAnim = useRef(new Animated.Value(1)).current;
+  const continuousPulseRef = useRef<ReturnType<typeof Animated.loop> | null>(null);
 
   useEffect(() => {
     if (!pulseOnMount || isBlocked) return;
@@ -32,6 +36,24 @@ export function EntrySpotButton({
       Animated.timing(pulseAnim, { toValue: 1, duration: 200, useNativeDriver: true }),
     ]).start();
   }, [pulseOnMount, pulseAnim, isBlocked]);
+
+  useEffect(() => {
+    if (pulseHint && !isBlocked && !isSelected) {
+      const loop = Animated.loop(
+        Animated.sequence([
+          Animated.timing(pulseAnim, { toValue: 1.12, duration: 600, useNativeDriver: true }),
+          Animated.timing(pulseAnim, { toValue: 1, duration: 600, useNativeDriver: true }),
+        ])
+      );
+      continuousPulseRef.current = loop;
+      loop.start();
+      return () => {
+        loop.stop();
+        pulseAnim.setValue(1);
+      };
+    }
+    return undefined;
+  }, [pulseHint, isBlocked, isSelected, pulseAnim]);
 
   return (
     <Animated.View style={{ transform: [{ scale: pulseAnim }] }}>

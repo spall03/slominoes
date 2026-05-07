@@ -1,6 +1,6 @@
 // src/components/HUD.tsx
-import React from 'react';
-import { View, Text, Pressable, Platform, StyleSheet } from 'react-native';
+import React, { useEffect, useRef } from 'react';
+import { View, Text, Pressable, Animated, Platform, StyleSheet } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { colors, fonts, symbolColors } from '../theme';
 import { SymbolIcon } from '../symbols/index';
@@ -24,6 +24,8 @@ interface HUDProps {
   onBuyRespin?: () => void;
   canAffordRespin?: boolean;
   onSettingsPress?: () => void;
+  /** When true, the respin badge runs a continuous attention pulse (Level 0 hints). */
+  pulseHint?: boolean;
 }
 
 /**
@@ -51,6 +53,7 @@ export function HUD({
   onBuyRespin,
   canAffordRespin,
   onSettingsPress,
+  pulseHint,
 }: HUDProps) {
   const handleRespinPress = () => {
     if (respinsRemaining > 0) {
@@ -63,6 +66,26 @@ export function HUD({
   const bestProgress = Math.min(1, threshold > 0 ? score / threshold : 0);
   const currentProgress = Math.min(1, threshold > 0 ? currentGridScore / threshold : 0);
   const scoreDiverged = score > currentGridScore;
+
+  // Continuous attention pulse on the respin badge during Level 0 step 4.
+  const pulseAnim = useRef(new Animated.Value(1)).current;
+  useEffect(() => {
+    if (!pulseHint) {
+      pulseAnim.setValue(1);
+      return;
+    }
+    const loop = Animated.loop(
+      Animated.sequence([
+        Animated.timing(pulseAnim, { toValue: 1.12, duration: 600, useNativeDriver: true }),
+        Animated.timing(pulseAnim, { toValue: 1, duration: 600, useNativeDriver: true }),
+      ]),
+    );
+    loop.start();
+    return () => {
+      loop.stop();
+      pulseAnim.setValue(1);
+    };
+  }, [pulseHint, pulseAnim]);
 
   return (
     <View>
@@ -86,28 +109,39 @@ export function HUD({
               )}
             </View>
           )}
-          <Pressable
-            style={[
-              styles.respinBadge,
-              respinMode && styles.respinBadgeActive,
-              respinDisabled && styles.respinBadgeDisabled,
-            ]}
-            onPress={handleRespinPress}
-            disabled={respinDisabled}
-          >
-            <Text style={[styles.respinLabel, respinMode && styles.respinLabelActive]}>
-              RESPIN
-            </Text>
-            {respinsRemaining > 0 ? (
-              <Text style={[styles.respinCount, respinMode && styles.respinCountActive]}>
-                {respinsRemaining}
+          <Animated.View style={{ transform: [{ scale: pulseAnim }] }}>
+            <Pressable
+              style={[
+                styles.respinBadge,
+                respinMode && styles.respinBadgeActive,
+                respinDisabled && styles.respinBadgeDisabled,
+                pulseHint && styles.respinBadgeHint,
+              ]}
+              onPress={handleRespinPress}
+              disabled={respinDisabled}
+            >
+              <Text style={[
+                styles.respinLabel,
+                respinMode && styles.respinLabelActive,
+                pulseHint && styles.respinLabelHint,
+              ]}>
+                RESPIN
               </Text>
-            ) : (
-              <Text style={[styles.respinCost, respinDisabled && styles.respinCostDisabled]}>
-                {nextRespinCost}pts
-              </Text>
-            )}
-          </Pressable>
+              {respinsRemaining > 0 ? (
+                <Text style={[
+                  styles.respinCount,
+                  respinMode && styles.respinCountActive,
+                  pulseHint && styles.respinCountHint,
+                ]}>
+                  {respinsRemaining}
+                </Text>
+              ) : (
+                <Text style={[styles.respinCost, respinDisabled && styles.respinCostDisabled]}>
+                  {nextRespinCost}pts
+                </Text>
+              )}
+            </Pressable>
+          </Animated.View>
           {onSettingsPress && (
             <Pressable onPress={onSettingsPress} style={styles.settingsButton} hitSlop={8}>
               <Text style={styles.settingsIcon}>&#x2699;</Text>
@@ -233,6 +267,19 @@ const styles = StyleSheet.create({
   },
   respinBadgeDisabled: {
     opacity: 0.4,
+  },
+  respinBadgeHint: {
+    borderColor: colors.cyan,
+    backgroundColor: colors.cyanWash,
+    ...(Platform.OS === 'web' ? ({
+      boxShadow: '0 0 12px rgba(0,229,255,0.55)',
+    } as any) : {}),
+  },
+  respinLabelHint: {
+    color: colors.cyan,
+  },
+  respinCountHint: {
+    color: colors.cyan,
   },
   respinCostDisabled: {
     color: colors.inkMute,
