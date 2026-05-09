@@ -17,7 +17,7 @@ import { Grid } from './Grid';
 import { HelpPanel } from './HelpPanel';
 import { SettingsScreen } from './SettingsScreen';
 import { SymbolPoolStrip } from './SymbolPoolStrip';
-import { TutorialHints } from './TutorialHints';
+import { TutorialHints, TutorialBanner } from './TutorialHints';
 import { useTutorialHints } from '../tutorial-hints-store';
 import { startMusic, stopMusic } from '../music';
 import { RespinCol } from '../symbols/RespinCol';
@@ -355,6 +355,12 @@ export function PlayingScreen() {
             {/* Decayed hint — visible on level 1 turns 1–3, or after 5s idle */}
             {phase === 'placing' && currentTile && !respinMode && !isTutorial && hintVisible && hintText && (
               <Text style={styles.hintText}>{hintText}</Text>
+            )}
+
+            {/* Tutorial banner — same area as the idle hint, but driven by
+                the scripted TutorialHints state instead of idle-decay. */}
+            {phase === 'placing' && currentTile && !respinMode && isTutorial && (
+              <TutorialBanner />
             )}
 
             {/* Respin mode controls */}

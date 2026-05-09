@@ -10,7 +10,7 @@
 // On unmount, resets the hint store.
 
 import React, { useEffect, useRef } from 'react';
-import { Animated, Text, View, StyleSheet, Platform } from 'react-native';
+import { Animated, Text, StyleSheet, Platform } from 'react-native';
 import { isMobile } from '../constants';
 import { colors, fonts } from '../theme';
 import { useGameStore } from '../store';
@@ -18,18 +18,20 @@ import { useTutorialHints } from '../tutorial-hints-store';
 import { tutorialStepAdvanced } from '../analytics-events';
 
 const ROTATE_HINT = isMobile
-  ? 'Tap to rotate · Hold to confirm'
-  : 'Press R to rotate · Enter to confirm';
+  ? 'Drag to move · Tap to rotate · Hold to confirm'
+  : 'Arrows: move · R: rotate · Enter: confirm';
 
 export function TutorialHints() {
-  const bannerCopy = useTutorialHints(s => s.bannerCopy);
+  // Note: banner copy is rendered inline by PlayingScreen (so it sits below
+  // the grid in the controls area, not overlapping the top entry button).
+  // This component just runs the orchestration + renders the centered "wow"
+  // overlay.
   const overlayCopy = useTutorialHints(s => s.overlayCopy);
 
   const advancedSteps = useRef<Set<number>>(new Set());
   const seenPlacedMode = useRef(false);
 
   // Animations
-  const bannerOpacity = useRef(new Animated.Value(0)).current;
   const overlayOpacity = useRef(new Animated.Value(0)).current;
 
   // ------------------------------------------------------------------
@@ -161,17 +163,6 @@ export function TutorialHints() {
   }, []);
 
   // ------------------------------------------------------------------
-  // Banner fade
-  // ------------------------------------------------------------------
-  useEffect(() => {
-    Animated.timing(bannerOpacity, {
-      toValue: bannerCopy ? 1 : 0,
-      duration: 200,
-      useNativeDriver: true,
-    }).start();
-  }, [bannerCopy, bannerOpacity]);
-
-  // ------------------------------------------------------------------
   // Overlay fade — fades in, lingers ~2.4s, fades out
   // ------------------------------------------------------------------
   useEffect(() => {
@@ -195,14 +186,6 @@ export function TutorialHints() {
 
   return (
     <>
-      {bannerCopy && (
-        <Animated.View
-          style={[styles.bannerContainer, { opacity: bannerOpacity }]}
-          pointerEvents="none"
-        >
-          <Text style={styles.bannerText}>{bannerCopy}</Text>
-        </Animated.View>
-      )}
       {overlayCopy && (
         <Animated.View
           style={[styles.overlayContainer, { opacity: overlayOpacity }]}
@@ -215,13 +198,37 @@ export function TutorialHints() {
   );
 }
 
+/**
+ * Inline banner — rendered by PlayingScreen in the controls area below the
+ * grid, where the regular Level 1+ idle hint also lives. Keeps the tutorial
+ * hint visually consistent with the rest of the in-level UI and avoids
+ * overlapping the top entry button.
+ */
+export function TutorialBanner() {
+  const bannerCopy = useTutorialHints(s => s.bannerCopy);
+  const opacity = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    Animated.timing(opacity, {
+      toValue: bannerCopy ? 1 : 0,
+      duration: 200,
+      useNativeDriver: true,
+    }).start();
+  }, [bannerCopy, opacity]);
+
+  if (!bannerCopy) return null;
+
+  return (
+    <Animated.View style={[styles.bannerInline, { opacity }]}>
+      <Text style={styles.bannerInlineText}>{bannerCopy}</Text>
+    </Animated.View>
+  );
+}
+
 const styles = StyleSheet.create({
-  bannerContainer: {
-    position: 'absolute',
-    top: 56,
-    left: 12,
-    right: 12,
-    zIndex: 50,
+  bannerInline: {
+    marginTop: 8,
+    marginHorizontal: 8,
     paddingVertical: 10,
     paddingHorizontal: 16,
     backgroundColor: colors.surface,
@@ -229,8 +236,9 @@ const styles = StyleSheet.create({
     borderColor: colors.cyanBorder,
     borderRadius: 10,
     alignItems: 'center',
+    alignSelf: 'stretch',
   },
-  bannerText: {
+  bannerInlineText: {
     color: colors.ink,
     fontFamily: fonts.semiBold,
     fontSize: 13,
