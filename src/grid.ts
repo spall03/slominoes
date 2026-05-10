@@ -58,10 +58,12 @@ export function canPlaceTile(
   col: number,
   rotation: Rotation,
   vineSymbols?: Set<string>,
+  tile?: Tile | null,
 ): boolean {
   if (row < 0 || row >= BOARD_SIZE || col < 0 || col >= BOARD_SIZE) return false;
+  const [symbolFirst, symbolSecond] = tile ? getSymbolsForRotation(tile) : [null, null];
   const cell1 = grid[row][col];
-  if (cell1 !== null && !(cell1 === 'wall' && vineSymbols?.size)) return false;
+  if (cell1 !== null && !(cell1 === 'wall' && symbolFirst && vineSymbols?.has(symbolFirst))) return false;
 
   const [rowOffset, colOffset] = getSecondCellOffset(rotation);
   const row2 = row + rowOffset;
@@ -69,7 +71,7 @@ export function canPlaceTile(
 
   if (row2 < 0 || row2 >= BOARD_SIZE || col2 < 0 || col2 >= BOARD_SIZE) return false;
   const cell2 = grid[row2][col2];
-  if (cell2 !== null && !(cell2 === 'wall' && vineSymbols?.size)) return false;
+  if (cell2 !== null && !(cell2 === 'wall' && symbolSecond && vineSymbols?.has(symbolSecond))) return false;
 
   return true;
 }
@@ -125,18 +127,20 @@ export function canPlaceTileWithEntry(
   rotation: Rotation,
   reachableCells: Set<string> | null,
   vineSymbols?: Set<string>,
+  tile?: Tile | null,
 ): boolean {
   if (!reachableCells) return false;
-  if (!canPlaceTile(grid, row, col, rotation, vineSymbols)) return false;
+  if (!canPlaceTile(grid, row, col, rotation, vineSymbols, tile)) return false;
 
   // For vine placements, also allow cells adjacent to reachable cells
-  if (vineSymbols?.size) {
+  if (vineSymbols?.size && tile) {
     const [ro, co] = getSecondCellOffset(rotation);
     const r2 = row + ro, c2 = col + co;
+    const [symbolFirst, symbolSecond] = getSymbolsForRotation(tile);
     const key1 = `${row},${col}`;
     const key2 = `${r2},${c2}`;
-    const cell1Ok = reachableCells.has(key1) || grid[row]?.[col] === 'wall';
-    const cell2Ok = reachableCells.has(key2) || grid[r2]?.[c2] === 'wall';
+    const cell1Ok = reachableCells.has(key1) || (grid[row]?.[col] === 'wall' && vineSymbols.has(symbolFirst));
+    const cell2Ok = reachableCells.has(key2) || (grid[r2]?.[c2] === 'wall' && vineSymbols.has(symbolSecond));
     return cell1Ok && cell2Ok;
   }
 
@@ -144,7 +148,7 @@ export function canPlaceTileWithEntry(
 }
 
 // Check if any entry spot has valid placements on the grid
-export function anyEntryHasValidPlacement(grid: Grid, entrySpots: EntrySpot[], vineSymbols?: Set<string>): boolean {
+export function anyEntryHasValidPlacement(grid: Grid, entrySpots: EntrySpot[], tile?: Tile | null, vineSymbols?: Set<string>): boolean {
   for (const entry of entrySpots) {
     const reachable = computeReachableCells(grid, entry);
     if (reachable.size < 2 && !vineSymbols?.size) continue;
@@ -152,7 +156,7 @@ export function anyEntryHasValidPlacement(grid: Grid, entrySpots: EntrySpot[], v
     for (const cellKey of reachable) {
       const [r, c] = cellKey.split(',').map(Number);
       for (let rot = 0; rot < 4; rot++) {
-        if (canPlaceTileWithEntry(grid, r, c, rot as Rotation, reachable, vineSymbols)) {
+        if (canPlaceTileWithEntry(grid, r, c, rot as Rotation, reachable, vineSymbols, tile)) {
           return true;
         }
       }

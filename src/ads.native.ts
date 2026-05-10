@@ -25,21 +25,20 @@ import type {
 } from './ads';
 
 // -----------------------------------------------------------------------------
-// Ad unit IDs — TEST IDs in dev, real IDs (TODO) in production
+// Ad unit IDs — TEST IDs in dev, real IDs in production
 // -----------------------------------------------------------------------------
 // Google's public test IDs work in any AdMob app for development. Replace with
 // real production unit IDs from Steve's AdMob console when available.
 //
-// For v1 we use TestIds.* which auto-resolve to test ads at runtime — the
-// constants below document the real production IDs that will eventually
-// replace them in the AdMob plugin config.
+// Production IDs are injected through Expo public env vars. If a production
+// ID is missing, the corresponding ad placement stays unavailable instead of
+// serving Google's test ads in a release build.
+const env = (globalThis as any).process?.env ?? {};
 
 const AD_UNITS = {
-  // Replace with real IDs after Corp Apple Dev clears + AdMob production setup.
-  // For now: TestIds always shows test ads regardless of build type.
-  rewardedRespinRescue: __DEV__ ? TestIds.REWARDED : TestIds.REWARDED, // TODO real ID
-  rewardedContinue: __DEV__ ? TestIds.REWARDED : TestIds.REWARDED, // TODO real ID
-  interstitial: __DEV__ ? TestIds.INTERSTITIAL : TestIds.INTERSTITIAL, // TODO real ID
+  rewardedRespinRescue: __DEV__ ? TestIds.REWARDED : env.EXPO_PUBLIC_ADMOB_REWARDED_RESPIN_RESCUE_ID,
+  rewardedContinue: __DEV__ ? TestIds.REWARDED : env.EXPO_PUBLIC_ADMOB_REWARDED_CONTINUE_ID,
+  interstitial: __DEV__ ? TestIds.INTERSTITIAL : env.EXPO_PUBLIC_ADMOB_INTERSTITIAL_ID,
 };
 
 // -----------------------------------------------------------------------------
@@ -69,7 +68,7 @@ function getRewardedRef(placement: RewardedPlacement): {
   loaded: boolean;
   setAd: (a: RewardedAd | null) => void;
   setLoaded: (l: boolean) => void;
-  unitId: string;
+  unitId?: string;
 } {
   if (placement === 'respin_rescue') {
     return {
@@ -107,9 +106,11 @@ export const adsApi: AdsApi = {
     const ref = getRewardedRef(placement);
     if (ref.loaded) return; // already ready
     if (rewardedFailureCount[placement] >= 3) return; // give up for session
+    if (!ref.unitId) return; // production ad unit not configured
+    const unitId = ref.unitId;
 
     return new Promise((resolve) => {
-      const ad = RewardedAd.createForAdRequest(ref.unitId, {
+      const ad = RewardedAd.createForAdRequest(unitId, {
         requestNonPersonalizedAdsOnly: false, // honored at SDK level via UMP/ATT
       });
       ref.setAd(ad);
@@ -182,6 +183,7 @@ export const adsApi: AdsApi = {
 
   async preloadInterstitial(): Promise<void> {
     if (interstitialLoaded) return;
+    if (!AD_UNITS.interstitial) return;
 
     return new Promise((resolve) => {
       const ad = InterstitialAd.createForAdRequest(AD_UNITS.interstitial, {

@@ -238,12 +238,12 @@ export const useGameStore = create<GameState>((set, get) => ({
 
     // Try current rotation first, then others
     let useRotation: Rotation | null = null;
-    if (canPlaceTileWithEntry(grid, row, col, rotation, reachableCells, vines)) {
+    if (canPlaceTileWithEntry(grid, row, col, rotation, reachableCells, vines, currentTile)) {
       useRotation = rotation;
     } else {
       for (let i = 1; i <= 3; i++) {
         const tryRot = ((rotation + i) % 4) as Rotation;
-        if (canPlaceTileWithEntry(grid, row, col, tryRot, reachableCells, vines)) {
+        if (canPlaceTileWithEntry(grid, row, col, tryRot, reachableCells, vines, currentTile)) {
           useRotation = tryRot;
           break;
         }
@@ -261,7 +261,7 @@ export const useGameStore = create<GameState>((set, get) => ({
   movePlacement: (row: number, col: number) => {
     const { phase, currentTile, rotation, grid, placementMode, reachableCells, loadoutDefs } = get();
     if (phase !== 'placing' || !currentTile || placementMode !== 'placed') return;
-    if (!canPlaceTileWithEntry(grid, row, col, rotation, reachableCells, getVineSymbols(loadoutDefs))) return;
+    if (!canPlaceTileWithEntry(grid, row, col, rotation, reachableCells, getVineSymbols(loadoutDefs), currentTile)) return;
 
     set({ placedPosition: { row, col } });
   },
@@ -274,7 +274,7 @@ export const useGameStore = create<GameState>((set, get) => ({
     // Try each rotation until we find a valid one
     for (let i = 1; i <= 4; i++) {
       const newRotation = ((rotation + i) % 4) as Rotation;
-      if (canPlaceTileWithEntry(grid, placedPosition.row, placedPosition.col, newRotation, reachableCells, vines)) {
+      if (canPlaceTileWithEntry(grid, placedPosition.row, placedPosition.col, newRotation, reachableCells, vines, get().currentTile)) {
         set({ rotation: newRotation });
         try { Sound.playRotate(); } catch {}
         return;
@@ -287,7 +287,7 @@ export const useGameStore = create<GameState>((set, get) => ({
     if (phase !== 'placing' || !currentTile || placementMode !== 'placed' || !placedPosition) return;
 
     const { row, col } = placedPosition;
-    if (!canPlaceTileWithEntry(grid, row, col, rotation, reachableCells, getVineSymbols(loadoutDefs))) return;
+    if (!canPlaceTileWithEntry(grid, row, col, rotation, reachableCells, getVineSymbols(loadoutDefs), currentTile)) return;
 
     const [rowOffset, colOffset] = getSecondCellOffset(rotation);
     const row2 = row + rowOffset;
@@ -385,17 +385,18 @@ export const useGameStore = create<GameState>((set, get) => ({
     }
 
     // Generate extra tiles from abilities (egg)
-    let newQueue = tileQueue.slice(1);
+    const queuedTiles = tileQueue.slice();
     if (extraTiles > 0) {
       const getSymbol = get().loadoutFreqs
         ? () => getRandomSymbolFromFreqs(get().loadoutFreqs!)
         : () => getRandomSymbol(get().levelConfig.symbolCount);
       for (let i = 0; i < extraTiles; i++) {
-        newQueue.push({ id: `extra-${Date.now()}-${i}`, symbolA: getSymbol(), symbolB: getSymbol() });
+        queuedTiles.push({ id: `extra-${Date.now()}-${i}`, symbolA: getSymbol(), symbolB: getSymbol() });
       }
     }
 
-    const nextTile = tileQueue[0] ?? null;
+    const nextTile = queuedTiles[0] ?? null;
+    const newQueue = queuedTiles.slice(1);
     const isComplete = nextTile === null;
 
     // Auto-end: once the player has enough score to earn the max +3 bonus respins
@@ -431,7 +432,7 @@ export const useGameStore = create<GameState>((set, get) => ({
       }
     } else {
       // Check if any entry has valid placements on the new grid
-      const stuck = !anyEntryHasValidPlacement(newGrid, get().entrySpots, getVineSymbols(loadoutDefs));
+      const stuck = !anyEntryHasValidPlacement(newGrid, get().entrySpots, nextTile, getVineSymbols(loadoutDefs));
       if (stuck) {
         // No valid placements remaining — end the game
         const result = newTotalScore >= get().levelConfig.threshold ? 'win' : 'lose';

@@ -44,12 +44,12 @@
       [
         "react-native-google-mobile-ads",
         {
-          "ios_app_id": "ca-app-pub-3940256099942544~1458002511",
-          "android_app_id": "ca-app-pub-3940256099942544~3347511713",
-          "user_tracking_usage_description": "We use this to show you ads relevant to your interests. You can opt out and the game still works fully.",
-          "delay_app_measurement_init": true,
-          "optimize_initialization": true,
-          "optimize_ad_loading": true
+          "iosAppId": "ca-app-pub-3940256099942544~1458002511",
+          "androidAppId": "ca-app-pub-3940256099942544~3347511713",
+          "userTrackingUsageDescription": "We use this to show you ads relevant to your interests. You can opt out and the game still works fully.",
+          "delayAppMeasurementInit": true,
+          "optimizeInitialization": true,
+          "optimizeAdLoading": true
         }
       ]
     ]

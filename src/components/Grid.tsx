@@ -68,7 +68,7 @@ export function Grid() {
           for (let col = startCol - dist; col <= startCol + dist; col++) {
             if (row < 0 || row >= BOARD_SIZE || col < 0 || col >= BOARD_SIZE) continue;
             for (let rot = 0; rot < 4; rot++) {
-              if (canPlaceTileWithEntry(grid, row, col, rot as Rotation, reachable, vineSymbols)) return { row, col };
+              if (canPlaceTileWithEntry(grid, row, col, rot as Rotation, reachable, vineSymbols, state.currentTile)) return { row, col };
             }
           }
         }
@@ -125,25 +125,25 @@ export function Grid() {
       switch (e.key) {
         case 'ArrowUp':
           e.preventDefault();
-          if (canPlaceTileWithEntry(state.grid, row - 1, col, state.rotation, state.reachableCells, state.vineSymbols)) {
+          if (canPlaceTileWithEntry(state.grid, row - 1, col, state.rotation, state.reachableCells, state.vineSymbols, state.currentTile)) {
             state.movePlacement(row - 1, col);
           }
           break;
         case 'ArrowDown':
           e.preventDefault();
-          if (canPlaceTileWithEntry(state.grid, row + 1, col, state.rotation, state.reachableCells, state.vineSymbols)) {
+          if (canPlaceTileWithEntry(state.grid, row + 1, col, state.rotation, state.reachableCells, state.vineSymbols, state.currentTile)) {
             state.movePlacement(row + 1, col);
           }
           break;
         case 'ArrowLeft':
           e.preventDefault();
-          if (canPlaceTileWithEntry(state.grid, row, col - 1, state.rotation, state.reachableCells, state.vineSymbols)) {
+          if (canPlaceTileWithEntry(state.grid, row, col - 1, state.rotation, state.reachableCells, state.vineSymbols, state.currentTile)) {
             state.movePlacement(row, col - 1);
           }
           break;
         case 'ArrowRight':
           e.preventDefault();
-          if (canPlaceTileWithEntry(state.grid, row, col + 1, state.rotation, state.reachableCells, state.vineSymbols)) {
+          if (canPlaceTileWithEntry(state.grid, row, col + 1, state.rotation, state.reachableCells, state.vineSymbols, state.currentTile)) {
             state.movePlacement(row, col + 1);
           }
           break;
@@ -223,7 +223,7 @@ export function Grid() {
 
       if (placementMode === 'idle') {
         const anyRotFits = [0, 1, 2, 3].some(r =>
-          canPlaceTileWithEntry(grid, cell.row, cell.col, r as Rotation, reachableCells, vineSymbols)
+          canPlaceTileWithEntry(grid, cell.row, cell.col, r as Rotation, reachableCells, vineSymbols, currentTile)
         );
         if (anyRotFits) {
           Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
@@ -244,7 +244,7 @@ export function Grid() {
           } else {
             // Try to move tile to the tapped cell
             const anyRotFits = [0, 1, 2, 3].some(r =>
-              canPlaceTileWithEntry(grid, cell.row, cell.col, r as Rotation, reachableCells, vineSymbols)
+              canPlaceTileWithEntry(grid, cell.row, cell.col, r as Rotation, reachableCells, vineSymbols, currentTile)
             );
             if (anyRotFits) {
               Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
@@ -262,7 +262,7 @@ export function Grid() {
       if (phase !== 'placing' || placementMode !== 'placed') return;
 
       const cell = getCellFromPosition(event.x, event.y);
-      if (cell && canPlaceTileWithEntry(grid, cell.row, cell.col, rotation, reachableCells, vineSymbols)) {
+      if (cell && canPlaceTileWithEntry(grid, cell.row, cell.col, rotation, reachableCells, vineSymbols, currentTile)) {
         if (!placedPosition || placedPosition.row !== cell.row || placedPosition.col !== cell.col) {
           Haptics.selectionAsync();
           movePlacement(cell.row, cell.col);
@@ -327,11 +327,11 @@ export function Grid() {
     for (const cellKey of reachable) {
       const [r, c] = cellKey.split(',').map(Number);
       for (let rot = 0; rot < 4; rot++) {
-        if (canPlaceTileWithEntry(grid, r, c, rot as Rotation, reachable, vineSymbols)) return false;
+        if (canPlaceTileWithEntry(grid, r, c, rot as Rotation, reachable, vineSymbols, currentTile)) return false;
       }
     }
     return true;
-  }), [grid, entrySpots]);
+  }), [grid, entrySpots, vineSymbols, currentTile]);
 
   const leftEntries = entrySpots.filter(e => e.arrowDirection === 'right');
   const rightEntries = entrySpots.filter(e => e.arrowDirection === 'left');

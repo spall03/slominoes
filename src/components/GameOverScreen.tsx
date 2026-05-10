@@ -4,7 +4,7 @@ import { View, Text, Pressable, StyleSheet } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { colors, fonts } from '../theme';
 import { NUM_LEVELS } from '../constants';
-import { useRunStore } from '../store';
+import { useGameStore, useRunStore } from '../store';
 import { useMetaStore, UNLOCK_CONDITIONS } from '../meta-store';
 import { SYMBOL_ROSTER } from '../symbols';
 import { startMusic, stopMusic } from '../music';
@@ -13,6 +13,7 @@ export function GameOverScreen() {
   const { currentLevel, levelScore, levelConfig } = useRunStore();
   const endRun = useMetaStore(s => s.endRun);
   const unlockedSymbols = useMetaStore(s => s.unlockedSymbols);
+  const gameResult = useGameStore(s => s.result);
   const endRunCalled = useRef(false);
 
   const isTutorial = currentLevel === 0;
@@ -22,7 +23,8 @@ export function GameOverScreen() {
   const unlockedCount = UNLOCK_CONDITIONS.filter(c => unlockedSymbols.has(c.symbolId)).length;
   const allUnlocked = unlockedCount >= totalUnlockable;
 
-  const won = currentLevel >= NUM_LEVELS && levelScore >= 0;
+  const won = currentLevel >= NUM_LEVELS && gameResult === 'win';
+  const completedLevels = won ? NUM_LEVELS : Math.max(0, currentLevel - 1);
 
   useEffect(() => {
     if (isTutorial || won) {
@@ -40,9 +42,9 @@ export function GameOverScreen() {
     if (isTutorial) return;
     if (!endRunCalled.current) {
       endRunCalled.current = true;
-      endRun(levelScore, currentLevel, won);
+      endRun(levelScore, completedLevels, won);
     }
-  }, [endRun, levelScore, currentLevel, won, isTutorial]);
+  }, [endRun, levelScore, completedLevels, won, isTutorial]);
 
   const threshold = levelConfig?.threshold ?? 0;
   const progress = threshold > 0 ? Math.min(1, levelScore / threshold) : 1;
