@@ -34,8 +34,7 @@ export function getEntrySpots(count: number): EntrySpot[] {
     { id: 3, label: 'Right', cells: [[3, 7], [4, 7]], arrowDirection: 'left' },
   ];
   if (count <= 1) return [all[0]];
-  if (count === 2) return [all[0], all[1]];
-  return all;
+  return all.slice(0, Math.min(count, all.length));
 }
 
 // =============================================================================

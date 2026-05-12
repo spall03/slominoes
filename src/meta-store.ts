@@ -507,9 +507,6 @@ export const useMetaStore = create<MetaState>((set, get) => ({
     };
 
     // Update cumulative stats.
-    // Note: `levelsWon` param from the caller is actually "currentLevel at end
-    // of run" (level reached), not number-of-levels-won-this-run. Kept the
-    // param name for back-compat.
     const newStats: CumulativeStats = {
       cumulativeScore: cumulativeStats.cumulativeScore + finalScore,
       levelsWon: cumulativeStats.levelsWon + levelsWon,
