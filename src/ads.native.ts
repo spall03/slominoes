@@ -53,6 +53,9 @@ let rewardedRespinRescueLoaded = false;
 let rewardedContinueLoaded = false;
 let interstitialLoaded = false;
 
+let rewardedRespinRescueLoading: Promise<void> | null = null;
+let rewardedContinueLoading: Promise<void> | null = null;
+
 // Failure counters — hide ad UIs after consecutive failures (per spec)
 let rewardedFailureCount: Record<RewardedPlacement, number> = {
   respin_rescue: 0,
@@ -66,24 +69,30 @@ let rewardedFailureCount: Record<RewardedPlacement, number> = {
 function getRewardedRef(placement: RewardedPlacement): {
   ad: RewardedAd | null;
   loaded: boolean;
+  loading: Promise<void> | null;
   setAd: (a: RewardedAd | null) => void;
   setLoaded: (l: boolean) => void;
+  setLoading: (p: Promise<void> | null) => void;
   unitId?: string;
 } {
   if (placement === 'respin_rescue') {
     return {
       ad: rewardedRespinRescue,
       loaded: rewardedRespinRescueLoaded,
+      loading: rewardedRespinRescueLoading,
       setAd: (a) => { rewardedRespinRescue = a; },
       setLoaded: (l) => { rewardedRespinRescueLoaded = l; },
+      setLoading: (p) => { rewardedRespinRescueLoading = p; },
       unitId: AD_UNITS.rewardedRespinRescue,
     };
   }
   return {
     ad: rewardedContinue,
     loaded: rewardedContinueLoaded,
+    loading: rewardedContinueLoading,
     setAd: (a) => { rewardedContinue = a; },
     setLoaded: (l) => { rewardedContinueLoaded = l; },
+    setLoading: (p) => { rewardedContinueLoading = p; },
     unitId: AD_UNITS.rewardedContinue,
   };
 }
@@ -105,33 +114,54 @@ export const adsApi: AdsApi = {
   async preloadRewarded(placement: RewardedPlacement): Promise<void> {
     const ref = getRewardedRef(placement);
     if (ref.loaded) return; // already ready
+    if (ref.loading) return ref.loading; // load already in flight
     if (rewardedFailureCount[placement] >= 3) return; // give up for session
     if (!ref.unitId) return; // production ad unit not configured
     const unitId = ref.unitId;
 
-    return new Promise((resolve) => {
-      const ad = RewardedAd.createForAdRequest(unitId, {
-        requestNonPersonalizedAdsOnly: false, // honored at SDK level via UMP/ATT
-      });
-      ref.setAd(ad);
-
-      const unsubLoaded = ad.addAdEventListener(RewardedAdEventType.LOADED, () => {
-        ref.setLoaded(true);
-        rewardedFailureCount[placement] = 0;
-        unsubLoaded();
-        unsubError();
-        resolve();
-      });
-      const unsubError = ad.addAdEventListener(AdEventType.ERROR, () => {
-        ref.setLoaded(false);
-        rewardedFailureCount[placement] += 1;
-        unsubLoaded();
-        unsubError();
-        resolve();
-      });
-
-      ad.load();
+    const ad = RewardedAd.createForAdRequest(unitId, {
+      requestNonPersonalizedAdsOnly: false, // honored at SDK level via UMP/ATT
     });
+    ref.setAd(ad);
+    ref.setLoaded(false);
+
+    let resolveLoad: () => void = () => {};
+    let unsubLoaded: () => void = () => {};
+    let unsubError: () => void = () => {};
+    const loadPromise = new Promise<void>((resolve) => {
+      resolveLoad = resolve;
+    });
+    ref.setLoading(loadPromise);
+
+    const finish = (loaded: boolean) => {
+      const current = getRewardedRef(placement);
+      if (current.ad === ad) {
+        current.setLoaded(loaded);
+        if (!loaded) rewardedFailureCount[placement] += 1;
+      }
+      if (current.loading === loadPromise) current.setLoading(null);
+      unsubLoaded();
+      unsubError();
+      resolveLoad();
+    };
+
+    unsubLoaded = ad.addAdEventListener(RewardedAdEventType.LOADED, () => {
+      const current = getRewardedRef(placement);
+      if (current.ad === ad) {
+        rewardedFailureCount[placement] = 0;
+      }
+      finish(true);
+    });
+    unsubError = ad.addAdEventListener(AdEventType.ERROR, () => {
+      finish(false);
+    });
+
+    try {
+      ad.load();
+    } catch {
+      finish(false);
+    }
+    return loadPromise;
   },
 
   isRewardedReady(placement: RewardedPlacement): boolean {

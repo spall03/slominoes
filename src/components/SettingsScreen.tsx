@@ -1,9 +1,19 @@
 // src/components/SettingsScreen.tsx
-import React, { useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { View, Text, Pressable, StyleSheet, Platform } from 'react-native';
 import { colors, fonts } from '../theme';
 import { useSettingsStore } from '../settings-store';
 import { useRunStore } from '../store';
+import { useMetaStore } from '../meta-store';
+import { iapApi } from '../iap';
+import { attUmpApi } from '../att-ump';
+import {
+  iapCompleted,
+  iapFailed,
+  iapRestored,
+  iapSettingsViewed,
+  iapStarted,
+} from '../analytics-events';
 
 interface Props {
   onClose: () => void;
@@ -25,7 +35,32 @@ export function SettingsScreen({ onClose }: Props) {
   const sfxEnabled = useSettingsStore(s => s.sfxEnabled);
   const toggleMusic = useSettingsStore(s => s.toggleMusic);
   const toggleSfx = useSettingsStore(s => s.toggleSfx);
+  const removeAdsEntitled = useMetaStore(s => s.removeAdsEntitled);
+  const adServiceReady = useMetaStore(s => s.adServiceReady);
+  const adServiceFailed = useMetaStore(s => s.adServiceFailed);
+  const setRemoveAdsEntitled = useMetaStore(s => s.setRemoveAdsEntitled);
   const [confirmingAbandon, setConfirmingAbandon] = useState(false);
+  const [storePrice, setStorePrice] = useState<string | null>(null);
+  const [iapBusy, setIapBusy] = useState<'purchase' | 'restore' | 'privacy' | null>(null);
+  const [iapMessage, setIapMessage] = useState<string | null>(null);
+  const loggedIapViewRef = useRef(false);
+  const showIap = Platform.OS !== 'web';
+  const iapAvailable = showIap && adServiceReady && !adServiceFailed;
+
+  useEffect(() => {
+    if (!showIap) return;
+    if (!loggedIapViewRef.current) {
+      loggedIapViewRef.current = true;
+      iapSettingsViewed();
+    }
+    if (!iapAvailable) return;
+    iapApi.fetchProducts()
+      .then(products => {
+        const product = products[0];
+        if (product) setStorePrice(product.localizedPrice || product.price);
+      })
+      .catch(() => {});
+  }, [iapAvailable, showIap]);
 
   const handleAbandon = () => {
     if (!confirmingAbandon) {
@@ -37,6 +72,55 @@ export function SettingsScreen({ onClose }: Props) {
     onClose();
   };
 
+  const handlePurchaseRemoveAds = async () => {
+    if (!iapAvailable || iapBusy) return;
+    setIapBusy('purchase');
+    setIapMessage(null);
+    iapStarted('settings');
+    const result = await iapApi.purchaseRemoveAds();
+    if (result.ok && result.purchased) {
+      setRemoveAdsEntitled(true);
+      iapCompleted(storePrice ?? 'store_price');
+      setIapMessage('Ad-free enabled');
+    } else if (result.error === 'cancelled') {
+      iapFailed('cancelled');
+      setIapMessage('Purchase cancelled');
+    } else {
+      iapFailed('error', result.error);
+      setIapMessage('Purchase unavailable');
+    }
+    setIapBusy(null);
+  };
+
+  const handleRestorePurchases = async () => {
+    if (!iapAvailable || iapBusy) return;
+    setIapBusy('restore');
+    setIapMessage(null);
+    const result = await iapApi.restorePurchases();
+    if (result.ok && result.removeAds) {
+      setRemoveAdsEntitled(true);
+      iapRestored('button');
+      setIapMessage('Purchase restored');
+    } else {
+      iapFailed('error', result.error ?? 'no-entitlement');
+      setIapMessage('No purchase found');
+    }
+    setIapBusy(null);
+  };
+
+  const handlePrivacyChoices = async () => {
+    if (!iapAvailable || iapBusy) return;
+    setIapBusy('privacy');
+    setIapMessage(null);
+    try {
+      await attUmpApi.loadConsent();
+      setIapMessage('Privacy choices updated');
+    } catch {
+      setIapMessage('Privacy choices unavailable');
+    }
+    setIapBusy(null);
+  };
+
   return (
     <View style={styles.overlay}>
       <View style={styles.modal}>
@@ -46,6 +130,69 @@ export function SettingsScreen({ onClose }: Props) {
           <ToggleRow label="Music" enabled={musicEnabled} onToggle={toggleMusic} />
           <ToggleRow label="Sound Effects" enabled={sfxEnabled} onToggle={toggleSfx} />
         </View>
+
+        {showIap && (
+          <View style={styles.section}>
+            <View style={styles.iapPanel}>
+              <View style={styles.iapHeaderRow}>
+                <View>
+                  <Text style={styles.iapEyebrow}>REMOVE ADS</Text>
+                  <Text style={styles.iapTitle}>
+                    {removeAdsEntitled ? 'AD-FREE' : (storePrice ?? 'STORE PRICE')}
+                  </Text>
+                </View>
+                <View style={[styles.iapPill, removeAdsEntitled && styles.iapPillOwned]}>
+                  <Text style={[styles.iapPillText, removeAdsEntitled && styles.iapPillTextOwned]}>
+                    {removeAdsEntitled ? 'OWNED' : 'IAP'}
+                  </Text>
+                </View>
+              </View>
+              <Text style={styles.iapCopy}>
+                Removes interstitials. Rewarded ads stay available.
+              </Text>
+              {!removeAdsEntitled && (
+                <Pressable
+                  style={[
+                    styles.goldButton,
+                    (!iapAvailable || !!iapBusy) && styles.actionDisabled,
+                  ]}
+                  disabled={!iapAvailable || !!iapBusy}
+                  onPress={handlePurchaseRemoveAds}
+                >
+                  <Text style={styles.goldButtonText}>
+                    {iapBusy === 'purchase' ? 'PURCHASING' : 'REMOVE ADS'}
+                  </Text>
+                </Pressable>
+              )}
+              <Pressable
+                style={[
+                  styles.secondaryRowButton,
+                  (!iapAvailable || !!iapBusy) && styles.actionDisabled,
+                ]}
+                disabled={!iapAvailable || !!iapBusy}
+                onPress={handleRestorePurchases}
+              >
+                <Text style={styles.secondaryRowText}>
+                  {iapBusy === 'restore' ? 'RESTORING' : 'RESTORE PURCHASES'}
+                </Text>
+              </Pressable>
+              <Pressable
+                style={[
+                  styles.secondaryRowButton,
+                  (!iapAvailable || !!iapBusy) && styles.actionDisabled,
+                ]}
+                disabled={!iapAvailable || !!iapBusy}
+                onPress={handlePrivacyChoices}
+              >
+                <Text style={styles.secondaryRowText}>
+                  {iapBusy === 'privacy' ? 'OPENING' : 'MANAGE PRIVACY CHOICES'}
+                </Text>
+              </Pressable>
+              {iapMessage && <Text style={styles.iapMessage}>{iapMessage}</Text>}
+              {!iapAvailable && <Text style={styles.iapMessage}>Store unavailable</Text>}
+            </View>
+          </View>
+        )}
 
         <Pressable
           style={({ pressed }) => [
@@ -119,6 +266,97 @@ const styles = StyleSheet.create({
     width: '100%',
     gap: 12,
     marginBottom: 24,
+  },
+  iapPanel: {
+    width: '100%',
+    borderWidth: 1,
+    borderColor: colors.goldBorder,
+    borderRadius: 10,
+    backgroundColor: colors.goldTint,
+    padding: 12,
+    gap: 10,
+  },
+  iapHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 12,
+  },
+  iapEyebrow: {
+    color: colors.gold,
+    fontFamily: fonts.semiBold,
+    fontSize: 10,
+    letterSpacing: 2,
+  },
+  iapTitle: {
+    color: colors.ink,
+    fontFamily: fonts.bold,
+    fontSize: 16,
+    letterSpacing: 1,
+  },
+  iapPill: {
+    borderWidth: 1,
+    borderColor: colors.gold,
+    borderRadius: 999,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    backgroundColor: colors.surface,
+  },
+  iapPillOwned: {
+    borderColor: colors.cyan,
+    backgroundColor: colors.cyanTint,
+  },
+  iapPillText: {
+    color: colors.gold,
+    fontFamily: fonts.bold,
+    fontSize: 9,
+    letterSpacing: 1.5,
+  },
+  iapPillTextOwned: {
+    color: colors.cyan,
+  },
+  iapCopy: {
+    color: colors.inkDim,
+    fontFamily: fonts.regular,
+    fontSize: 12,
+    lineHeight: 17,
+  },
+  goldButton: {
+    borderWidth: 2,
+    borderColor: colors.gold,
+    borderRadius: 8,
+    paddingVertical: 9,
+    alignItems: 'center',
+    backgroundColor: 'rgba(255,215,0,0.08)',
+  },
+  goldButtonText: {
+    color: colors.gold,
+    fontFamily: fonts.bold,
+    fontSize: 13,
+    letterSpacing: 2,
+  },
+  secondaryRowButton: {
+    borderWidth: 1,
+    borderColor: colors.line2,
+    borderRadius: 8,
+    paddingVertical: 8,
+    alignItems: 'center',
+    backgroundColor: colors.surface,
+  },
+  secondaryRowText: {
+    color: colors.cyan,
+    fontFamily: fonts.semiBold,
+    fontSize: 11,
+    letterSpacing: 1.5,
+  },
+  actionDisabled: {
+    opacity: 0.45,
+  },
+  iapMessage: {
+    color: colors.inkMute,
+    fontFamily: fonts.regular,
+    fontSize: 11,
+    textAlign: 'center',
   },
   toggleRow: {
     flexDirection: 'row',

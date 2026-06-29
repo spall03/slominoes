@@ -25,6 +25,16 @@ export function LevelPreviewScreen() {
       levelScore: 0,
       levelConfig: null,
       bonusRespins: 5,
+      respinAdUsedThisRun: false,
+      continuesUsedThisRun: 0,
+      sawInterstitialThisRun: false,
+      runStartTime: 0,
+      totalRespinsUsed: 0,
+      runEndReason: null,
+      runFinalized: false,
+      runAnalyticsLogged: false,
+      skipInterstitialThisRun: true,
+      interstitialEligibleThisRun: false,
     });
   };
 

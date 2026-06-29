@@ -5,6 +5,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { colors, fonts, symbolColors } from '../theme';
 import { SymbolIcon } from '../symbols/index';
 import type { Symbol } from '../types';
+import { AdRewardButton } from './AdRewardButton';
 
 interface HUDProps {
   level: number;
@@ -26,6 +27,8 @@ interface HUDProps {
   onSettingsPress?: () => void;
   /** When true, the respin badge runs a continuous attention pulse (Level 0 hints). */
   pulseHint?: boolean;
+  showRespinReward?: boolean;
+  onRespinReward?: () => void;
 }
 
 /**
@@ -54,6 +57,8 @@ export function HUD({
   canAffordRespin,
   onSettingsPress,
   pulseHint,
+  showRespinReward,
+  onRespinReward,
 }: HUDProps) {
   const handleRespinPress = () => {
     if (respinsRemaining > 0) {
@@ -109,39 +114,50 @@ export function HUD({
               )}
             </View>
           )}
-          <Animated.View style={{ transform: [{ scale: pulseAnim }] }}>
-            <Pressable
-              style={[
-                styles.respinBadge,
-                respinMode && styles.respinBadgeActive,
-                respinDisabled && styles.respinBadgeDisabled,
-                pulseHint && styles.respinBadgeHint,
-              ]}
-              onPress={handleRespinPress}
-              disabled={respinDisabled}
-            >
-              <Text style={[
-                styles.respinLabel,
-                respinMode && styles.respinLabelActive,
-                pulseHint && styles.respinLabelHint,
-              ]}>
-                RESPIN
-              </Text>
-              {respinsRemaining > 0 ? (
+          {showRespinReward && onRespinReward ? (
+            <AdRewardButton
+              compact
+              placement="respin_rescue"
+              level={level}
+              title="EARN"
+              detail="+3"
+              onReward={onRespinReward}
+            />
+          ) : (
+            <Animated.View style={{ transform: [{ scale: pulseAnim }] }}>
+              <Pressable
+                style={[
+                  styles.respinBadge,
+                  respinMode && styles.respinBadgeActive,
+                  respinDisabled && styles.respinBadgeDisabled,
+                  pulseHint && styles.respinBadgeHint,
+                ]}
+                onPress={handleRespinPress}
+                disabled={respinDisabled}
+              >
                 <Text style={[
-                  styles.respinCount,
-                  respinMode && styles.respinCountActive,
-                  pulseHint && styles.respinCountHint,
+                  styles.respinLabel,
+                  respinMode && styles.respinLabelActive,
+                  pulseHint && styles.respinLabelHint,
                 ]}>
-                  {respinsRemaining}
+                  RESPIN
                 </Text>
-              ) : (
-                <Text style={[styles.respinCost, respinDisabled && styles.respinCostDisabled]}>
-                  {nextRespinCost}pts
-                </Text>
-              )}
-            </Pressable>
-          </Animated.View>
+                {respinsRemaining > 0 ? (
+                  <Text style={[
+                    styles.respinCount,
+                    respinMode && styles.respinCountActive,
+                    pulseHint && styles.respinCountHint,
+                  ]}>
+                    {respinsRemaining}
+                  </Text>
+                ) : (
+                  <Text style={[styles.respinCost, respinDisabled && styles.respinCostDisabled]}>
+                    {nextRespinCost}pts
+                  </Text>
+                )}
+              </Pressable>
+            </Animated.View>
+          )}
           {onSettingsPress && (
             <Pressable onPress={onSettingsPress} style={styles.settingsButton} hitSlop={8}>
               <Text style={styles.settingsIcon}>&#x2699;</Text>

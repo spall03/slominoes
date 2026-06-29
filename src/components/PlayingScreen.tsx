@@ -12,6 +12,7 @@ import {
   isMobile,
 } from '../constants';
 import { useGameStore, useRunStore, respinModeRef } from '../store';
+import { useMetaStore } from '../meta-store';
 import { HUD } from './HUD';
 import { Grid } from './Grid';
 import { HelpPanel } from './HelpPanel';
@@ -22,6 +23,7 @@ import { useTutorialHints } from '../tutorial-hints-store';
 import { startMusic, stopMusic } from '../music';
 import { RespinCol } from '../symbols/RespinCol';
 import { RespinRow } from '../symbols/RespinRow';
+import { adsApi } from '../ads';
 
 export function PlayingScreen() {
   const {
@@ -46,6 +48,11 @@ export function PlayingScreen() {
   const isSpinning = spinningCells.size > 0;
 
   const { currentLevel } = useRunStore();
+  const respinAdUsedThisRun = useRunStore(s => s.respinAdUsedThisRun);
+  const claimRespinAdReward = useRunStore(s => s.claimRespinAdReward);
+  const adServiceReady = useMetaStore(s => s.adServiceReady);
+  const adServiceFailed = useMetaStore(s => s.adServiceFailed);
+  const isTutorial = currentLevel === 0;
 
   useEffect(() => {
     try { startMusic('level' + currentLevel); } catch {}
@@ -121,6 +128,25 @@ export function PlayingScreen() {
   // Auto-exit respin mode when respins run out AND can't afford more
   const nextCost = getNextRespinCost();
   const canBuy = score >= nextCost;
+  const canShowRespinReward =
+    Platform.OS !== 'web' &&
+    !isTutorial &&
+    phase === 'placing' &&
+    placementMode !== 'placed' &&
+    matchingCells.size === 0 &&
+    !isSpinning &&
+    adServiceReady &&
+    !adServiceFailed &&
+    respinsRemaining === 0 &&
+    !canBuy &&
+    !respinAdUsedThisRun;
+
+  useEffect(() => {
+    if (canShowRespinReward) {
+      adsApi.preloadRewarded('respin_rescue').catch(() => {});
+    }
+  }, [canShowRespinReward]);
+
   useEffect(() => {
     if (respinMode && respinsRemaining === 0 && !canBuy) {
       setRespinMode(false);
@@ -223,7 +249,6 @@ export function PlayingScreen() {
   }, []);
 
   const isDesktop = Platform.OS === 'web' && !isMobile;
-  const isTutorial = currentLevel === 0;
   const tutorialFocus = useTutorialHints(s => s.focus);
 
   return (
@@ -247,6 +272,11 @@ export function PlayingScreen() {
         onBuyRespin={() => { buyRespin(); setRespinMode(true); }}
         onSettingsPress={() => setShowSettings(true)}
         pulseHint={tutorialFocus === 'respin-badge'}
+        showRespinReward={canShowRespinReward}
+        onRespinReward={() => {
+          claimRespinAdReward();
+          setRespinMode(true);
+        }}
       />
 
       <View style={isDesktop ? styles.mainRow : styles.mobileMain}>

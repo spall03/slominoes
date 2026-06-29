@@ -1,20 +1,32 @@
 // src/components/GameOverScreen.tsx
-import React, { useEffect, useRef } from 'react';
-import { View, Text, Pressable, StyleSheet } from 'react-native';
+import React, { useCallback, useEffect, useState } from 'react';
+import { View, Text, Pressable, Platform, StyleSheet } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { colors, fonts } from '../theme';
 import { NUM_LEVELS } from '../constants';
-import { useGameStore, useRunStore } from '../store';
+import { useRunStore } from '../store';
 import { useMetaStore, UNLOCK_CONDITIONS } from '../meta-store';
-import { SYMBOL_ROSTER } from '../symbols';
 import { startMusic, stopMusic } from '../music';
+import { AdRewardButton } from './AdRewardButton';
+import { InterstitialGate } from './InterstitialGate';
 
 export function GameOverScreen() {
-  const { currentLevel, levelScore, levelConfig } = useRunStore();
-  const endRun = useMetaStore(s => s.endRun);
+  const {
+    currentLevel,
+    levelScore,
+    levelConfig,
+    runEndReason,
+    continuesUsedThisRun,
+    interstitialEligibleThisRun,
+    finalizeRun,
+    logRunEnded,
+    continueLevel,
+    returnToTitle,
+  } = useRunStore();
   const unlockedSymbols = useMetaStore(s => s.unlockedSymbols);
-  const gameResult = useGameStore(s => s.result);
-  const endRunCalled = useRef(false);
+  const adServiceReady = useMetaStore(s => s.adServiceReady);
+  const adServiceFailed = useMetaStore(s => s.adServiceFailed);
+  const [pendingDestination, setPendingDestination] = useState<'run' | 'title' | null>(null);
 
   const isTutorial = currentLevel === 0;
 
@@ -23,8 +35,17 @@ export function GameOverScreen() {
   const unlockedCount = UNLOCK_CONDITIONS.filter(c => unlockedSymbols.has(c.symbolId)).length;
   const allUnlocked = unlockedCount >= totalUnlockable;
 
-  const won = currentLevel >= NUM_LEVELS && gameResult === 'win';
-  const completedLevels = won ? NUM_LEVELS : Math.max(0, currentLevel - 1);
+  const won = runEndReason === 'won';
+  const abandoned = runEndReason === 'abandoned';
+  const continuesRemaining = Math.max(0, 2 - continuesUsedThisRun);
+  const leavingRun = pendingDestination !== null;
+  const canOfferContinue =
+    Platform.OS !== 'web' &&
+    !isTutorial &&
+    runEndReason === 'lost' &&
+    continuesRemaining > 0 &&
+    adServiceReady &&
+    !adServiceFailed;
 
   useEffect(() => {
     if (isTutorial || won) {
@@ -35,16 +56,28 @@ export function GameOverScreen() {
     return () => { try { stopMusic(); } catch {} };
   }, [won, isTutorial]);
 
-  // Call endRun once when this screen mounts — but NOT for the tutorial,
-  // which is meta-progression-neutral. (useMetaStore.endRun() also self-gates,
-  // but defending here too.)
   useEffect(() => {
     if (isTutorial) return;
-    if (!endRunCalled.current) {
-      endRunCalled.current = true;
-      endRun(levelScore, completedLevels, won);
+    if (!canOfferContinue) finalizeRun();
+  }, [canOfferContinue, finalizeRun, isTutorial]);
+
+  const leaveRun = useCallback((destination: 'run' | 'title') => {
+    if (pendingDestination) return;
+    if (!isTutorial) finalizeRun();
+    setPendingDestination(destination);
+  }, [finalizeRun, isTutorial, pendingDestination]);
+
+  const handleInterstitialComplete = useCallback(() => {
+    if (!pendingDestination) return;
+    logRunEnded();
+    const destination = pendingDestination;
+    setPendingDestination(null);
+    if (destination === 'title') {
+      returnToTitle();
+    } else {
+      useRunStore.getState().startRun();
     }
-  }, [endRun, levelScore, completedLevels, won, isTutorial]);
+  }, [logRunEnded, pendingDestination, returnToTitle]);
 
   const threshold = levelConfig?.threshold ?? 0;
   const progress = threshold > 0 ? Math.min(1, levelScore / threshold) : 1;
@@ -92,7 +125,9 @@ export function GameOverScreen() {
       <Text style={styles.subtitle}>
         {won
           ? `All ${NUM_LEVELS} levels complete!`
-          : `Reached Level ${currentLevel} / ${NUM_LEVELS}`}
+          : abandoned
+            ? `Abandoned at Level ${currentLevel} / ${NUM_LEVELS}`
+            : `Reached Level ${currentLevel} / ${NUM_LEVELS}`}
       </Text>
 
       {/* Stats card */}
@@ -149,9 +184,27 @@ export function GameOverScreen() {
         </View>
       </View>
 
+      {canOfferContinue && (
+        <View style={styles.continueWrap}>
+          <AdRewardButton
+            placement="continue"
+            level={currentLevel}
+            title="WATCH TO CONTINUE"
+            detail={`${continuesRemaining}/2 CONTINUES REMAINING`}
+            disabled={leavingRun}
+            onReward={continueLevel}
+          />
+        </View>
+      )}
+
       <Pressable
-        style={({ pressed }) => [styles.playAgainButton, pressed && styles.buttonPressed]}
-        onPress={() => useRunStore.getState().startRun()}
+        style={({ pressed }) => [
+          styles.playAgainButton,
+          leavingRun && styles.buttonDisabled,
+          pressed && !leavingRun && styles.buttonPressed,
+        ]}
+        disabled={leavingRun}
+        onPress={() => leaveRun('run')}
       >
         <Text style={styles.playAgainText}>
           {won ? 'PLAY AGAIN' : 'TRY AGAIN'}
@@ -159,11 +212,22 @@ export function GameOverScreen() {
       </Pressable>
 
       <Pressable
-        style={({ pressed }) => [styles.mainMenuButton, pressed && styles.buttonPressed]}
-        onPress={() => useRunStore.getState().startRun()}
+        style={({ pressed }) => [
+          styles.mainMenuButton,
+          leavingRun && styles.buttonDisabled,
+          pressed && !leavingRun && styles.buttonPressed,
+        ]}
+        disabled={leavingRun}
+        onPress={() => leaveRun('title')}
       >
         <Text style={styles.mainMenuText}>MAIN MENU</Text>
       </Pressable>
+
+      <InterstitialGate
+        active={leavingRun}
+        eligible={interstitialEligibleThisRun}
+        onComplete={handleInterstitialComplete}
+      />
     </View>
   );
 }
@@ -225,6 +289,9 @@ const styles = StyleSheet.create({
     borderRadius: 10,
     paddingVertical: 14,
     paddingHorizontal: 32,
+    marginBottom: 16,
+  },
+  continueWrap: {
     marginBottom: 16,
   },
   playAgainText: {
@@ -292,5 +359,8 @@ const styles = StyleSheet.create({
   },
   buttonPressed: {
     opacity: 0.7,
+  },
+  buttonDisabled: {
+    opacity: 0.45,
   },
 });

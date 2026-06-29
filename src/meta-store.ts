@@ -133,6 +133,7 @@ interface PersistedMeta {
   bestRunScore?: number;         // added in v2; absent on old saves
   removeAdsEntitled?: boolean;   // ad-support: persisted entitlement cache
   firstRunCompleted?: boolean;   // ad-support: gate for first-run-no-interstitial guardrail
+  lastInterstitialAt?: number;   // ad-support: persisted cooldown timestamp
   hasTutorialBeenSeen?: boolean; // FTUE: gate for routing NEW RUN to Level 0
   hasSeenDraftIntro?: boolean;   // FTUE: gate for first-draft-visit overlay
 }
@@ -140,6 +141,7 @@ interface PersistedMeta {
 interface PersistedAds {
   removeAdsEntitled: boolean;
   firstRunCompleted: boolean;
+  lastInterstitialAt: number;
 }
 
 interface PersistedFtue {
@@ -179,7 +181,7 @@ async function loadMeta(): Promise<{
       return {
         unlocked: new Set(),
         stats: defaultCumulativeStats(),
-        ads: { removeAdsEntitled: false, firstRunCompleted: false },
+        ads: { removeAdsEntitled: false, firstRunCompleted: false, lastInterstitialAt: 0 },
         ftue: {
           hasTutorialBeenSeen: legacyTutorialSeen,
           hasSeenDraftIntro: false,
@@ -202,6 +204,7 @@ async function loadMeta(): Promise<{
       ads: {
         removeAdsEntitled: data.removeAdsEntitled ?? false,
         firstRunCompleted: data.firstRunCompleted ?? false,
+        lastInterstitialAt: data.lastInterstitialAt ?? 0,
       },
       ftue: {
         // OR-merge legacy and new — covers (a) fresh installs with legacy key,
@@ -214,7 +217,7 @@ async function loadMeta(): Promise<{
     return {
       unlocked: new Set(),
       stats: defaultCumulativeStats(),
-      ads: { removeAdsEntitled: false, firstRunCompleted: false },
+      ads: { removeAdsEntitled: false, firstRunCompleted: false, lastInterstitialAt: 0 },
       ftue: {
         hasTutorialBeenSeen: legacyTutorialSeen,
         hasSeenDraftIntro: false,
@@ -241,6 +244,7 @@ async function saveMeta(
     bestRunScore: stats.bestRunScore,
     removeAdsEntitled: ads.removeAdsEntitled,
     firstRunCompleted: ads.firstRunCompleted,
+    lastInterstitialAt: ads.lastInterstitialAt,
     hasTutorialBeenSeen: ftue.hasTutorialBeenSeen,
     hasSeenDraftIntro: ftue.hasSeenDraftIntro,
   };
@@ -352,6 +356,7 @@ export const useMetaStore = create<MetaState>((set, get) => ({
       cumulativeStats: stats,
       removeAdsEntitled: ads.removeAdsEntitled,
       firstRunCompleted: ads.firstRunCompleted,
+      lastInterstitialAt: ads.lastInterstitialAt,
       hasTutorialBeenSeen: ftue.hasTutorialBeenSeen,
       hasSeenDraftIntro: ftue.hasSeenDraftIntro,
     });
@@ -546,6 +551,14 @@ export const useMetaStore = create<MetaState>((set, get) => ({
       unlockQueue: queue.slice(1), // remaining queue for future runs
     });
 
+    try {
+      const events = require('./analytics-events');
+      events.userProperties.furthestLevelReached(newStats.furthestLevel);
+      events.userProperties.totalRunsPlayed(newStats.totalRuns);
+      events.userProperties.unlocksOwnedCount(newUnlocked.size);
+      if (pendingUnlock) events.unlockTriggered(pendingUnlock);
+    } catch {}
+
     // Persist
     saveMeta(
       newUnlocked,
@@ -553,6 +566,7 @@ export const useMetaStore = create<MetaState>((set, get) => ({
       {
         removeAdsEntitled: get().removeAdsEntitled,
         firstRunCompleted: get().firstRunCompleted,
+        lastInterstitialAt: get().lastInterstitialAt,
       },
       {
         hasTutorialBeenSeen: get().hasTutorialBeenSeen,
@@ -570,6 +584,7 @@ export const useMetaStore = create<MetaState>((set, get) => ({
   // ==========================================================================
 
   setAdServiceReady: ({ attStatus, removeAdsEntitled }) => {
+    const wasRemoveAdsEntitled = get().removeAdsEntitled;
     set({
       adServiceReady: true,
       adServiceFailed: false,
@@ -577,12 +592,19 @@ export const useMetaStore = create<MetaState>((set, get) => ({
       attStatus,
       removeAdsEntitled,
     });
+    try {
+      const events = require('./analytics-events');
+      events.userProperties.iapRemoveAdsOwned(removeAdsEntitled);
+      if (removeAdsEntitled && !wasRemoveAdsEntitled) {
+        events.iapRestored('auto_cold_start');
+      }
+    } catch {}
     // Persist the entitlement value the cold-start auto-restore returned
-    const { unlockedSymbols, cumulativeStats, firstRunCompleted, hasTutorialBeenSeen, hasSeenDraftIntro } = get();
+    const { unlockedSymbols, cumulativeStats, firstRunCompleted, lastInterstitialAt, hasTutorialBeenSeen, hasSeenDraftIntro } = get();
     saveMeta(
       unlockedSymbols,
       cumulativeStats,
-      { removeAdsEntitled, firstRunCompleted },
+      { removeAdsEntitled, firstRunCompleted, lastInterstitialAt },
       { hasTutorialBeenSeen, hasSeenDraftIntro },
     );
   },
@@ -597,17 +619,26 @@ export const useMetaStore = create<MetaState>((set, get) => ({
 
   setRemoveAdsEntitled: (entitled: boolean) => {
     set({ removeAdsEntitled: entitled });
-    const { unlockedSymbols, cumulativeStats, firstRunCompleted, hasTutorialBeenSeen, hasSeenDraftIntro } = get();
+    try { require('./analytics-events').userProperties.iapRemoveAdsOwned(entitled); } catch {}
+    const { unlockedSymbols, cumulativeStats, firstRunCompleted, lastInterstitialAt, hasTutorialBeenSeen, hasSeenDraftIntro } = get();
     saveMeta(
       unlockedSymbols,
       cumulativeStats,
-      { removeAdsEntitled: entitled, firstRunCompleted },
+      { removeAdsEntitled: entitled, firstRunCompleted, lastInterstitialAt },
       { hasTutorialBeenSeen, hasSeenDraftIntro },
     );
   },
 
   markInterstitialShown: () => {
-    set({ lastInterstitialAt: Date.now() });
+    const lastInterstitialAt = Date.now();
+    set({ lastInterstitialAt });
+    const { unlockedSymbols, cumulativeStats, removeAdsEntitled, firstRunCompleted, hasTutorialBeenSeen, hasSeenDraftIntro } = get();
+    saveMeta(
+      unlockedSymbols,
+      cumulativeStats,
+      { removeAdsEntitled, firstRunCompleted, lastInterstitialAt },
+      { hasTutorialBeenSeen, hasSeenDraftIntro },
+    );
   },
 
   markFirstRunCompleted: () => {
@@ -623,11 +654,11 @@ export const useMetaStore = create<MetaState>((set, get) => ({
     }
     if (get().firstRunCompleted) return; // idempotent
     set({ firstRunCompleted: true });
-    const { unlockedSymbols, cumulativeStats, removeAdsEntitled, hasTutorialBeenSeen, hasSeenDraftIntro } = get();
+    const { unlockedSymbols, cumulativeStats, removeAdsEntitled, lastInterstitialAt, hasTutorialBeenSeen, hasSeenDraftIntro } = get();
     saveMeta(
       unlockedSymbols,
       cumulativeStats,
-      { removeAdsEntitled, firstRunCompleted: true },
+      { removeAdsEntitled, firstRunCompleted: true, lastInterstitialAt },
       { hasTutorialBeenSeen, hasSeenDraftIntro },
     );
   },
@@ -639,11 +670,11 @@ export const useMetaStore = create<MetaState>((set, get) => ({
   setTutorialSeen: () => {
     if (get().hasTutorialBeenSeen) return; // idempotent
     set({ hasTutorialBeenSeen: true });
-    const { unlockedSymbols, cumulativeStats, removeAdsEntitled, firstRunCompleted, hasSeenDraftIntro } = get();
+    const { unlockedSymbols, cumulativeStats, removeAdsEntitled, firstRunCompleted, lastInterstitialAt, hasSeenDraftIntro } = get();
     saveMeta(
       unlockedSymbols,
       cumulativeStats,
-      { removeAdsEntitled, firstRunCompleted },
+      { removeAdsEntitled, firstRunCompleted, lastInterstitialAt },
       { hasTutorialBeenSeen: true, hasSeenDraftIntro },
     );
   },
@@ -654,11 +685,11 @@ export const useMetaStore = create<MetaState>((set, get) => ({
     // or any cumulative stats — that gating happens via isTutorialRun() in
     // the run lifecycle paths.
     set({ hasTutorialBeenSeen: false });
-    const { unlockedSymbols, cumulativeStats, removeAdsEntitled, firstRunCompleted, hasSeenDraftIntro } = get();
+    const { unlockedSymbols, cumulativeStats, removeAdsEntitled, firstRunCompleted, lastInterstitialAt, hasSeenDraftIntro } = get();
     saveMeta(
       unlockedSymbols,
       cumulativeStats,
-      { removeAdsEntitled, firstRunCompleted },
+      { removeAdsEntitled, firstRunCompleted, lastInterstitialAt },
       { hasTutorialBeenSeen: false, hasSeenDraftIntro },
     );
   },
@@ -666,11 +697,11 @@ export const useMetaStore = create<MetaState>((set, get) => ({
   setDraftIntroSeen: () => {
     if (get().hasSeenDraftIntro) return; // idempotent
     set({ hasSeenDraftIntro: true });
-    const { unlockedSymbols, cumulativeStats, removeAdsEntitled, firstRunCompleted, hasTutorialBeenSeen } = get();
+    const { unlockedSymbols, cumulativeStats, removeAdsEntitled, firstRunCompleted, lastInterstitialAt, hasTutorialBeenSeen } = get();
     saveMeta(
       unlockedSymbols,
       cumulativeStats,
-      { removeAdsEntitled, firstRunCompleted },
+      { removeAdsEntitled, firstRunCompleted, lastInterstitialAt },
       { hasTutorialBeenSeen, hasSeenDraftIntro: true },
     );
   },

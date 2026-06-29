@@ -40,6 +40,7 @@ import {
 import { findMatches, calculateScore, matchKey } from './scoring';
 import { buildFrequencyTable, SYMBOL_ROSTER, hasNoLock, getRespinMatchBonus, getEntrySpotCount, type SymbolDef, type SymbolId } from './symbols';
 import * as Sound from './sound';
+import { adsApi } from './ads';
 import {
   calculateScoreWithAbilities,
   evaluateOnPlace,
@@ -77,6 +78,31 @@ const SPIN_STAGGER_MS = 80;
 const SPIN_BASE_CYCLES = 2;
 const BASE_RESPIN_COST = 100;
 const RESPIN_COST_STEP = 50;
+const RESPIN_REWARD_AMOUNT = 3;
+const MAX_CONTINUES_PER_RUN = 2;
+
+type RunEndReason = 'won' | 'lost' | 'abandoned';
+type LevelEndOutcome = 'won' | 'lost' | 'auto_end';
+
+function getAnalyticsEvents() {
+  return require('./analytics-events');
+}
+
+function isAdServiceUsable(): boolean {
+  const meta = getMetaStore()?.getState?.();
+  return !!meta?.adServiceReady && !meta.adServiceFailed;
+}
+
+function preloadInterstitialIfEligible() {
+  const meta = getMetaStore()?.getState?.();
+  if (!meta || !isAdServiceUsable() || meta.removeAdsEntitled) return;
+  adsApi.preloadInterstitial().catch(() => {});
+}
+
+function preloadContinueIfEligible(continuesUsed: number) {
+  if (!isAdServiceUsable() || continuesUsed >= MAX_CONTINUES_PER_RUN) return;
+  adsApi.preloadRewarded('continue').catch(() => {});
+}
 
 // =============================================================================
 // GAME STATE
@@ -104,6 +130,7 @@ export interface GameState {
   reachableCells: Set<string> | null;
   lockedCells: Set<string>;
   respinsBought: number;
+  respinsUsed: number;
   spinningCells: Map<string, SpinCellInfo>;
   pendingSpinGrid: Grid | null;
   pendingSpinScore: number;
@@ -165,6 +192,7 @@ export function createInitialState(config: LevelConfig = generateLevelConfig(1),
     reachableCells: null as Set<string> | null,
     lockedCells: new Set<string>(),
     respinsBought: 0,
+    respinsUsed: 0,
     spinningCells: new Map<string, SpinCellInfo>(),
     pendingSpinGrid: null as Grid | null,
     pendingSpinScore: 0,
@@ -426,7 +454,12 @@ export const useGameStore = create<GameState>((set, get) => ({
         reachableCells: null,
       });
       if (result === 'win') {
-        useRunStore.getState().completeLevel(newTotalScore, threshold, get().respinsRemaining);
+        useRunStore.getState().completeLevel(
+          newTotalScore,
+          threshold,
+          get().respinsRemaining,
+          autoEndForBonus ? 'auto_end' : 'won',
+        );
       } else {
         useRunStore.getState().failLevel(newTotalScore);
       }
@@ -452,7 +485,12 @@ export const useGameStore = create<GameState>((set, get) => ({
           reachableCells: null,
         });
         if (result === 'win') {
-          useRunStore.getState().completeLevel(newTotalScore, get().levelConfig.threshold, get().respinsRemaining);
+          useRunStore.getState().completeLevel(
+            newTotalScore,
+            get().levelConfig.threshold,
+            get().respinsRemaining,
+            'won',
+          );
         } else {
           useRunStore.getState().failLevel(newTotalScore);
         }
@@ -664,6 +702,7 @@ export const useGameStore = create<GameState>((set, get) => ({
     try { Sound.playRespin(); } catch {}
     set({
       respinsRemaining: newRespins,
+      respinsUsed: get().respinsUsed + 1,
       spinningCells: newSpinningCells,
       pendingSpinGrid: newGrid,
       pendingSpinScore: newScore,
@@ -803,7 +842,7 @@ export const useGameStore = create<GameState>((set, get) => ({
         selectedEntry: null,
         reachableCells: null,
       });
-      useRunStore.getState().completeLevel(committedScore, threshold, get().respinsRemaining);
+      useRunStore.getState().completeLevel(committedScore, threshold, get().respinsRemaining, 'auto_end');
     }
   },
 
@@ -825,13 +864,29 @@ export interface RunState {
   levelScore: number;
   levelConfig: LevelConfig | null;
   bonusRespins: number;
+  respinAdUsedThisRun: boolean;
+  continuesUsedThisRun: number;
+  sawInterstitialThisRun: boolean;
+  runStartTime: number;
+  totalRespinsUsed: number;
+  runEndReason: RunEndReason | null;
+  runFinalized: boolean;
+  runAnalyticsLogged: boolean;
+  skipInterstitialThisRun: boolean;
+  interstitialEligibleThisRun: boolean;
 
   startRun: () => void;
   confirmDraft: (loadout: SymbolDef[]) => void;
   startLevel: () => void;
-  completeLevel: (score: number, threshold: number, respinsLeft: number) => void;
+  completeLevel: (score: number, threshold: number, respinsLeft: number, outcome?: Exclude<LevelEndOutcome, 'lost'>) => void;
   failLevel: (score: number) => void;
+  claimRespinAdReward: () => void;
+  continueLevel: () => void;
+  markSawInterstitial: () => void;
+  finalizeRun: () => void;
+  logRunEnded: () => void;
   abandonRun: () => void;
+  returnToTitle: () => void;
 }
 
 export const useRunStore = create<RunState>((set, get) => ({
@@ -840,6 +895,16 @@ export const useRunStore = create<RunState>((set, get) => ({
   levelScore: 0,
   levelConfig: null,
   bonusRespins: 0,
+  respinAdUsedThisRun: false,
+  continuesUsedThisRun: 0,
+  sawInterstitialThisRun: false,
+  runStartTime: 0,
+  totalRespinsUsed: 0,
+  runEndReason: null,
+  runFinalized: false,
+  runAnalyticsLogged: false,
+  skipInterstitialThisRun: true,
+  interstitialEligibleThisRun: false,
 
   startRun: () => {
     // Lazy-require meta-store + analytics to avoid circular import.
@@ -859,6 +924,16 @@ export const useRunStore = create<RunState>((set, get) => ({
         levelScore: 0,
         levelConfig: config,
         bonusRespins: 0,
+        respinAdUsedThisRun: false,
+        continuesUsedThisRun: 0,
+        sawInterstitialThisRun: false,
+        runStartTime: 0,
+        totalRespinsUsed: 0,
+        runEndReason: null,
+        runFinalized: false,
+        runAnalyticsLogged: false,
+        skipInterstitialThisRun: true,
+        interstitialEligibleThisRun: false,
       });
       useGameStore.setState({
         loadoutFreqs: freqs,
@@ -877,13 +952,46 @@ export const useRunStore = create<RunState>((set, get) => ({
       // Seed the bank with 5 so level 1 isn't zero-respin; everything after
       // that is earned via the bonus tiers (and carries across levels).
       bonusRespins: 5,
+      respinAdUsedThisRun: false,
+      continuesUsedThisRun: 0,
+      sawInterstitialThisRun: false,
+      runStartTime: 0,
+      totalRespinsUsed: 0,
+      runEndReason: null,
+      runFinalized: false,
+      runAnalyticsLogged: false,
+      skipInterstitialThisRun: !meta.firstRunCompleted,
+      interstitialEligibleThisRun: false,
     });
   },
 
   confirmDraft: (loadout: SymbolDef[]) => {
     const freqs = buildFrequencyTable(loadout);
     const config = generateLevelConfig(1);
-    set({ runPhase: 'levelPreview', levelConfig: config });
+    const meta = getMetaStore()?.getState?.();
+    try {
+      const events = getAnalyticsEvents();
+      events.runStarted({
+        loadout: events.buildLoadoutString(loadout.map(s => s.id as SymbolId)),
+        loadout_size: loadout.length,
+        has_crown: loadout.some(s => s.id === 'crown'),
+        unlocks_count: meta?.unlockedSymbols?.size ?? 0,
+      });
+    } catch {}
+    set({
+      runPhase: 'levelPreview',
+      levelConfig: config,
+      runStartTime: Date.now(),
+      totalRespinsUsed: 0,
+      respinAdUsedThisRun: false,
+      continuesUsedThisRun: 0,
+      sawInterstitialThisRun: false,
+      runEndReason: null,
+      runFinalized: false,
+      runAnalyticsLogged: false,
+      skipInterstitialThisRun: !meta?.firstRunCompleted,
+      interstitialEligibleThisRun: false,
+    });
     useGameStore.setState({ loadoutFreqs: freqs, loadoutDefs: loadout });
   },
 
@@ -896,10 +1004,10 @@ export const useRunStore = create<RunState>((set, get) => ({
     // Preserve loadout from previous level
     const { loadoutFreqs: freqs, loadoutDefs: defs } = useGameStore.getState();
     useGameStore.getState().resetGame(config, freqs ?? undefined, defs ?? undefined);
-    set({ runPhase: 'playing' });
+    set({ runPhase: 'playing', runEndReason: null });
   },
 
-  completeLevel: (score: number, threshold: number, _respinsLeft: number) => {
+  completeLevel: (score: number, threshold: number, _respinsLeft: number, outcome: Exclude<LevelEndOutcome, 'lost'> = 'won') => {
     const { currentLevel } = get();
 
     // FTUE: Level 0 completion routes to GameOver with custom Tutorial-complete
@@ -922,6 +1030,21 @@ export const useRunStore = create<RunState>((set, get) => ({
       return;
     }
 
+    const game = useGameStore.getState();
+    const totalRespinsUsed = get().totalRespinsUsed + game.respinsUsed;
+    try {
+      getAnalyticsEvents().levelEnded({
+        level: currentLevel,
+        outcome,
+        score,
+        threshold,
+        respins_used: game.respinsUsed,
+        respins_bought_in_level: game.respinsBought,
+      });
+    } catch {}
+    set({ totalRespinsUsed });
+    preloadInterstitialIfEligible();
+
     // Calculate bonus respins for next level based on how much score exceeds threshold
     const excessPct = (score - threshold) / threshold;
     let bonus = 0;
@@ -931,7 +1054,17 @@ export const useRunStore = create<RunState>((set, get) => ({
 
     if (currentLevel >= NUM_LEVELS) {
       try { Sound.playLevelWin(); } catch {}
-      set({ runPhase: 'gameOver', levelScore: score, bonusRespins: 0 });
+      const interstitialEligibleThisRun = !get().skipInterstitialThisRun;
+      try { getMetaStore()?.getState?.()?.markFirstRunCompleted?.(); } catch {}
+      set({
+        runPhase: 'gameOver',
+        levelScore: score,
+        bonusRespins: 0,
+        runEndReason: 'won',
+        runFinalized: false,
+        runAnalyticsLogged: false,
+        interstitialEligibleThisRun,
+      });
       return;
     }
     try { Sound.playLevelWin(); } catch {}
@@ -944,12 +1077,128 @@ export const useRunStore = create<RunState>((set, get) => ({
       // Bonus respins stack across levels — earn up to +3 per level, no global cap.
       bonusRespins: get().bonusRespins + bonus,
       runPhase: 'levelPreview',
+      runEndReason: null,
     });
   },
 
   failLevel: (score: number) => {
+    const { currentLevel } = get();
+    const game = useGameStore.getState();
+    const totalRespinsUsed = get().totalRespinsUsed + game.respinsUsed;
+    try {
+      getAnalyticsEvents().levelEnded({
+        level: currentLevel,
+        outcome: 'lost',
+        score,
+        threshold: game.levelConfig.threshold,
+        respins_used: game.respinsUsed,
+        respins_bought_in_level: game.respinsBought,
+      });
+    } catch {}
+    set({ totalRespinsUsed });
+    preloadInterstitialIfEligible();
+    preloadContinueIfEligible(get().continuesUsedThisRun);
     try { Sound.playLevelLose(); } catch {}
-    set({ runPhase: 'gameOver', levelScore: score });
+    const interstitialEligibleThisRun = !get().skipInterstitialThisRun;
+    try { getMetaStore()?.getState?.()?.markFirstRunCompleted?.(); } catch {}
+    set({
+      runPhase: 'gameOver',
+      levelScore: score,
+      runEndReason: 'lost',
+      runFinalized: false,
+      runAnalyticsLogged: false,
+      interstitialEligibleThisRun,
+    });
+  },
+
+  claimRespinAdReward: () => {
+    const { bonusRespins, respinAdUsedThisRun, runPhase } = get();
+    if (runPhase !== 'playing' || respinAdUsedThisRun) return;
+    useGameStore.setState(state => ({
+      respinsRemaining: state.respinsRemaining + RESPIN_REWARD_AMOUNT,
+    }));
+    set({
+      respinAdUsedThisRun: true,
+      bonusRespins: bonusRespins + RESPIN_REWARD_AMOUNT,
+    });
+  },
+
+  continueLevel: () => {
+    const { runEndReason, continuesUsedThisRun, levelConfig, bonusRespins, currentLevel } = get();
+    if (runEndReason !== 'lost' || continuesUsedThisRun >= MAX_CONTINUES_PER_RUN || !levelConfig) return;
+
+    const { loadoutFreqs: freqs, loadoutDefs: defs } = useGameStore.getState();
+    const config = bonusRespins > 0
+      ? { ...levelConfig, respins: levelConfig.respins + bonusRespins }
+      : levelConfig;
+
+    useGameStore.getState().resetGame(config, freqs ?? undefined, defs ?? undefined);
+    try { getMetaStore()?.getState?.()?.startLevel?.(); } catch {}
+    const nextContinues = continuesUsedThisRun + 1;
+    try {
+      getAnalyticsEvents().continueUsed(
+        currentLevel,
+        Math.max(0, MAX_CONTINUES_PER_RUN - nextContinues) as 0 | 1,
+      );
+    } catch {}
+    set({
+      runPhase: 'playing',
+      levelScore: 0,
+      continuesUsedThisRun: nextContinues,
+      runEndReason: null,
+      runFinalized: false,
+      interstitialEligibleThisRun: false,
+    });
+  },
+
+  markSawInterstitial: () => {
+    set({ sawInterstitialThisRun: true });
+  },
+
+  finalizeRun: () => {
+    const {
+      runFinalized,
+      runEndReason,
+      currentLevel,
+      levelScore,
+    } = get();
+    if (runFinalized || currentLevel === 0) return;
+    const outcome: RunEndReason = runEndReason ?? 'lost';
+    const completedLevels = outcome === 'won' ? NUM_LEVELS : Math.max(0, currentLevel - 1);
+
+    try {
+      getMetaStore()?.getState?.()?.endRun(levelScore, completedLevels, outcome === 'won');
+      getMetaStore()?.getState?.()?.markFirstRunCompleted?.();
+    } catch {}
+    set({ runFinalized: true });
+  },
+
+  logRunEnded: () => {
+    const {
+      runAnalyticsLogged,
+      runEndReason,
+      currentLevel,
+      levelScore,
+      totalRespinsUsed,
+      continuesUsedThisRun,
+      sawInterstitialThisRun,
+      runStartTime,
+    } = get();
+    if (runAnalyticsLogged || currentLevel === 0) return;
+    const outcome: RunEndReason = runEndReason ?? 'lost';
+    const inProgressRespins = outcome === 'abandoned' ? useGameStore.getState().respinsUsed : 0;
+    try {
+      getAnalyticsEvents().runEnded({
+        outcome,
+        final_level: currentLevel,
+        final_score: levelScore,
+        total_respins_used: totalRespinsUsed + inProgressRespins,
+        continues_used: continuesUsedThisRun,
+        saw_interstitial: sawInterstitialThisRun,
+        duration_ms: runStartTime > 0 ? Date.now() - runStartTime : 0,
+      });
+    } catch {}
+    set({ runAnalyticsLogged: true });
   },
 
   abandonRun: () => {
@@ -957,6 +1206,34 @@ export const useRunStore = create<RunState>((set, get) => ({
     // stats via endRun() and shows the summary. Use the current in-progress
     // score, not the prior level's levelScore.
     const currentScore = useGameStore.getState().score;
-    set({ runPhase: 'gameOver', levelScore: currentScore });
+    const interstitialEligibleThisRun = !get().skipInterstitialThisRun;
+    try { getMetaStore()?.getState?.()?.markFirstRunCompleted?.(); } catch {}
+    set({
+      runPhase: 'gameOver',
+      levelScore: currentScore,
+      runEndReason: 'abandoned',
+      runFinalized: false,
+      runAnalyticsLogged: false,
+      interstitialEligibleThisRun,
+    });
+  },
+
+  returnToTitle: () => {
+    set({
+      runPhase: 'title',
+      levelScore: 0,
+      levelConfig: null,
+      bonusRespins: 0,
+      respinAdUsedThisRun: false,
+      continuesUsedThisRun: 0,
+      sawInterstitialThisRun: false,
+      runStartTime: 0,
+      totalRespinsUsed: 0,
+      runEndReason: null,
+      runFinalized: false,
+      runAnalyticsLogged: false,
+      skipInterstitialThisRun: true,
+      interstitialEligibleThisRun: false,
+    });
   },
 }));
