@@ -44,7 +44,7 @@
       [
         "react-native-google-mobile-ads",
         {
-          "iosAppId": "ca-app-pub-3940256099942544~1458002511",
+          "iosAppId": "ca-app-pub-3785726745879105~6236726544",
           "androidAppId": "ca-app-pub-3940256099942544~3347511713",
           "userTrackingUsageDescription": "We use this to show you ads relevant to your interests. You can opt out and the game still works fully.",
           "delayAppMeasurementInit": true,
