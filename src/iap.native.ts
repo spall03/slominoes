@@ -11,12 +11,18 @@
 import {
   initConnection,
   endConnection,
-  getProducts,
+  fetchProducts,
   requestPurchase,
   finishTransaction,
   getAvailablePurchases,
+  purchaseUpdatedListener,
+  purchaseErrorListener,
+  ErrorCode,
+  type EventSubscription,
   type Product,
-  type ProductPurchase,
+  type ProductOrSubscription,
+  type Purchase,
+  type PurchaseError,
 } from 'react-native-iap';
 import type {
   IapApi,
@@ -33,17 +39,52 @@ const REMOVE_ADS_PRODUCT_ID = 'com.2ndstrike.slominoes.removeads';
 let connected = false;
 
 function toIapProduct(p: Product): IapProduct {
+  const displayPrice = p.displayPrice ?? String(p.price ?? '');
   return {
-    productId: p.productId,
-    price: p.price,
-    localizedPrice: p.localizedPrice ?? p.price,
+    productId: p.id,
+    price: p.price != null ? String(p.price) : displayPrice,
+    localizedPrice: displayPrice,
     title: p.title ?? 'Remove Ads',
     description: p.description ?? '',
   };
 }
 
-function isRemoveAds(p: ProductPurchase): boolean {
+function isRemoveAds(p: Purchase): boolean {
   return p.productId === REMOVE_ADS_PRODUCT_ID;
+}
+
+function isOneTimeProduct(p: ProductOrSubscription): p is Product {
+  return p.type === 'in-app';
+}
+
+function normalizeRemoveAdsPurchase(
+  result: Purchase | Purchase[] | null | undefined,
+): Purchase | null {
+  if (Array.isArray(result)) {
+    return result.find(isRemoveAds) ?? null;
+  }
+  return result && isRemoveAds(result) ? result : null;
+}
+
+function isUserCancelled(e: unknown): boolean {
+  const code = (e as { code?: unknown } | null)?.code;
+  return (
+    code === ErrorCode.UserCancelled ||
+    code === 'E_USER_CANCELLED' ||
+    code === 'E_USER_CANCELED' ||
+    code === 'user-cancelled'
+  );
+}
+
+function errorMessage(e: unknown, fallback: string): string {
+  const err = e as { message?: unknown; code?: unknown } | null;
+  if (typeof err?.message === 'string' && err.message.length > 0) {
+    return err.message;
+  }
+  if (typeof err?.code === 'string' && err.code.length > 0) {
+    return err.code;
+  }
+  return fallback;
 }
 
 export const iapApi: IapApi = {
@@ -61,8 +102,11 @@ export const iapApi: IapApi = {
   async fetchProducts(): Promise<IapProduct[]> {
     if (!connected) await iapApi.initialize();
     try {
-      const products = await getProducts({ skus: [REMOVE_ADS_PRODUCT_ID] });
-      return products.map(toIapProduct);
+      const products = await fetchProducts({
+        skus: [REMOVE_ADS_PRODUCT_ID],
+        type: 'in-app',
+      });
+      return (products ?? []).filter(isOneTimeProduct).map(toIapProduct);
     } catch {
       return [];
     }
@@ -70,24 +114,82 @@ export const iapApi: IapApi = {
 
   async purchaseRemoveAds(): Promise<PurchaseResult> {
     if (!connected) await iapApi.initialize();
-    try {
-      const result = await requestPurchase({ sku: REMOVE_ADS_PRODUCT_ID });
-      // result can be a Purchase or array; normalize
-      const purchase = Array.isArray(result) ? result[0] : result;
-      if (!purchase) {
-        return { ok: false, purchased: false, error: 'no-purchase-returned' };
-      }
-      // Acknowledge the purchase to StoreKit (required to clear pending state)
-      await finishTransaction({ purchase, isConsumable: false });
-      return { ok: true, purchased: true };
-    } catch (e: any) {
-      const code = e?.code ?? 'unknown';
-      // E_USER_CANCELLED is a non-error case
-      if (code === 'E_USER_CANCELLED') {
-        return { ok: false, purchased: false, error: 'cancelled' };
-      }
-      return { ok: false, purchased: false, error: e?.message ?? code };
-    }
+
+    return new Promise<PurchaseResult>((resolve) => {
+      let settled = false;
+      let updateSub: EventSubscription | null = null;
+      let errorSub: EventSubscription | null = null;
+      let timeout: ReturnType<typeof setTimeout> | null = null;
+
+      const cleanup = () => {
+        updateSub?.remove();
+        errorSub?.remove();
+        if (timeout) clearTimeout(timeout);
+      };
+
+      const settle = (result: PurchaseResult) => {
+        if (settled) return;
+        settled = true;
+        cleanup();
+        resolve(result);
+      };
+
+      const completePurchase = async (purchase: Purchase) => {
+        try {
+          await finishTransaction({ purchase, isConsumable: false });
+          settle({ ok: true, purchased: true });
+        } catch (e: unknown) {
+          settle({
+            ok: false,
+            purchased: false,
+            error: errorMessage(e, 'finish-transaction-failed'),
+          });
+        }
+      };
+
+      updateSub = purchaseUpdatedListener((purchase) => {
+        if (isRemoveAds(purchase)) {
+          void completePurchase(purchase);
+        }
+      });
+
+      errorSub = purchaseErrorListener((error: PurchaseError) => {
+        settle({
+          ok: false,
+          purchased: false,
+          error: isUserCancelled(error)
+            ? 'cancelled'
+            : errorMessage(error, 'purchase-error'),
+        });
+      });
+
+      timeout = setTimeout(() => {
+        settle({ ok: false, purchased: false, error: 'purchase-timeout' });
+      }, 120000);
+
+      requestPurchase({
+        type: 'in-app',
+        request: {
+          apple: { sku: REMOVE_ADS_PRODUCT_ID },
+          google: { skus: [REMOVE_ADS_PRODUCT_ID] },
+        },
+      })
+        .then((result) => {
+          const purchase = normalizeRemoveAdsPurchase(result);
+          if (purchase) {
+            void completePurchase(purchase);
+          }
+        })
+        .catch((e: unknown) => {
+          settle({
+            ok: false,
+            purchased: false,
+            error: isUserCancelled(e)
+              ? 'cancelled'
+              : errorMessage(e, 'purchase-error'),
+          });
+        });
+    });
   },
 
   async restorePurchases(): Promise<RestoreResult> {
