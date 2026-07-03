@@ -19,5 +19,13 @@
     "production": {
       "autoIncrement": true
     }
+  },
+  "submit": {
+    "production": {
+      "ios": {
+        "appleId": "steve@2ndstrike.co",
+        "appleTeamId": "PQWCGM5H9E"
+      }
+    }
   }
 }
