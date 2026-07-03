@@ -38,9 +38,6 @@
       "bundler": "metro",
       "output": "single"
     },
-    "experiments": {
-      "baseUrl": "/slominoes"
-    },
     "plugins": [
       "expo-font",
       "@react-native-firebase/app",
