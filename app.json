@@ -63,6 +63,12 @@
           "optimizeAdLoading": true
         }
       ]
-    ]
+    ],
+    "extra": {
+      "eas": {
+        "projectId": "2ce262e8-5365-4833-909a-62b0f03954c7"
+      }
+    },
+    "owner": "stevepalley"
   }
 }
