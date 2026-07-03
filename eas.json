@@ -24,6 +24,7 @@
     "production": {
       "ios": {
         "appleId": "steve@2ndstrike.co",
+        "ascAppId": "6785719918",
         "appleTeamId": "PQWCGM5H9E"
       }
     }
