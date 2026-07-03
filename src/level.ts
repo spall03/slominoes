@@ -58,12 +58,12 @@ export const TUTORIAL_LEVEL_CONFIG: LevelConfig = {
   respins: 1,
   tilesPerLevel: 4,
   symbolCount: 5,
-  // Pre-seeded board: 2 cherries adjacent at row 5 (begging for a 3-match)
-  // + 1 isolated bar at (3, 1) that will be the respin-lesson setup.
+  // Pre-seeded board: 2 cherries adjacent near the bottom (begging for a
+  // 3-match) + 1 isolated bar in human row 3 for the respin lesson.
   obstacles: [
     { row: 5, col: 3, symbol: 'cherry' },
     { row: 5, col: 4, symbol: 'cherry' },
-    { row: 3, col: 1, symbol: 'bar' },
+    { row: 2, col: 1, symbol: 'bar' },
   ],
   entrySpotCount: 2,
   boardMask: null,

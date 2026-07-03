@@ -24,6 +24,7 @@ interface HUDProps {
   /** Called when user taps the respin badge while out of respins (buys one then enters mode). */
   onBuyRespin?: () => void;
   canAffordRespin?: boolean;
+  respinLocked?: boolean;
   onSettingsPress?: () => void;
   /** When true, the respin badge runs a continuous attention pulse (Level 0 hints). */
   pulseHint?: boolean;
@@ -55,19 +56,21 @@ export function HUD({
   onRespinToggle,
   onBuyRespin,
   canAffordRespin,
+  respinLocked,
   onSettingsPress,
   pulseHint,
   showRespinReward,
   onRespinReward,
 }: HUDProps) {
   const handleRespinPress = () => {
+    if (respinLocked) return;
     if (respinsRemaining > 0) {
       onRespinToggle?.();
     } else if (canAffordRespin) {
       onBuyRespin?.();
     }
   };
-  const respinDisabled = respinsRemaining === 0 && !canAffordRespin;
+  const respinDisabled = !!respinLocked || (respinsRemaining === 0 && !canAffordRespin);
   const bestProgress = Math.min(1, threshold > 0 ? score / threshold : 0);
   const currentProgress = Math.min(1, threshold > 0 ? currentGridScore / threshold : 0);
   const scoreDiverged = score > currentGridScore;

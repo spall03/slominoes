@@ -244,6 +244,7 @@ const styles = StyleSheet.create({
     fontFamily: fonts.bold,
     fontSize: 36,
     letterSpacing: 4,
+    textAlign: 'center',
     textTransform: 'uppercase',
     marginBottom: 8,
     textShadowOffset: { width: 0, height: 0 },

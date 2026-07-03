@@ -20,6 +20,7 @@ import { SettingsScreen } from './SettingsScreen';
 import { SymbolPoolStrip } from './SymbolPoolStrip';
 import { TutorialHints, TutorialBanner } from './TutorialHints';
 import { useTutorialHints } from '../tutorial-hints-store';
+import { TUTORIAL_RESPIN_TARGET } from '../tutorial-rails';
 import { startMusic, stopMusic } from '../music';
 import { RespinCol } from '../symbols/RespinCol';
 import { RespinRow } from '../symbols/RespinRow';
@@ -53,6 +54,10 @@ export function PlayingScreen() {
   const adServiceReady = useMetaStore(s => s.adServiceReady);
   const adServiceFailed = useMetaStore(s => s.adServiceFailed);
   const isTutorial = currentLevel === 0;
+  const tutorialStep = useTutorialHints(s => s.step);
+  const tutorialFocus = useTutorialHints(s => s.focus);
+  const tutorialBannerCopy = useTutorialHints(s => s.bannerCopy);
+  const tutorialRespinLocked = isTutorial && tutorialStep < 4;
 
   useEffect(() => {
     try { startMusic('level' + currentLevel); } catch {}
@@ -62,6 +67,12 @@ export function PlayingScreen() {
   const respinTarget = useGameStore(s => s.respinTarget);
 
   const fireRespin = (type: 'row' | 'col', index: number) => {
+    if (
+      isTutorial &&
+      (type !== TUTORIAL_RESPIN_TARGET.type || index !== TUTORIAL_RESPIN_TARGET.index)
+    ) {
+      return;
+    }
     const state = useGameStore.getState();
     if (state.respinsRemaining === 0) {
       state.buyRespin();
@@ -74,6 +85,12 @@ export function PlayingScreen() {
   // Tap a respin button: first tap arms (shows biased pool preview), second
   // tap on same line fires. Tap a different line to re-arm.
   const handleRespinTap = (type: 'row' | 'col', index: number) => {
+    if (
+      isTutorial &&
+      (type !== TUTORIAL_RESPIN_TARGET.type || index !== TUTORIAL_RESPIN_TARGET.index)
+    ) {
+      return;
+    }
     const state = useGameStore.getState();
     const target = state.respinTarget;
     const isArmed = target?.type === type && target.index === index;
@@ -87,6 +104,17 @@ export function PlayingScreen() {
   const [showHelp, setShowHelp] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
   const [respinMode, setRespinMode] = useState(false);
+  const handleRespinToggle = () => {
+    if (tutorialRespinLocked) return;
+    setRespinMode(v => !v);
+  };
+  const isTutorialRespinButtonDisabled = (type: 'row' | 'col', index: number) =>
+    isTutorial &&
+    (
+      tutorialRespinLocked ||
+      type !== TUTORIAL_RESPIN_TARGET.type ||
+      index !== TUTORIAL_RESPIN_TARGET.index
+    );
 
   // ==========================================================================
   // Hint decay (Move 02): hints show on level 1 turns 1–3 always, and on later
@@ -153,6 +181,12 @@ export function PlayingScreen() {
     }
   }, [respinsRemaining, respinMode, canBuy]);
 
+  useEffect(() => {
+    if (tutorialRespinLocked && respinMode) {
+      setRespinMode(false);
+    }
+  }, [tutorialRespinLocked, respinMode]);
+
   // Exit respin mode when tile gets placed
   useEffect(() => {
     if (placementMode === 'placed') {
@@ -181,6 +215,10 @@ export function PlayingScreen() {
       nextFor: (current: { type: 'row' | 'col'; index: number }) => { type: 'row' | 'col'; index: number },
     ) => {
       const state = useGameStore.getState();
+      if (useRunStore.getState().currentLevel === 0) {
+        state.setRespinTarget(TUTORIAL_RESPIN_TARGET);
+        return;
+      }
       const current = state.respinTarget ?? { type: 'row' as const, index: 0 };
       state.setRespinTarget(nextFor(current));
     };
@@ -190,6 +228,8 @@ export function PlayingScreen() {
       if (state.phase !== 'placing') return;
       if (state.respinsRemaining <= 0 && state.score < state.getNextRespinCost()) return;
       if (state.placementMode === 'placed') return;
+      const tutorialActive = useRunStore.getState().currentLevel === 0;
+      if (tutorialActive && useTutorialHints.getState().step < 4) return;
 
       switch (e.key) {
         case 'ArrowUp':
@@ -237,7 +277,9 @@ export function PlayingScreen() {
           e.preventDefault();
           if (state.respinsRemaining === 0) state.buyRespin();
           if (useGameStore.getState().respinsRemaining > 0) {
-            const target = useGameStore.getState().respinTarget ?? { type: 'row' as const, index: 0 };
+            const target = tutorialActive
+              ? TUTORIAL_RESPIN_TARGET
+              : useGameStore.getState().respinTarget ?? { type: 'row' as const, index: 0 };
             useGameStore.getState().respinLine(target.type, target.index);
           }
           break;
@@ -249,7 +291,6 @@ export function PlayingScreen() {
   }, []);
 
   const isDesktop = Platform.OS === 'web' && !isMobile;
-  const tutorialFocus = useTutorialHints(s => s.focus);
 
   return (
     <View style={styles.screenContainer}>
@@ -268,12 +309,18 @@ export function PlayingScreen() {
         nextTileB={currentTile?.symbolB ?? null}
         tilesRemaining={tilesRemaining}
         canAffordRespin={canBuy}
-        onRespinToggle={() => setRespinMode(v => !v)}
-        onBuyRespin={() => { buyRespin(); setRespinMode(true); }}
+        onRespinToggle={handleRespinToggle}
+        onBuyRespin={() => {
+          if (tutorialRespinLocked) return;
+          buyRespin();
+          setRespinMode(true);
+        }}
+        respinLocked={tutorialRespinLocked}
         onSettingsPress={() => setShowSettings(true)}
         pulseHint={tutorialFocus === 'respin-badge'}
         showRespinReward={canShowRespinReward}
         onRespinReward={() => {
+          if (tutorialRespinLocked) return;
           claimRespinAdReward();
           setRespinMode(true);
         }}
@@ -304,14 +351,19 @@ export function PlayingScreen() {
                           styles.respinButtonSelected,
                         (placementMode === 'placed' || isSpinning) &&
                           styles.respinButtonDisabled,
+                        isTutorialRespinButtonDisabled('col', col) &&
+                          styles.respinButtonDisabled,
                       ]}
                       onPress={() =>
-                        placementMode !== 'placed' && handleRespinTap('col', col)
+                        placementMode !== 'placed' &&
+                        !isTutorialRespinButtonDisabled('col', col) &&
+                        handleRespinTap('col', col)
                       }
                       disabled={
                         placementMode === 'placed' ||
                         matchingCells.size > 0 ||
-                        isSpinning
+                        isSpinning ||
+                        isTutorialRespinButtonDisabled('col', col)
                       }
                     >
                       <RespinCol size={CELL_SIZE - 4} />
@@ -338,14 +390,23 @@ export function PlayingScreen() {
                             styles.respinButtonSelected,
                           (placementMode === 'placed' || isSpinning) &&
                             styles.respinButtonDisabled,
+                          isTutorialRespinButtonDisabled('row', row) &&
+                            styles.respinButtonDisabled,
+                          isTutorial &&
+                            tutorialStep >= 4 &&
+                            row === TUTORIAL_RESPIN_TARGET.index &&
+                            styles.respinButtonHint,
                         ]}
                         onPress={() =>
-                          placementMode !== 'placed' && handleRespinTap('row', row)
+                          placementMode !== 'placed' &&
+                          !isTutorialRespinButtonDisabled('row', row) &&
+                          handleRespinTap('row', row)
                         }
                         disabled={
                           placementMode === 'placed' ||
                           matchingCells.size > 0 ||
-                          isSpinning
+                          isSpinning ||
+                          isTutorialRespinButtonDisabled('row', row)
                         }
                       >
                         <RespinRow size={CELL_SIZE - 4} />
@@ -397,14 +458,18 @@ export function PlayingScreen() {
             {phase === 'placing' && respinMode && (
               <View style={styles.respinControls}>
                 <Text style={styles.hintTextRespin}>
-                  Tap a row or column to respin
+                  {isTutorial && tutorialBannerCopy
+                    ? tutorialBannerCopy
+                    : 'Tap a row or column to respin'}
                 </Text>
-                <Pressable
-                  style={styles.respinDoneButton}
-                  onPress={() => setRespinMode(false)}
-                >
-                  <Text style={styles.respinDoneText}>DONE</Text>
-                </Pressable>
+                {(!isTutorial || tutorialStep >= 6) && (
+                  <Pressable
+                    style={styles.respinDoneButton}
+                    onPress={() => setRespinMode(false)}
+                  >
+                    <Text style={styles.respinDoneText}>DONE</Text>
+                  </Pressable>
+                )}
               </View>
             )}
 
@@ -544,6 +609,11 @@ const styles = StyleSheet.create({
   },
   respinButtonDisabled: {
     opacity: 0.3,
+  },
+  respinButtonHint: {
+    backgroundColor: colors.pinkTint,
+    borderWidth: 2,
+    borderColor: colors.gold,
   },
   controls: {
     flex: 1,

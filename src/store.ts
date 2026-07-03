@@ -37,6 +37,12 @@ import {
   getRandomSymbol,
   getRandomSymbolFromFreqs,
 } from './level';
+import {
+  TUTORIAL_RESPIN_TARGET,
+  getTutorialPlacementTarget,
+  isTutorialPlacementCell,
+  isTutorialPlacementSatisfied,
+} from './tutorial-rails';
 import { findMatches, calculateScore, matchKey } from './scoring';
 import { buildFrequencyTable, SYMBOL_ROSTER, hasNoLock, getRespinMatchBonus, getEntrySpotCount, type SymbolDef, type SymbolId } from './symbols';
 import * as Sound from './sound';
@@ -102,6 +108,19 @@ function preloadInterstitialIfEligible() {
 function preloadContinueIfEligible(continuesUsed: number) {
   if (!isAdServiceUsable() || continuesUsed >= MAX_CONTINUES_PER_RUN) return;
   adsApi.preloadRewarded('continue').catch(() => {});
+}
+
+function getActiveTutorialPlacementTarget(state: { levelConfig: LevelConfig; currentTile: Tile | null }) {
+  return state.levelConfig.isTutorial ? getTutorialPlacementTarget(state.currentTile) : null;
+}
+
+function isTutorialRespinTargetAllowed(
+  levelConfig: LevelConfig,
+  type: 'row' | 'col',
+  index: number,
+): boolean {
+  return !levelConfig.isTutorial ||
+    (type === TUTORIAL_RESPIN_TARGET.type && index === TUTORIAL_RESPIN_TARGET.index);
 }
 
 // =============================================================================
@@ -235,8 +254,10 @@ export const useGameStore = create<GameState>((set, get) => ({
   ...createInitialState(),
 
   selectEntry: (index: number) => {
-    const { phase, grid, entrySpots } = get();
+    const { phase, grid, entrySpots, levelConfig, currentTile } = get();
     if (phase !== 'placing') return;
+    const tutorialTarget = getActiveTutorialPlacementTarget({ levelConfig, currentTile });
+    if (tutorialTarget && index !== tutorialTarget.entryId) return;
     const entry = entrySpots[index];
     if (!entry) return;
     const reachable = computeReachableCells(grid, entry);
@@ -260,9 +281,22 @@ export const useGameStore = create<GameState>((set, get) => ({
   },
 
   startPlacement: (row: number, col: number) => {
-    const { phase, currentTile, rotation, grid, reachableCells, loadoutDefs } = get();
+    const { phase, currentTile, rotation, grid, reachableCells, loadoutDefs, levelConfig, selectedEntry } = get();
     if (phase !== 'placing' || !currentTile) return;
     const vines = getVineSymbols(loadoutDefs);
+    const tutorialTarget = getActiveTutorialPlacementTarget({ levelConfig, currentTile });
+
+    if (tutorialTarget) {
+      if (selectedEntry !== tutorialTarget.entryId) return;
+      if (!isTutorialPlacementCell(tutorialTarget, row, col)) return;
+      if (!canPlaceTileWithEntry(grid, row, col, tutorialTarget.rotation, reachableCells, vines, currentTile)) return;
+      set({
+        placementMode: 'placed',
+        placedPosition: { row, col },
+        rotation: tutorialTarget.rotation,
+      });
+      return;
+    }
 
     // Try current rotation first, then others
     let useRotation: Rotation | null = null;
@@ -287,16 +321,27 @@ export const useGameStore = create<GameState>((set, get) => ({
   },
 
   movePlacement: (row: number, col: number) => {
-    const { phase, currentTile, rotation, grid, placementMode, reachableCells, loadoutDefs } = get();
+    const { phase, currentTile, rotation, grid, placementMode, reachableCells, loadoutDefs, levelConfig } = get();
     if (phase !== 'placing' || !currentTile || placementMode !== 'placed') return;
+    const tutorialTarget = getActiveTutorialPlacementTarget({ levelConfig, currentTile });
+    if (tutorialTarget) {
+      if (!isTutorialPlacementCell(tutorialTarget, row, col)) return;
+      if (!canPlaceTileWithEntry(grid, row, col, tutorialTarget.rotation, reachableCells, getVineSymbols(loadoutDefs), currentTile)) return;
+      set({
+        placedPosition: { row, col },
+        rotation: tutorialTarget.rotation,
+      });
+      return;
+    }
     if (!canPlaceTileWithEntry(grid, row, col, rotation, reachableCells, getVineSymbols(loadoutDefs), currentTile)) return;
 
     set({ placedPosition: { row, col } });
   },
 
   rotatePlacedTile: () => {
-    const { placementMode, placedPosition, rotation, grid, reachableCells, loadoutDefs } = get();
+    const { placementMode, placedPosition, rotation, grid, reachableCells, loadoutDefs, levelConfig, currentTile } = get();
     if (placementMode !== 'placed' || !placedPosition) return;
+    if (getActiveTutorialPlacementTarget({ levelConfig, currentTile })) return;
     const vines = getVineSymbols(loadoutDefs);
 
     // Try each rotation until we find a valid one
@@ -311,10 +356,12 @@ export const useGameStore = create<GameState>((set, get) => ({
   },
 
   confirmPlacement: () => {
-    const { phase, currentTile, rotation, grid, tileQueue, placementMode, placedPosition, reachableCells, loadoutDefs } = get();
+    const { phase, currentTile, rotation, grid, tileQueue, placementMode, placedPosition, reachableCells, loadoutDefs, levelConfig } = get();
     if (phase !== 'placing' || !currentTile || placementMode !== 'placed' || !placedPosition) return;
 
     const { row, col } = placedPosition;
+    const tutorialTarget = getActiveTutorialPlacementTarget({ levelConfig, currentTile });
+    if (tutorialTarget && !isTutorialPlacementSatisfied(tutorialTarget, row, col, rotation)) return;
     if (!canPlaceTileWithEntry(grid, row, col, rotation, reachableCells, getVineSymbols(loadoutDefs), currentTile)) return;
 
     const [rowOffset, colOffset] = getSecondCellOffset(rotation);
@@ -614,9 +661,10 @@ export const useGameStore = create<GameState>((set, get) => ({
   },
 
   respinLine: (type: 'row' | 'col', index: number) => {
-    const { phase, respinsRemaining, grid, score, matchingCells, spinningCells, lockedCells, loadoutFreqs } = get();
+    const { phase, respinsRemaining, grid, score, matchingCells, spinningCells, lockedCells, loadoutFreqs, levelConfig } = get();
     if (phase !== 'placing' || respinsRemaining <= 0) return;
     if (index < 0 || index >= BOARD_SIZE) return;
+    if (!isTutorialRespinTargetAllowed(levelConfig, type, index)) return;
     if (matchingCells.size > 0) return; // Block respins during animation
     if (spinningCells.size > 0) return; // Block respins during active spin
 
@@ -660,6 +708,25 @@ export const useGameStore = create<GameState>((set, get) => ({
             delay: row * SPIN_STAGGER_MS,
           });
         }
+      }
+    }
+
+    if (
+      levelConfig.isTutorial &&
+      type === TUTORIAL_RESPIN_TARGET.type &&
+      index === TUTORIAL_RESPIN_TARGET.index
+    ) {
+      for (const col of [1, 2, 3]) {
+        const key = `${TUTORIAL_RESPIN_TARGET.index},${col}`;
+        if (lockedCells.has(key)) continue;
+        if (newGrid[TUTORIAL_RESPIN_TARGET.index][col] === null || newGrid[TUTORIAL_RESPIN_TARGET.index][col] === 'wall') continue;
+        const spinInfo = newSpinningCells.get(key);
+        newGrid[TUTORIAL_RESPIN_TARGET.index][col] = 'bar';
+        newSpinningCells.set(key, {
+          finalSymbol: 'bar',
+          cycles: spinInfo?.cycles ?? SPIN_BASE_CYCLES + col,
+          delay: spinInfo?.delay ?? col * SPIN_STAGGER_MS,
+        });
       }
     }
 
@@ -711,7 +778,10 @@ export const useGameStore = create<GameState>((set, get) => ({
     });
   },
 
-  setRespinTarget: (target) => set({ respinTarget: target }),
+  setRespinTarget: (target) => {
+    if (target && !isTutorialRespinTargetAllowed(get().levelConfig, target.type, target.index)) return;
+    set({ respinTarget: target });
+  },
 
   getNextRespinCost: () => {
     return BASE_RESPIN_COST + get().respinsBought * RESPIN_COST_STEP;

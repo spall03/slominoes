@@ -11,15 +11,10 @@
 
 import React, { useEffect, useRef } from 'react';
 import { Animated, Text, StyleSheet, Platform } from 'react-native';
-import { isMobile } from '../constants';
 import { colors, fonts } from '../theme';
 import { useGameStore } from '../store';
 import { useTutorialHints } from '../tutorial-hints-store';
 import { tutorialStepAdvanced } from '../analytics-events';
-
-const ROTATE_HINT = isMobile
-  ? 'Drag to move · Tap to rotate · Hold to confirm'
-  : 'Arrows: move · R: rotate · Enter: confirm';
 
 export function TutorialHints() {
   // Note: banner copy is rendered inline by PlayingScreen (so it sits below
@@ -43,7 +38,7 @@ export function TutorialHints() {
       advancedSteps.current.add(1);
       useTutorialHints.getState().show({
         step: 1,
-        bannerCopy: 'Tap an entry arrow on the top or bottom to place your first tile.',
+        bannerCopy: 'Tap the bottom entry, then place the cherry left of the cherry pair.',
         focus: 'entry',
       });
       tutorialStepAdvanced(1);
@@ -64,7 +59,7 @@ export function TutorialHints() {
           advancedSteps.current.add(1.5);
           hints.show({
             step: 1.5,
-            bannerCopy: ROTATE_HINT,
+            bannerCopy: 'Press CONFIRM to lock in the 3-cherry match.',
             focus: null,
           });
           tutorialStepAdvanced(1.5);
@@ -80,8 +75,8 @@ export function TutorialHints() {
         advancedSteps.current.add(2);
         hints.show({
           step: 2,
-          bannerCopy: null,
-          overlayCopy: 'Three cherries match.\nMatched cells lock — safe from respins.',
+          bannerCopy: 'Place the next tile below the match. Not every move scores.',
+          overlayCopy: 'Three cherries match.\nMatched cells lock - safe from respins.',
           focus: null,
         });
         tutorialStepAdvanced(2);
@@ -102,7 +97,7 @@ export function TutorialHints() {
         advancedSteps.current.add(3);
         hints.show({
           step: 3,
-          bannerCopy: 'Not every move is a match. Set up future combos.',
+          bannerCopy: 'Place the bar beside the bar in row 3.',
           overlayCopy: null,
           focus: null,
         });
@@ -117,7 +112,7 @@ export function TutorialHints() {
         advancedSteps.current.add(4);
         hints.show({
           step: 4,
-          bannerCopy: 'You have 2 bars in row 3. Tap RESPIN to try for a third.',
+          bannerCopy: 'Row 3 has two bars. Tap RESPIN, then row 3.',
           focus: 'respin-badge',
         });
         tutorialStepAdvanced(4);
@@ -132,8 +127,8 @@ export function TutorialHints() {
         advancedSteps.current.add(5);
         hints.show({
           step: 5,
-          bannerCopy: 'Tap the same row again to fire the respin.',
-          focus: null,
+          bannerCopy: 'Tap row 3 again to fire the respin.',
+          focus: 'rows',
         });
         tutorialStepAdvanced(5);
       }
@@ -149,7 +144,7 @@ export function TutorialHints() {
         hints.show({
           step: 6,
           bannerCopy: null,
-          overlayCopy: "That's a respin.\nNow finish strong.",
+          overlayCopy: "That's a respin.\nNow place the last tile.",
           focus: null,
         });
         tutorialStepAdvanced(6);

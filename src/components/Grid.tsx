@@ -14,6 +14,7 @@ import { Cell } from './Cell';
 import { SpinCell } from './SpinCell';
 import { EntrySpotButton } from './EntrySpotButton';
 import { useTutorialHints } from '../tutorial-hints-store';
+import { getTutorialPlacementTarget, isTutorialPlacementCell } from '../tutorial-rails';
 import { ScorePopup } from './ScorePopup';
 import type { Grid as GridType, Rotation, Symbol } from '../types';
 
@@ -46,10 +47,12 @@ export function Grid() {
     vineSymbols,
     spinningCells,
     clearSpinAnimation,
+    levelConfig,
   } = useGameStore();
   const respinTarget = useGameStore(s => s.respinTarget);
   const tutorialFocus = useTutorialHints(s => s.focus);
   const pulseEntries = tutorialFocus === 'entry';
+  const tutorialTarget = levelConfig.isTutorial ? getTutorialPlacementTarget(currentTile) : null;
 
   const [animationKey, setAnimationKey] = useState(0);
 
@@ -62,6 +65,24 @@ export function Grid() {
       const state = useGameStore.getState();
       const entry = state.entrySpots[entryIndex];
       if (!entry) return null;
+      const tutorialTarget = state.levelConfig.isTutorial
+        ? getTutorialPlacementTarget(state.currentTile)
+        : null;
+      if (tutorialTarget) {
+        if (entryIndex !== tutorialTarget.entryId) return null;
+        if (canPlaceTileWithEntry(
+          grid,
+          tutorialTarget.row,
+          tutorialTarget.col,
+          tutorialTarget.rotation,
+          reachable,
+          vineSymbols,
+          state.currentTile,
+        )) {
+          return { row: tutorialTarget.row, col: tutorialTarget.col };
+        }
+        return null;
+      }
       const [startRow, startCol] = entry.cells[0];
       for (let dist = 0; dist < BOARD_SIZE; dist++) {
         for (let row = startRow - dist; row <= startRow + dist; row++) {
@@ -222,7 +243,9 @@ export function Grid() {
       if (!cell) return;
 
       if (placementMode === 'idle') {
-        const anyRotFits = [0, 1, 2, 3].some(r =>
+        if (tutorialTarget && !isTutorialPlacementCell(tutorialTarget, cell.row, cell.col)) return;
+        const rotations = tutorialTarget ? [tutorialTarget.rotation] : [0, 1, 2, 3];
+        const anyRotFits = rotations.some(r =>
           canPlaceTileWithEntry(grid, cell.row, cell.col, r as Rotation, reachableCells, vineSymbols, currentTile)
         );
         if (anyRotFits) {
@@ -239,11 +262,14 @@ export function Grid() {
           const isSameCell = (cell.row === pp.row && cell.col === pp.col) ||
             (cell.row === pp.row + ro && cell.col === pp.col + co);
           if (isSameCell) {
+            if (tutorialTarget) return;
             Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
             rotatePlacedTile();
           } else {
             // Try to move tile to the tapped cell
-            const anyRotFits = [0, 1, 2, 3].some(r =>
+            if (tutorialTarget && !isTutorialPlacementCell(tutorialTarget, cell.row, cell.col)) return;
+            const rotations = tutorialTarget ? [tutorialTarget.rotation] : [0, 1, 2, 3];
+            const anyRotFits = rotations.some(r =>
               canPlaceTileWithEntry(grid, cell.row, cell.col, r as Rotation, reachableCells, vineSymbols, currentTile)
             );
             if (anyRotFits) {
@@ -262,7 +288,12 @@ export function Grid() {
       if (phase !== 'placing' || placementMode !== 'placed') return;
 
       const cell = getCellFromPosition(event.x, event.y);
-      if (cell && canPlaceTileWithEntry(grid, cell.row, cell.col, rotation, reachableCells, vineSymbols, currentTile)) {
+      const useRotation = tutorialTarget?.rotation ?? rotation;
+      if (
+        cell &&
+        (!tutorialTarget || isTutorialPlacementCell(tutorialTarget, cell.row, cell.col)) &&
+        canPlaceTileWithEntry(grid, cell.row, cell.col, useRotation, reachableCells, vineSymbols, currentTile)
+      ) {
         if (!placedPosition || placedPosition.row !== cell.row || placedPosition.col !== cell.col) {
           Haptics.selectionAsync();
           movePlacement(cell.row, cell.col);
@@ -345,32 +376,38 @@ export function Grid() {
         <View style={styles.entrySpotRow}>
           {entrySpots
             .filter(e => e.arrowDirection === 'down')
-            .map(entry => (
-              <EntrySpotButton
-                key={entry.id}
-                entry={entry}
-                isSelected={selectedEntry === entry.id}
-                isBlocked={entryBlocked[entry.id]}
-                onPress={() => selectEntry(entry.id)}
-                pulseHint={pulseEntries}
-              />
-            ))}
+            .map(entry => {
+              const isTutorialBlocked = tutorialTarget !== null && entry.id !== tutorialTarget.entryId;
+              return (
+                <EntrySpotButton
+                  key={entry.id}
+                  entry={entry}
+                  isSelected={selectedEntry === entry.id}
+                  isBlocked={entryBlocked[entry.id] || isTutorialBlocked}
+                  onPress={() => selectEntry(entry.id)}
+                  pulseHint={pulseEntries && !isTutorialBlocked}
+                />
+              );
+            })}
         </View>
       )}
       <View style={{ flexDirection: 'row', alignItems: 'center' }}>
         {/* Left entry spot buttons */}
         {!hideEntries && hasSideEntries && (
           <View style={styles.entrySpotCol}>
-            {leftEntries.map(entry => (
-              <EntrySpotButton
-                key={entry.id}
-                entry={entry}
-                isSelected={selectedEntry === entry.id}
-                isBlocked={entryBlocked[entry.id]}
-                onPress={() => selectEntry(entry.id)}
-                pulseHint={pulseEntries}
-              />
-            ))}
+            {leftEntries.map(entry => {
+              const isTutorialBlocked = tutorialTarget !== null && entry.id !== tutorialTarget.entryId;
+              return (
+                <EntrySpotButton
+                  key={entry.id}
+                  entry={entry}
+                  isSelected={selectedEntry === entry.id}
+                  isBlocked={entryBlocked[entry.id] || isTutorialBlocked}
+                  onPress={() => selectEntry(entry.id)}
+                  pulseHint={pulseEntries && !isTutorialBlocked}
+                />
+              );
+            })}
           </View>
         )}
         <GestureDetector gesture={composedGesture}>
@@ -396,7 +433,8 @@ export function Grid() {
 
                   const isMatching = matchingCells.has(cellKey);
                   const isLocked = lockedCells.has(cellKey);
-                  const isReachable = reachableCells?.has(cellKey) ?? false;
+                  const isReachable = (reachableCells?.has(cellKey) ?? false) &&
+                    (!tutorialTarget || isTutorialPlacementCell(tutorialTarget, rowIndex, colIndex));
                   const entryCellDir = entryCellMap.get(cellKey) ?? null;
                   const isInRespinTarget = respinTarget !== null && (
                     (respinTarget.type === 'row' && respinTarget.index === rowIndex) ||
@@ -439,16 +477,19 @@ export function Grid() {
         {/* Right entry spot buttons */}
         {!hideEntries && hasSideEntries && (
           <View style={styles.entrySpotCol}>
-            {rightEntries.map(entry => (
-              <EntrySpotButton
-                key={entry.id}
-                entry={entry}
-                isSelected={selectedEntry === entry.id}
-                isBlocked={entryBlocked[entry.id]}
-                onPress={() => selectEntry(entry.id)}
-                pulseHint={pulseEntries}
-              />
-            ))}
+            {rightEntries.map(entry => {
+              const isTutorialBlocked = tutorialTarget !== null && entry.id !== tutorialTarget.entryId;
+              return (
+                <EntrySpotButton
+                  key={entry.id}
+                  entry={entry}
+                  isSelected={selectedEntry === entry.id}
+                  isBlocked={entryBlocked[entry.id] || isTutorialBlocked}
+                  onPress={() => selectEntry(entry.id)}
+                  pulseHint={pulseEntries && !isTutorialBlocked}
+                />
+              );
+            })}
           </View>
         )}
       </View>
@@ -457,16 +498,19 @@ export function Grid() {
         <View style={styles.entrySpotRow}>
           {entrySpots
             .filter(e => e.arrowDirection === 'up')
-            .map(entry => (
-              <EntrySpotButton
-                key={entry.id}
-                entry={entry}
-                isSelected={selectedEntry === entry.id}
-                isBlocked={entryBlocked[entry.id]}
-                onPress={() => selectEntry(entry.id)}
-                pulseHint={pulseEntries}
-              />
-            ))}
+            .map(entry => {
+              const isTutorialBlocked = tutorialTarget !== null && entry.id !== tutorialTarget.entryId;
+              return (
+                <EntrySpotButton
+                  key={entry.id}
+                  entry={entry}
+                  isSelected={selectedEntry === entry.id}
+                  isBlocked={entryBlocked[entry.id] || isTutorialBlocked}
+                  onPress={() => selectEntry(entry.id)}
+                  pulseHint={pulseEntries && !isTutorialBlocked}
+                />
+              );
+            })}
         </View>
       )}
     </View>
