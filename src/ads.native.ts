@@ -16,6 +16,7 @@ import {
   RewardedAdEventType,
   TestIds,
 } from 'react-native-google-mobile-ads';
+import { Platform } from 'react-native';
 import type {
   AdsApi,
   AdResult,
@@ -33,12 +34,24 @@ import type {
 // Production IDs are injected through Expo public env vars. If a production
 // ID is missing, the corresponding ad placement stays unavailable instead of
 // serving Google's test ads in a release build.
-const env = (globalThis as any).process?.env ?? {};
+const IOS_AD_UNITS = {
+  rewardedRespinRescue: process.env.EXPO_PUBLIC_ADMOB_IOS_REWARDED_RESPIN_RESCUE_ID,
+  rewardedContinue: process.env.EXPO_PUBLIC_ADMOB_IOS_REWARDED_CONTINUE_ID,
+  interstitial: process.env.EXPO_PUBLIC_ADMOB_IOS_INTERSTITIAL_ID,
+};
+
+const ANDROID_AD_UNITS = {
+  rewardedRespinRescue: process.env.EXPO_PUBLIC_ADMOB_ANDROID_REWARDED_RESPIN_RESCUE_ID,
+  rewardedContinue: process.env.EXPO_PUBLIC_ADMOB_ANDROID_REWARDED_CONTINUE_ID,
+  interstitial: process.env.EXPO_PUBLIC_ADMOB_ANDROID_INTERSTITIAL_ID,
+};
+
+const PRODUCTION_AD_UNITS = Platform.OS === 'ios' ? IOS_AD_UNITS : ANDROID_AD_UNITS;
 
 const AD_UNITS = {
-  rewardedRespinRescue: __DEV__ ? TestIds.REWARDED : env.EXPO_PUBLIC_ADMOB_REWARDED_RESPIN_RESCUE_ID,
-  rewardedContinue: __DEV__ ? TestIds.REWARDED : env.EXPO_PUBLIC_ADMOB_REWARDED_CONTINUE_ID,
-  interstitial: __DEV__ ? TestIds.INTERSTITIAL : env.EXPO_PUBLIC_ADMOB_INTERSTITIAL_ID,
+  rewardedRespinRescue: __DEV__ ? TestIds.REWARDED : PRODUCTION_AD_UNITS.rewardedRespinRescue,
+  rewardedContinue: __DEV__ ? TestIds.REWARDED : PRODUCTION_AD_UNITS.rewardedContinue,
+  interstitial: __DEV__ ? TestIds.INTERSTITIAL : PRODUCTION_AD_UNITS.interstitial,
 };
 
 // -----------------------------------------------------------------------------

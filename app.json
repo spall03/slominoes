@@ -17,6 +17,7 @@
       "supportsTablet": true,
       "bundleIdentifier": "com.2ndstrike.slominoes",
       "buildNumber": "1",
+      "googleServicesFile": "./GoogleService-Info.plist",
       "infoPlist": {
         "NSUserTrackingUsageDescription": "We use this to show you ads relevant to your interests. You can opt out and the game still works fully — rewarded ads stay available either way."
       }
@@ -41,6 +42,16 @@
     },
     "plugins": [
       "expo-font",
+      "@react-native-firebase/app",
+      "@react-native-firebase/crashlytics",
+      [
+        "expo-build-properties",
+        {
+          "ios": {
+            "useFrameworks": "static"
+          }
+        }
+      ],
       [
         "react-native-google-mobile-ads",
         {
