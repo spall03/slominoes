@@ -192,6 +192,7 @@ export function GameOverScreen() {
             title="WATCH TO CONTINUE"
             detail={`${continuesRemaining}/2 CONTINUES REMAINING`}
             disabled={leavingRun}
+            hideWhenUnavailable
             onReward={continueLevel}
           />
         </View>

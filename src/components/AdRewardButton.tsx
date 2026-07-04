@@ -25,6 +25,7 @@ interface Props {
   rewardLabel?: string;
   compact?: boolean;
   disabled?: boolean;
+  hideWhenUnavailable?: boolean;
   onReward: () => void;
 }
 
@@ -36,6 +37,7 @@ export function AdRewardButton({
   rewardLabel,
   compact,
   disabled,
+  hideWhenUnavailable,
   onReward,
 }: Props) {
   const [state, setState] = useState<RewardState>('loading');
@@ -118,14 +120,15 @@ export function AdRewardButton({
     setState('failed');
   };
 
-  if (hidden) return null;
-
   const isBusy = state === 'loading' || state === 'watching';
   const isFailed = state === 'failed';
+
+  if (hidden || (hideWhenUnavailable && isFailed)) return null;
+
   const label = compact
     ? isFailed ? 'RETRY' : state === 'watching' ? 'AD' : title
-    : isFailed ? 'TRY AGAIN' : state === 'watching' ? 'OPENING' : title;
-  const sublabel = isFailed ? (error ? 'AD UNAVAILABLE' : 'AD FAILED') : detail;
+    : isFailed ? 'AD UNAVAILABLE' : state === 'watching' ? 'OPENING' : title;
+  const sublabel = isFailed ? (error ? 'TRY AGAIN LATER' : 'AD FAILED') : detail;
 
   return (
     <Pressable

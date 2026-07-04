@@ -61,6 +61,7 @@ export function TitleScreen() {
         <View style={styles.rosterWrap}>
           <ScrollView
             horizontal
+            style={styles.rosterScroll}
             showsHorizontalScrollIndicator={false}
             contentContainerStyle={styles.rosterRow}
           >
@@ -144,9 +145,19 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginBottom: 16,
     maxWidth: 320,
+    height: 54,
+    flexGrow: 0,
+    flexShrink: 0,
+  },
+  rosterScroll: {
+    height: 30,
+    maxHeight: 30,
+    flexGrow: 0,
+    flexShrink: 0,
   },
   rosterRow: {
     flexDirection: 'row',
+    alignItems: 'center',
     gap: 6,
     paddingHorizontal: 8,
     opacity: 0.6,
