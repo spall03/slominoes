@@ -18,6 +18,12 @@
     },
     "production": {
       "autoIncrement": true
+    },
+    "testflight": {
+      "extends": "production",
+      "env": {
+        "EXPO_PUBLIC_ADMOB_USE_TEST_ADS": "true"
+      }
     }
   },
   "submit": {

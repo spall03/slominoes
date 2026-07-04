@@ -1,9 +1,8 @@
 // src/ads.native.ts
 //
 // Native (iOS/Android) AdMob implementation using react-native-google-mobile-ads.
-// Uses Google's PUBLIC TEST ad unit IDs as placeholders — Steve will replace
-// with real production IDs once the Corp Apple Developer enrollment clears
-// and AdMob production app + ad units are registered.
+// Supports a build-time test-ad switch for TestFlight/internal builds. App
+// Store builds use production ad unit IDs from Expo public env vars.
 //
 // IMPORTANT: this module must NOT be imported on web. The platform router in
 // ./ads.ts handles that gating.
@@ -26,14 +25,15 @@ import type {
 } from './ads';
 
 // -----------------------------------------------------------------------------
-// Ad unit IDs — TEST IDs in dev, real IDs in production
+// Ad unit IDs — demo IDs in dev/testflight, real IDs in production
 // -----------------------------------------------------------------------------
-// Google's public test IDs work in any AdMob app for development. Replace with
-// real production unit IDs from Steve's AdMob console when available.
+// Google's public test IDs work in any AdMob app for development/testing.
 //
 // Production IDs are injected through Expo public env vars. If a production
 // ID is missing, the corresponding ad placement stays unavailable instead of
 // serving Google's test ads in a release build.
+const USE_TEST_AD_UNITS = __DEV__ || process.env.EXPO_PUBLIC_ADMOB_USE_TEST_ADS === 'true';
+
 const IOS_AD_UNITS = {
   rewardedRespinRescue: process.env.EXPO_PUBLIC_ADMOB_IOS_REWARDED_RESPIN_RESCUE_ID,
   rewardedContinue: process.env.EXPO_PUBLIC_ADMOB_IOS_REWARDED_CONTINUE_ID,
@@ -49,9 +49,9 @@ const ANDROID_AD_UNITS = {
 const PRODUCTION_AD_UNITS = Platform.OS === 'ios' ? IOS_AD_UNITS : ANDROID_AD_UNITS;
 
 const AD_UNITS = {
-  rewardedRespinRescue: __DEV__ ? TestIds.REWARDED : PRODUCTION_AD_UNITS.rewardedRespinRescue,
-  rewardedContinue: __DEV__ ? TestIds.REWARDED : PRODUCTION_AD_UNITS.rewardedContinue,
-  interstitial: __DEV__ ? TestIds.INTERSTITIAL : PRODUCTION_AD_UNITS.interstitial,
+  rewardedRespinRescue: USE_TEST_AD_UNITS ? TestIds.REWARDED : PRODUCTION_AD_UNITS.rewardedRespinRescue,
+  rewardedContinue: USE_TEST_AD_UNITS ? TestIds.REWARDED : PRODUCTION_AD_UNITS.rewardedContinue,
+  interstitial: USE_TEST_AD_UNITS ? TestIds.INTERSTITIAL : PRODUCTION_AD_UNITS.interstitial,
 };
 
 // -----------------------------------------------------------------------------
