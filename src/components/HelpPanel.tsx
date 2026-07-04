@@ -26,10 +26,19 @@ function SymbolRow({ symbol, label }: { symbol: string; label: string }) {
   );
 }
 
-export function HelpPanel() {
+export function HelpPanel({
+  embedded = false,
+  showTitle = true,
+}: {
+  embedded?: boolean;
+  showTitle?: boolean;
+}) {
   return (
-    <ScrollView style={styles.helpPanel} contentContainerStyle={styles.content}>
-      <Text style={styles.title}>How to Play</Text>
+    <ScrollView
+      style={[styles.helpPanel, embedded && styles.helpPanelEmbedded]}
+      contentContainerStyle={styles.content}
+    >
+      {showTitle && <Text style={styles.title}>How to Play</Text>}
 
       <Section title="Goal">
         <Body>Place domino tiles on the grid to create matches. Score enough points to beat the level threshold and advance. Complete all 10 levels to win a run.</Body>
@@ -133,6 +142,14 @@ const styles = StyleSheet.create({
     borderRadius: 10,
     width: 280,
     maxHeight: 500,
+  },
+  helpPanelEmbedded: {
+    marginTop: 0,
+    width: '100%',
+    maxHeight: '100%',
+    backgroundColor: 'transparent',
+    borderWidth: 0,
+    borderRadius: 0,
   },
   content: {
     padding: 14,

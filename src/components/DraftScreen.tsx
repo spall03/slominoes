@@ -1,6 +1,15 @@
 // src/components/DraftScreen.tsx
-import React, { useEffect } from 'react';
-import { View, Text, Pressable, ScrollView, StyleSheet, Platform } from 'react-native';
+import React, { useEffect, useState } from 'react';
+import {
+  View,
+  Text,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Platform,
+  Modal,
+  type GestureResponderEvent,
+} from 'react-native';
 import { colors, fonts, symbolColors } from '../theme';
 import { useMetaStore, UNLOCK_CONDITIONS } from '../meta-store';
 import { useRunStore } from '../store';
@@ -29,10 +38,17 @@ function renderAbilityText(text: string) {
 function FrequencyDots({ freq }: { freq: number }) {
   const filled = Math.min(5, Math.max(0, freq));
   return (
-    <Text style={styles.chipValue}>
-      {'●'.repeat(filled)}
-      <Text style={styles.chipValueDim}>{'○'.repeat(5 - filled)}</Text>
-    </Text>
+    <View style={styles.freqDots} accessibilityLabel={`Frequency ${filled} of 5`}>
+      {Array.from({ length: 5 }).map((_, i) => (
+        <View
+          key={i}
+          style={[
+            styles.freqDot,
+            i < filled ? styles.freqDotFilled : styles.freqDotEmpty,
+          ]}
+        />
+      ))}
+    </View>
   );
 }
 
@@ -43,18 +59,96 @@ function getTierLabel(id: SymbolId): string {
   return `TIER ${cond.tier}`;
 }
 
+function SymbolDetailModal({
+  symbol,
+  onClose,
+}: {
+  symbol: SymbolDef | null;
+  onClose: () => void;
+}) {
+  if (!symbol) return null;
+  const abilityText = symbol.abilities.length > 0
+    ? symbol.abilities.map(a => a.description)
+    : ['No special ability.'];
+
+  return (
+    <Modal
+      visible
+      transparent
+      animationType="fade"
+      onRequestClose={onClose}
+    >
+      <View style={styles.modalOverlay}>
+        <View style={styles.detailModal}>
+          <View style={styles.detailHeader}>
+            <View style={styles.detailTitleRow}>
+              <View
+                style={[
+                  styles.detailIcon,
+                  Platform.OS === 'web' ? ({
+                    filter: `drop-shadow(0 0 5px ${symbolColors[symbol.id] ?? colors.cyan})`,
+                  } as any) : undefined,
+                ]}
+              >
+                <SymbolIcon symbol={symbol.id} size={44} />
+              </View>
+              <View style={styles.detailHeading}>
+                <Text style={styles.detailEyebrow}>{getTierLabel(symbol.id)}</Text>
+                <Text style={styles.detailTitle}>{symbol.name}</Text>
+              </View>
+            </View>
+            <Pressable
+              style={styles.modalCloseButton}
+              onPress={onClose}
+              accessibilityRole="button"
+              accessibilityLabel="Close symbol details"
+            >
+              <Text style={styles.modalCloseText}>×</Text>
+            </Pressable>
+          </View>
+
+          <View style={styles.detailStats}>
+            <View style={styles.detailStat}>
+              <Text style={styles.detailStatValue}>{symbol.matchLength}</Text>
+              <Text style={styles.detailStatLabel}>MATCH</Text>
+            </View>
+            <View style={styles.detailStat}>
+              <Text style={styles.detailStatValue}>{symbol.scoreValue}</Text>
+              <Text style={styles.detailStatLabel}>PTS</Text>
+            </View>
+            <View style={styles.detailStat}>
+              <FrequencyDots freq={symbol.frequency} />
+              <Text style={styles.detailStatLabel}>FREQ</Text>
+            </View>
+          </View>
+
+          <View style={styles.detailAbilityList}>
+            {abilityText.map((text, index) => (
+              <Text key={index} style={styles.detailAbility}>
+                {renderAbilityText(text)}
+              </Text>
+            ))}
+          </View>
+        </View>
+      </View>
+    </Modal>
+  );
+}
+
 function SymbolCard({
   def,
   isSelected,
   isLocked,
   hint,
   onPress,
+  onInfoPress,
 }: {
   def: SymbolDef;
   isSelected: boolean;
   isLocked: boolean;
   hint?: string;
   onPress: () => void;
+  onInfoPress: () => void;
 }) {
   const abilityText = def.abilities.length > 0
     ? def.abilities.map(a => a.description).join('. ')
@@ -96,11 +190,25 @@ function SymbolCard({
                 <Text style={[
                   styles.name,
                   isSelected && { color: colors.gold },
-                ]}>{def.name}</Text>
+                ]} numberOfLines={1}>{def.name}</Text>
               </View>
-              <View style={styles.pointsBlock}>
-                <Text style={styles.points}>{def.scoreValue}</Text>
-                <Text style={styles.pointsEyebrow}>PTS</Text>
+              <View style={styles.cardActions}>
+                <Pressable
+                  style={styles.infoButton}
+                  hitSlop={8}
+                  accessibilityRole="button"
+                  accessibilityLabel={`${def.name} details`}
+                  onPress={(event: GestureResponderEvent) => {
+                    event.stopPropagation();
+                    onInfoPress();
+                  }}
+                >
+                  <Text style={styles.infoButtonText}>i</Text>
+                </Pressable>
+                <View style={styles.pointsBlock}>
+                  <Text style={styles.points}>{def.scoreValue}</Text>
+                  <Text style={styles.pointsEyebrow}>PTS</Text>
+                </View>
               </View>
             </View>
 
@@ -120,7 +228,7 @@ function SymbolCard({
             {abilityText && (
               <Text
                 style={styles.ability}
-                numberOfLines={isSelected ? undefined : 2}
+                numberOfLines={2}
               >
                 {renderAbilityText(abilityText)}
               </Text>
@@ -133,6 +241,8 @@ function SymbolCard({
 }
 
 export function DraftScreen() {
+  const [detailSymbol, setDetailSymbol] = useState<SymbolDef | null>(null);
+
   useEffect(() => {
     try { startMusic('draft'); } catch {}
     return () => { try { stopMusic(); } catch {} };
@@ -196,6 +306,7 @@ export function DraftScreen() {
             isSelected={selectedLoadout.includes(def.id)}
             isLocked={false}
             onPress={() => handlePress(def.id)}
+            onInfoPress={() => setDetailSymbol(def)}
           />
         ))}
         {locked.map(({ def, hint }) => (
@@ -206,6 +317,7 @@ export function DraftScreen() {
             isLocked={true}
             hint={hint}
             onPress={() => {}}
+            onInfoPress={() => {}}
           />
         ))}
       </ScrollView>
@@ -235,6 +347,10 @@ export function DraftScreen() {
           ]}>Start Run</Text>
         </Pressable>
       </View>
+      <SymbolDetailModal
+        symbol={detailSymbol}
+        onClose={() => setDetailSymbol(null)}
+      />
     </View>
   );
 }
@@ -284,7 +400,7 @@ const styles = StyleSheet.create({
     padding: 12,
     alignItems: 'center',
     justifyContent: 'center',
-    minHeight: 80,
+    height: 132,
   },
   cardContent: {
     flexDirection: 'row',
@@ -295,6 +411,7 @@ const styles = StyleSheet.create({
   cardInfo: {
     flex: 1,
     gap: 2,
+    minWidth: 0,
   },
   cardSelected: {
     borderColor: colors.gold,
@@ -341,6 +458,7 @@ const styles = StyleSheet.create({
   headerLeft: {
     flex: 1,
     gap: 1,
+    minWidth: 0,
   },
   eyebrow: {
     fontSize: 9,
@@ -354,6 +472,27 @@ const styles = StyleSheet.create({
     color: colors.ink,
     letterSpacing: 1,
     textTransform: 'uppercase',
+  },
+  cardActions: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 7,
+  },
+  infoButton: {
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    borderWidth: 1,
+    borderColor: colors.line2,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.surface2,
+  },
+  infoButtonText: {
+    color: colors.inkDim,
+    fontFamily: fonts.bold,
+    fontSize: 12,
+    lineHeight: 14,
   },
   pointsBlock: {
     alignItems: 'flex-end',
@@ -401,6 +540,24 @@ const styles = StyleSheet.create({
   chipValueDim: {
     color: colors.inkMute,
   },
+  freqDots: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 2,
+    minHeight: 10,
+  },
+  freqDot: {
+    width: 5,
+    height: 5,
+    borderRadius: 3,
+  },
+  freqDotFilled: {
+    backgroundColor: colors.cyan,
+  },
+  freqDotEmpty: {
+    borderWidth: 1,
+    borderColor: colors.inkMute,
+  },
   stats: {
     fontSize: 10,
     fontFamily: fonts.regular,
@@ -417,6 +574,115 @@ const styles = StyleSheet.create({
   abilityNumeric: {
     color: colors.cyan,
     fontFamily: fonts.semiBold,
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(6,6,20,0.88)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 18,
+  },
+  detailModal: {
+    width: '100%',
+    maxWidth: 360,
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.line2,
+    borderRadius: 12,
+    padding: 16,
+  },
+  detailHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    gap: 12,
+    marginBottom: 14,
+  },
+  detailTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    flex: 1,
+  },
+  detailIcon: {
+    width: 52,
+    height: 52,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.surface2,
+    borderWidth: 1,
+    borderColor: colors.line,
+    borderRadius: 10,
+  },
+  detailHeading: {
+    flex: 1,
+  },
+  detailEyebrow: {
+    color: colors.inkMute,
+    fontFamily: fonts.semiBold,
+    fontSize: 10,
+    letterSpacing: 2,
+  },
+  detailTitle: {
+    color: colors.ink,
+    fontFamily: fonts.bold,
+    fontSize: 22,
+    letterSpacing: 1,
+    textTransform: 'uppercase',
+  },
+  modalCloseButton: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.surface2,
+    borderWidth: 1,
+    borderColor: colors.line,
+  },
+  modalCloseText: {
+    color: colors.inkDim,
+    fontFamily: fonts.bold,
+    fontSize: 24,
+    lineHeight: 26,
+  },
+  detailStats: {
+    flexDirection: 'row',
+    gap: 8,
+    marginBottom: 14,
+  },
+  detailStat: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 4,
+    backgroundColor: colors.surface2,
+    borderWidth: 1,
+    borderColor: colors.line,
+    borderRadius: 8,
+    minHeight: 58,
+    padding: 8,
+  },
+  detailStatValue: {
+    color: colors.gold,
+    fontFamily: fonts.bold,
+    fontSize: 18,
+    fontVariant: ['tabular-nums'],
+  },
+  detailStatLabel: {
+    color: colors.inkMute,
+    fontFamily: fonts.semiBold,
+    fontSize: 9,
+    letterSpacing: 2,
+  },
+  detailAbilityList: {
+    gap: 8,
+  },
+  detailAbility: {
+    color: colors.ink,
+    fontFamily: fonts.regular,
+    fontSize: 13,
+    lineHeight: 19,
   },
   bottomBar: {
     position: 'absolute',

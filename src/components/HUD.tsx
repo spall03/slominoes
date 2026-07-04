@@ -26,6 +26,7 @@ interface HUDProps {
   canAffordRespin?: boolean;
   respinLocked?: boolean;
   onSettingsPress?: () => void;
+  onHelpPress?: () => void;
   /** When true, the respin badge runs a continuous attention pulse (Level 0 hints). */
   pulseHint?: boolean;
   showRespinReward?: boolean;
@@ -58,6 +59,7 @@ export function HUD({
   canAffordRespin,
   respinLocked,
   onSettingsPress,
+  onHelpPress,
   pulseHint,
   showRespinReward,
   onRespinReward,
@@ -160,6 +162,17 @@ export function HUD({
                 )}
               </Pressable>
             </Animated.View>
+          )}
+          {onHelpPress && (
+            <Pressable
+              onPress={onHelpPress}
+              style={styles.helpButton}
+              hitSlop={8}
+              accessibilityRole="button"
+              accessibilityLabel="How to play"
+            >
+              <Text style={styles.helpIcon}>?</Text>
+            </Pressable>
           )}
           {onSettingsPress && (
             <Pressable onPress={onSettingsPress} style={styles.settingsButton} hitSlop={8}>
@@ -328,6 +341,22 @@ const styles = StyleSheet.create({
   },
   settingsButton: {
     padding: 2,
+  },
+  helpButton: {
+    width: 26,
+    height: 26,
+    borderRadius: 13,
+    borderWidth: 1,
+    borderColor: colors.line2,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.surface2,
+  },
+  helpIcon: {
+    color: colors.inkDim,
+    fontFamily: fonts.bold,
+    fontSize: 15,
+    lineHeight: 18,
   },
   settingsIcon: {
     fontSize: 20,

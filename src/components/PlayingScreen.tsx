@@ -1,6 +1,6 @@
 // src/components/PlayingScreen.tsx
 import React, { useState, useEffect, useRef } from 'react';
-import { View, Text, Pressable, Platform, StyleSheet } from 'react-native';
+import { View, Text, Pressable, Platform, StyleSheet, Modal } from 'react-native';
 import { colors, fonts } from '../theme';
 import {
   BOARD_SIZE,
@@ -317,6 +317,7 @@ export function PlayingScreen() {
         }}
         respinLocked={tutorialRespinLocked}
         onSettingsPress={() => setShowSettings(true)}
+        onHelpPress={() => setShowHelp(true)}
         pulseHint={tutorialFocus === 'respin-badge'}
         showRespinReward={canShowRespinReward}
         onRespinReward={() => {
@@ -517,24 +518,32 @@ export function PlayingScreen() {
               </View>
             )}
 
-            {/* Help icon (mobile only) */}
-            {isMobile && (
-              <Pressable
-                onPress={() => setShowHelp((h) => !h)}
-                style={styles.helpIcon}
-              >
-                <Text style={styles.helpIconText}>
-                  {showHelp ? '\u2715' : '\u24d8'}
-                </Text>
-              </Pressable>
-            )}
-            {isMobile && showHelp && <HelpPanel />}
           </View>
         </View>
-
-        {/* Right column: rules panel (web desktop only) */}
-        {isDesktop && <HelpPanel />}
       </View>
+      <Modal
+        visible={showHelp}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setShowHelp(false)}
+      >
+        <View style={styles.helpModalOverlay}>
+          <View style={styles.helpModal}>
+            <View style={styles.helpModalHeader}>
+              <Text style={styles.helpModalTitle}>How to Play</Text>
+              <Pressable
+                style={styles.helpCloseButton}
+                onPress={() => setShowHelp(false)}
+                accessibilityRole="button"
+                accessibilityLabel="Close instructions"
+              >
+                <Text style={styles.helpCloseText}>×</Text>
+              </Pressable>
+            </View>
+            <HelpPanel embedded showTitle={false} />
+          </View>
+        </View>
+      </Modal>
       {showSettings && <SettingsScreen onClose={() => setShowSettings(false)} />}
     </View>
   );
@@ -726,16 +735,52 @@ const styles = StyleSheet.create({
     letterSpacing: 2,
     textTransform: 'uppercase',
   },
-  helpIcon: {
-    position: 'absolute',
-    top: 0,
-    right: 8,
-    padding: 4,
+  helpModalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(6,6,20,0.9)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 16,
   },
-  helpIconText: {
-    fontSize: 18,
-    color: colors.textMuted,
-    fontFamily: fonts.regular,
+  helpModal: {
+    width: '100%',
+    maxWidth: 430,
+    maxHeight: '86%',
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.line2,
+    borderRadius: 12,
+    padding: 14,
+  },
+  helpModalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    gap: 12,
+    marginBottom: 6,
+  },
+  helpModalTitle: {
+    color: colors.cyan,
+    fontFamily: fonts.bold,
+    fontSize: 15,
+    letterSpacing: 2,
+    textTransform: 'uppercase',
+  },
+  helpCloseButton: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.surface2,
+    borderWidth: 1,
+    borderColor: colors.line,
+  },
+  helpCloseText: {
+    color: colors.inkDim,
+    fontFamily: fonts.bold,
+    fontSize: 24,
+    lineHeight: 26,
   },
   buttonPressed: {
     opacity: 0.7,

@@ -154,6 +154,7 @@ export interface GameState {
   pendingSpinGrid: Grid | null;
   pendingSpinScore: number;
   pendingSpinAnimState: Partial<GameState> | null;
+  pendingSpinNewMatchMaxLength: number;
   loadoutFreqs: Map<string, number> | null;
   loadoutDefs: SymbolDef[] | null;
   vineSymbols: Set<string> | undefined;
@@ -216,6 +217,7 @@ export function createInitialState(config: LevelConfig = generateLevelConfig(1),
     pendingSpinGrid: null as Grid | null,
     pendingSpinScore: 0,
     pendingSpinAnimState: null as Partial<GameState> | null,
+    pendingSpinNewMatchMaxLength: 0,
     loadoutFreqs: loadoutFreqs ?? null,
     loadoutDefs: loadoutDefs ?? null,
     vineSymbols: getVineSymbols(loadoutDefs ?? null),
@@ -563,11 +565,19 @@ export const useGameStore = create<GameState>((set, get) => ({
       set({ respinsRemaining: get().respinsRemaining + extraRespins });
     }
 
-    // Sound effects
+    // Trigger match animation for matches involving newly placed cells
+    const newCells: [number, number][] = [[row, col], [row2, col2]];
+    const newCellKeys = new Set(newCells.map(([r, c]) => `${r},${c}`));
+    const placementMatches = matches.filter(match =>
+      match.cells.some(([r, c]) => newCellKeys.has(`${r},${c}`))
+    );
+
+    // Sound effects: only react to matches caused by this placement, not
+    // matches that were already on the board from earlier turns.
     try {
       Sound.playTilePlace();
-      if (matches.length > 0) {
-        const maxLen = Math.max(...matches.map(m => m.length));
+      if (placementMatches.length > 0) {
+        const maxLen = Math.max(...placementMatches.map(m => m.length));
         setTimeout(() => {
           if (maxLen >= 5) Sound.playBigMatch();
           else Sound.playMatch();
@@ -576,9 +586,7 @@ export const useGameStore = create<GameState>((set, get) => ({
       }
     } catch {}
 
-    // Trigger match animation for matches involving newly placed cells
     if (matches.length > 0) {
-      const newCells: [number, number][] = [[row, col], [row2, col2]];
       get().triggerMatchAnimation(matches, newCells);
     }
   },
@@ -774,6 +782,9 @@ export const useGameStore = create<GameState>((set, get) => ({
       pendingSpinGrid: newGrid,
       pendingSpinScore: newScore,
       pendingSpinAnimState: animState,
+      pendingSpinNewMatchMaxLength: newMatches.length > 0
+        ? Math.max(...newMatches.map(m => m.length))
+        : 0,
       respinTarget: null, // committed; disarm
     });
   },
@@ -803,7 +814,14 @@ export const useGameStore = create<GameState>((set, get) => ({
   },
 
   clearSpinAnimation: () => {
-    const { pendingSpinGrid, pendingSpinScore, pendingSpinAnimState, lockedCells, loadoutDefs } = get();
+    const {
+      pendingSpinGrid,
+      pendingSpinScore,
+      pendingSpinAnimState,
+      pendingSpinNewMatchMaxLength,
+      lockedCells,
+      loadoutDefs,
+    } = get();
     if (!pendingSpinGrid) return;
 
     let finalScore = pendingSpinScore;
@@ -894,8 +912,17 @@ export const useGameStore = create<GameState>((set, get) => ({
       pendingSpinGrid: null,
       pendingSpinScore: 0,
       pendingSpinAnimState: null,
+      pendingSpinNewMatchMaxLength: 0,
       ...(pendingSpinAnimState ?? {}),
     });
+
+    try {
+      if (pendingSpinNewMatchMaxLength > 0) {
+        if (pendingSpinNewMatchMaxLength >= 5) Sound.playBigMatch();
+        else Sound.playMatch();
+        setTimeout(() => Sound.playLock(), 160);
+      }
+    } catch {}
 
     // Auto-end: if the respin pushed us past +15% over threshold, end the level
     // now. Max bonus respins are locked in — playing out is boring.
@@ -1237,7 +1264,7 @@ export const useRunStore = create<RunState>((set, get) => ({
     const completedLevels = outcome === 'won' ? NUM_LEVELS : Math.max(0, currentLevel - 1);
 
     try {
-      getMetaStore()?.getState?.()?.endRun(levelScore, completedLevels, outcome === 'won');
+      getMetaStore()?.getState?.()?.endRun(levelScore, completedLevels, outcome === 'won', currentLevel);
       getMetaStore()?.getState?.()?.markFirstRunCompleted?.();
     } catch {}
     set({ runFinalized: true });

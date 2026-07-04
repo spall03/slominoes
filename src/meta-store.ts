@@ -306,7 +306,7 @@ export interface MetaState {
   recordRespinBought: () => void;
 
   // End of run
-  endRun: (finalScore: number, levelsWon: number, wonFullRun: boolean) => void;
+  endRun: (finalScore: number, levelsWon: number, wonFullRun: boolean, reachedLevel: number) => void;
   dismissUnlock: () => void;
 
   // Ad-support actions
@@ -493,7 +493,7 @@ export const useMetaStore = create<MetaState>((set, get) => ({
     });
   },
 
-  endRun: (finalScore: number, levelsWon: number, wonFullRun: boolean) => {
+  endRun: (finalScore: number, levelsWon: number, wonFullRun: boolean, reachedLevel: number) => {
     // Tutorial completion does NOT bump cumulative stats or trigger unlock
     // checks — Level 0 is meta-progression-neutral. Caller (typically
     // GameOverScreen) is also gated, but defending here for safety.
@@ -519,7 +519,7 @@ export const useMetaStore = create<MetaState>((set, get) => ({
       respinsBought: cumulativeStats.respinsBought + currentRunStats.respinsBoughtThisRun,
       uniqueSymbolsUsed: cumulativeStats.uniqueSymbolsUsed,
       totalRuns: cumulativeStats.totalRuns + 1,
-      furthestLevel: Math.max(cumulativeStats.furthestLevel, levelsWon),
+      furthestLevel: Math.max(cumulativeStats.furthestLevel, reachedLevel),
       bestRunScore: Math.max(cumulativeStats.bestRunScore, finalScore),
     };
 
