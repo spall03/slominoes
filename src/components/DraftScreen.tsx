@@ -150,10 +150,6 @@ function SymbolCard({
   onPress: () => void;
   onInfoPress: () => void;
 }) {
-  const abilityText = def.abilities.length > 0
-    ? def.abilities.map(a => a.description).join('. ')
-    : undefined;
-
   return (
     <Pressable
       style={[
@@ -165,26 +161,25 @@ function SymbolCard({
       disabled={isLocked}
     >
       {isLocked ? (
-        <>
+        <View style={styles.lockedContent}>
           <Text style={styles.lockedIcon}>?</Text>
           <Text style={styles.lockedLabel}>LOCKED</Text>
           {hint && <Text style={styles.hint}>{hint}</Text>}
-        </>
+        </View>
       ) : (
         <View style={styles.cardContent}>
-          <View
-            style={[
-              styles.iconBlock,
-              Platform.OS === 'web' ? ({
-                filter: `drop-shadow(0 0 4px ${symbolColors[def.id] ?? colors.cyan})`,
-              } as any) : undefined,
-            ]}
-          >
-            <SymbolIcon symbol={def.id} size={36} />
-          </View>
-          <View style={styles.cardInfo}>
-            {/* Eyebrow + title row with right-aligned points */}
-            <View style={styles.headerRow}>
+          <View style={styles.cardTopRow}>
+            <View
+              style={[
+                styles.iconBlock,
+                Platform.OS === 'web' ? ({
+                  filter: `drop-shadow(0 0 4px ${symbolColors[def.id] ?? colors.cyan})`,
+                } as any) : undefined,
+              ]}
+            >
+              <SymbolIcon symbol={def.id} size={30} />
+            </View>
+            <View style={styles.cardInfo}>
               <View style={styles.headerLeft}>
                 <Text style={styles.eyebrow}>{getTierLabel(def.id)}</Text>
                 <Text style={[
@@ -192,47 +187,34 @@ function SymbolCard({
                   isSelected && { color: colors.gold },
                 ]} numberOfLines={1}>{def.name}</Text>
               </View>
-              <View style={styles.cardActions}>
-                <Pressable
-                  style={styles.infoButton}
-                  hitSlop={8}
-                  accessibilityRole="button"
-                  accessibilityLabel={`${def.name} details`}
-                  onPress={(event: GestureResponderEvent) => {
-                    event.stopPropagation();
-                    onInfoPress();
-                  }}
-                >
-                  <Text style={styles.infoButtonText}>i</Text>
-                </Pressable>
-                <View style={styles.pointsBlock}>
-                  <Text style={styles.points}>{def.scoreValue}</Text>
-                  <Text style={styles.pointsEyebrow}>PTS</Text>
-                </View>
-              </View>
             </View>
+            <Pressable
+              style={styles.infoButton}
+              hitSlop={8}
+              accessibilityRole="button"
+              accessibilityLabel={`${def.name} details`}
+              onPress={(event: GestureResponderEvent) => {
+                event.stopPropagation();
+                onInfoPress();
+              }}
+            >
+              <Text style={styles.infoButtonText}>i</Text>
+            </Pressable>
+          </View>
 
-            {/* Meta chips: MATCH / FREQ */}
-            <View style={styles.chipRow}>
-              <View style={styles.chip}>
-                <Text style={styles.chipLabel}>MATCH</Text>
-                <Text style={styles.chipValue}>·{def.matchLength}</Text>
-              </View>
-              <View style={styles.chip}>
-                <Text style={styles.chipLabel}>FREQ</Text>
-                <FrequencyDots freq={def.frequency} />
-              </View>
+          <View style={styles.cardStatsRow}>
+            <View style={styles.statChip}>
+              <Text style={styles.statChipLabel}>PTS</Text>
+              <Text style={styles.statChipValue}>{def.scoreValue}</Text>
             </View>
-
-            {/* Ability sentence — ink body with inline cyan numeric highlights */}
-            {abilityText && (
-              <Text
-                style={styles.ability}
-                numberOfLines={2}
-              >
-                {renderAbilityText(abilityText)}
-              </Text>
-            )}
+            <View style={styles.statChip}>
+              <Text style={styles.statChipLabel}>MATCH</Text>
+              <Text style={styles.statChipValue}>{def.matchLength}</Text>
+            </View>
+            <View style={[styles.statChip, styles.freqChip]}>
+              <Text style={styles.statChipLabel}>FREQ</Text>
+              <FrequencyDots freq={def.frequency} />
+            </View>
           </View>
         </View>
       )}
@@ -396,21 +378,23 @@ const styles = StyleSheet.create({
     backgroundColor: '#0a0a1e',
     borderWidth: 1,
     borderColor: colors.border,
-    borderRadius: 10,
-    padding: 12,
-    alignItems: 'center',
-    justifyContent: 'center',
-    height: 132,
+    borderRadius: 8,
+    padding: 10,
+    height: 118,
   },
   cardContent: {
+    flex: 1,
+    width: '100%',
+    justifyContent: 'space-between',
+  },
+  cardTopRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 10,
+    gap: 8,
     width: '100%',
   },
   cardInfo: {
     flex: 1,
-    gap: 2,
     minWidth: 0,
   },
   cardSelected: {
@@ -421,6 +405,12 @@ const styles = StyleSheet.create({
   },
   cardLocked: {
     opacity: 0.75,
+  },
+  lockedContent: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 4,
   },
   lockedIcon: {
     fontSize: 28,
@@ -443,45 +433,36 @@ const styles = StyleSheet.create({
     fontStyle: 'italic',
     textAlign: 'center',
     marginTop: 4,
+    lineHeight: 13,
   },
   iconBlock: {
-    alignSelf: 'flex-start',
-    paddingTop: 2,
-  },
-  headerRow: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    justifyContent: 'space-between',
-    gap: 8,
-    marginBottom: 6,
+    width: 34,
+    height: 34,
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexGrow: 0,
+    flexShrink: 0,
   },
   headerLeft: {
-    flex: 1,
     gap: 1,
-    minWidth: 0,
   },
   eyebrow: {
-    fontSize: 9,
+    fontSize: 8,
     fontFamily: fonts.semiBold,
     color: colors.inkMute,
-    letterSpacing: 2,
+    letterSpacing: 1.5,
   },
   name: {
-    fontSize: 13,
+    fontSize: 16,
     fontFamily: fonts.bold,
     color: colors.ink,
-    letterSpacing: 1,
+    letterSpacing: 0.5,
     textTransform: 'uppercase',
   },
-  cardActions: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    gap: 7,
-  },
   infoButton: {
-    width: 22,
-    height: 22,
-    borderRadius: 11,
+    width: 26,
+    height: 26,
+    borderRadius: 13,
     borderWidth: 1,
     borderColor: colors.line2,
     alignItems: 'center',
@@ -491,64 +472,50 @@ const styles = StyleSheet.create({
   infoButtonText: {
     color: colors.inkDim,
     fontFamily: fonts.bold,
-    fontSize: 12,
-    lineHeight: 14,
+    fontSize: 13,
+    lineHeight: 15,
   },
-  pointsBlock: {
-    alignItems: 'flex-end',
-  },
-  points: {
-    fontSize: 16,
-    fontFamily: fonts.bold,
-    color: colors.gold,
-    fontVariant: ['tabular-nums'],
-  },
-  pointsEyebrow: {
-    fontSize: 8,
-    fontFamily: fonts.semiBold,
-    color: colors.inkMute,
-    letterSpacing: 2,
-    marginTop: -2,
-  },
-  chipRow: {
+  cardStatsRow: {
     flexDirection: 'row',
-    gap: 4,
-    marginBottom: 4,
-    flexWrap: 'wrap',
+    gap: 5,
   },
-  chip: {
-    flexDirection: 'row',
+  statChip: {
+    flex: 1,
     alignItems: 'center',
-    gap: 3,
+    justifyContent: 'center',
+    gap: 2,
     backgroundColor: colors.surface2,
-    borderRadius: 3,
-    paddingHorizontal: 5,
-    paddingVertical: 2,
+    borderWidth: 1,
+    borderColor: colors.line,
+    borderRadius: 5,
+    minHeight: 40,
+    paddingHorizontal: 3,
+    paddingVertical: 4,
   },
-  chipLabel: {
-    fontSize: 9,
+  freqChip: {
+    flex: 1.25,
+  },
+  statChipLabel: {
+    fontSize: 7,
     fontFamily: fonts.semiBold,
     color: colors.inkMute,
-    letterSpacing: 1,
+    letterSpacing: 1.1,
   },
-  chipValue: {
-    fontSize: 9,
+  statChipValue: {
+    color: colors.gold,
     fontFamily: fonts.bold,
-    color: colors.ink,
-    letterSpacing: 0.5,
-  },
-  chipValueDim: {
-    color: colors.inkMute,
+    fontSize: 14,
+    fontVariant: ['tabular-nums'],
   },
   freqDots: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 2,
-    minHeight: 10,
+    minHeight: 8,
   },
   freqDot: {
-    width: 5,
-    height: 5,
+    width: 4,
+    height: 4,
     borderRadius: 3,
   },
   freqDotFilled: {
@@ -557,19 +524,6 @@ const styles = StyleSheet.create({
   freqDotEmpty: {
     borderWidth: 1,
     borderColor: colors.inkMute,
-  },
-  stats: {
-    fontSize: 10,
-    fontFamily: fonts.regular,
-    color: colors.textMuted,
-  },
-  ability: {
-    // Move 01/03: body copy uses ink, not cyan. Numeric payload gets inline
-    // cyan (see abilityNumeric style) — rendered via splitAbilityText helper.
-    fontSize: 11,
-    fontFamily: fonts.regular,
-    color: colors.ink,
-    lineHeight: 15,
   },
   abilityNumeric: {
     color: colors.cyan,
