@@ -22,6 +22,29 @@ export interface Match {
   recipeDefiner?: string;
 }
 
+function matchCellsKey(cells: [number, number][]): string {
+  return cells
+    .map(([r, c]) => `${r},${c}`)
+    .sort()
+    .join('|');
+}
+
+function matchOrientation(cells: [number, number][]): 'row' | 'col' | 'shape' {
+  if (cells.every(([r]) => r === cells[0][0])) return 'row';
+  if (cells.every(([, c]) => c === cells[0][1])) return 'col';
+  return 'shape';
+}
+
+function cellsOverlap(a: [number, number][], b: [number, number][]): boolean {
+  const keys = new Set(a.map(([r, c]) => `${r},${c}`));
+  return b.some(([r, c]) => keys.has(`${r},${c}`));
+}
+
+export function abilityMatchKey(match: Pick<Match, 'cells' | 'symbol' | 'isRecipe' | 'recipeDefiner'>): string {
+  const kind = match.isRecipe ? `recipe:${match.recipeDefiner ?? match.symbol}` : `match:${match.symbol}`;
+  return `${kind}:${matchCellsKey(match.cells)}`;
+}
+
 /** Effects produced by ability evaluation — caller applies them */
 export interface AbilityEffects {
   bonusScore: number;
@@ -29,8 +52,15 @@ export interface AbilityEffects {
   extraTiles: number;
   cellsToUnlock: Set<string>;
   cellsToClear: Set<string>;
-  /** Score multipliers: [cellKey, factor] — applied to matches intersecting that cell */
-  matchMultipliers: { matchSymbol: string; scope: 'cross'; sourceRow: number; sourceCol: number; factor: number }[];
+  clearScorePerCell: number;
+  /** Score multipliers applied once per source match. */
+  matchMultipliers: {
+    matchSymbol: string;
+    scope: 'cross';
+    sourceRows: number[];
+    sourceCols: number[];
+    factor: number;
+  }[];
 }
 
 // =============================================================================
@@ -47,6 +77,25 @@ export function findMatchesWithAbilities(
   boardSize: number,
 ): Match[] {
   const matches: Match[] = [];
+  const seenMatches = new Set<string>();
+
+  const addMatch = (match: Match) => {
+    const key = abilityMatchKey(match);
+    if (seenMatches.has(key)) return;
+    seenMatches.add(key);
+    matches.push(match);
+  };
+
+  const removeOverlappingStandardMatchesInLine = (cells: [number, number][]) => {
+    const orientation = matchOrientation(cells);
+    for (let i = matches.length - 1; i >= 0; i--) {
+      const match = matches[i];
+      if (match.isRecipe) continue;
+      if (matchOrientation(match.cells) !== orientation || !cellsOverlap(match.cells, cells)) continue;
+      seenMatches.delete(abilityMatchKey(match));
+      matches.splice(i, 1);
+    }
+  };
 
   // Build match length lookup
   const matchLengths = new Map<string, number>();
@@ -109,7 +158,7 @@ export function findMatchesWithAbilities(
         for (let i = 0; i < length; i++) cells.push([row, col + i]);
         const baseScore = scoreValues.get(symbol) ?? 0;
         const score = baseScore * length * lengthMultiplier(length);
-        matches.push({ cells, symbol, length, score });
+        addMatch({ cells, symbol, length, score });
       }
       col += length;
     }
@@ -134,7 +183,7 @@ export function findMatchesWithAbilities(
         for (let i = 0; i < length; i++) cells.push([row + i, col]);
         const baseScore = scoreValues.get(symbol) ?? 0;
         const score = baseScore * length * lengthMultiplier(length);
-        matches.push({ cells, symbol, length, score });
+        addMatch({ cells, symbol, length, score });
       }
       row += length;
     }
@@ -158,11 +207,13 @@ export function findMatchesWithAbilities(
           // Find the on_match score_bonus for this recipe
           const bonus = getRecipeBonus(definerDef, recipe);
           const baseScore = (scoreValues.get(definer) ?? 0) * recipeLen * lengthMultiplier(recipeLen);
-          matches.push({
+          const match = {
             cells, symbol: definer, length: recipeLen,
             score: baseScore + bonus,
             isRecipe: true, recipeDefiner: definer,
-          });
+          };
+          removeOverlappingStandardMatchesInLine(cells);
+          addMatch(match);
         }
       }
     }
@@ -177,11 +228,13 @@ export function findMatchesWithAbilities(
           for (let i = 0; i < recipeLen; i++) cells.push([row + i, col]);
           const bonus = getRecipeBonus(definerDef, recipe);
           const baseScore = (scoreValues.get(definer) ?? 0) * recipeLen * lengthMultiplier(recipeLen);
-          matches.push({
+          const match = {
             cells, symbol: definer, length: recipeLen,
             score: baseScore + bonus,
             isRecipe: true, recipeDefiner: definer,
-          });
+          };
+          removeOverlappingStandardMatchesInLine(cells);
+          addMatch(match);
         }
       }
     }
@@ -224,6 +277,7 @@ function emptyEffects(): AbilityEffects {
     extraTiles: 0,
     cellsToUnlock: new Set(),
     cellsToClear: new Set(),
+    clearScorePerCell: 0,
     matchMultipliers: [],
   };
 }
@@ -259,13 +313,13 @@ export function evaluateOnMatch(
           const factor = ability.params.factor ?? 1;
           const target = ability.params.targetSymbol;
           if (target && ability.params.scope === 'cross') {
-            // Apply to all matches of targetSymbol in same row or column as this match
-            for (const [r, c] of match.cells) {
-              effects.matchMultipliers.push({
-                matchSymbol: target, scope: 'cross',
-                sourceRow: r, sourceCol: c, factor,
-              });
-            }
+            effects.matchMultipliers.push({
+              matchSymbol: target,
+              scope: 'cross',
+              sourceRows: [...new Set(match.cells.map(([r]) => r))],
+              sourceCols: [...new Set(match.cells.map(([, c]) => c))],
+              factor,
+            });
           }
           break;
         }
@@ -289,6 +343,7 @@ export function evaluateOnMatch(
 
         case 'clear': {
           if (ability.params.scope === 'adjacent') {
+            effects.clearScorePerCell += ability.params.points ?? 0;
             const dirs: [number, number][] = [[-1, -1], [-1, 0], [-1, 1], [0, -1], [0, 1], [1, -1], [1, 0], [1, 1]];
             for (const [r, c] of match.cells) {
               for (const [dr, dc] of dirs) {
@@ -493,9 +548,9 @@ export function applyMatchMultipliers(
     for (const match of matches) {
       if (match.symbol !== mult.matchSymbol) continue;
 
-      // Check if the match is in the same row or column as the multiplier source
-      const inSameRow = match.cells.some(([r]) => r === mult.sourceRow);
-      const inSameCol = match.cells.some(([, c]) => c === mult.sourceCol);
+      // Check if the match is in the same row or column as the multiplier source.
+      const inSameRow = match.cells.some(([r]) => mult.sourceRows.includes(r));
+      const inSameCol = match.cells.some(([, c]) => mult.sourceCols.includes(c));
 
       if (inSameRow || inSameCol) {
         // Multiplier applies: add (factor - 1) * score as bonus
@@ -531,6 +586,7 @@ export function calculateScoreWithAbilities(
     extraTiles: onMatchEffects.extraTiles + adjEffects.extraTiles,
     cellsToUnlock: new Set([...onMatchEffects.cellsToUnlock, ...adjEffects.cellsToUnlock]),
     cellsToClear: new Set([...onMatchEffects.cellsToClear, ...adjEffects.cellsToClear]),
+    clearScorePerCell: onMatchEffects.clearScorePerCell + adjEffects.clearScorePerCell,
     matchMultipliers: onMatchEffects.matchMultipliers,
   };
 

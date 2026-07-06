@@ -43,14 +43,15 @@ import {
   isTutorialPlacementCell,
   isTutorialPlacementSatisfied,
 } from './tutorial-rails';
-import { findMatches, calculateScore, matchKey } from './scoring';
+import { findMatches, calculateScore } from './scoring';
 import { buildFrequencyTable, SYMBOL_ROSTER, hasNoLock, getRespinMatchBonus, getEntrySpotCount, type SymbolDef, type SymbolId } from './symbols';
 import * as Sound from './sound';
 import { adsApi } from './ads';
 import {
+  abilityMatchKey,
   calculateScoreWithAbilities,
-  evaluateOnPlace,
-  canPlaceOnWall as canSymbolPlaceOnWall,
+  evaluateOnMatch,
+  findMatchesWithAbilities,
   type AbilityEffects,
   type Match as AbilityMatch,
 } from './ability-engine';
@@ -123,6 +124,67 @@ function isTutorialRespinTargetAllowed(
     (type === TUTORIAL_RESPIN_TARGET.type && index === TUTORIAL_RESPIN_TARGET.index);
 }
 
+function getOilCanMatchCellKeys(matches: { symbol: string; cells: [number, number][] }[]): Set<string> {
+  const cells = new Set<string>();
+  for (const match of matches) {
+    if (match.symbol !== 'oil_can') continue;
+    for (const [r, c] of match.cells) cells.add(`${r},${c}`);
+  }
+  return cells;
+}
+
+function lockRemainingOilCanCells(lockedCells: Set<string>, grid: Grid, oilCanKeys: Set<string>) {
+  for (const key of oilCanKeys) {
+    const [r, c] = key.split(',').map(Number);
+    if (grid[r]?.[c] === 'oil_can') lockedCells.add(key);
+  }
+}
+
+function clearUnlockedCells(grid: Grid, lockedCells: Set<string>, cellsToClear: Set<string>, nextLocked?: Set<string>): number {
+  let cleared = 0;
+  for (const key of cellsToClear) {
+    const [r, c] = key.split(',').map(Number);
+    if (r < 0 || r >= BOARD_SIZE || c < 0 || c >= BOARD_SIZE) continue;
+    if (lockedCells.has(key)) continue;
+    if (grid[r][c] === null || grid[r][c] === 'wall') continue;
+    grid[r][c] = null;
+    nextLocked?.delete(key);
+    cleared++;
+  }
+  return cleared;
+}
+
+type StoreMatch = {
+  cells: [number, number][];
+  symbol: string;
+  length: number;
+  score: number;
+  isRecipe?: boolean;
+  recipeDefiner?: string;
+};
+
+function storeMatchKey(match: StoreMatch): string {
+  return abilityMatchKey(match);
+}
+
+function getMatchesCreatedByCells<T extends Pick<StoreMatch, 'cells'>>(
+  matches: T[],
+  cells: [number, number][],
+): T[] {
+  const cellKeys = new Set(cells.map(([r, c]) => `${r},${c}`));
+  return matches.filter(match =>
+    match.cells.some(([r, c]) => cellKeys.has(`${r},${c}`))
+  );
+}
+
+function advancePeakScore(currentPeak: number, currentBank: number, scoreCandidate: number) {
+  const nextPeak = Math.max(currentPeak, scoreCandidate);
+  return {
+    score: nextPeak,
+    scoreBank: currentBank + Math.max(0, nextPeak - currentPeak),
+  };
+}
+
 // =============================================================================
 // GAME STATE
 // =============================================================================
@@ -134,7 +196,11 @@ export interface GameState {
   currentTile: Tile | null;
   rotation: Rotation;
   respinsRemaining: number;
+  /** Peak score reached this level. Used for thresholds, level results, and bonus respins. */
   score: number;
+  /** Spendable points earned from peak-score gains. Buying respins spends this. */
+  scoreBank: number;
+  /** Current ability-aware board valuation. Can go down after clears or respins. */
   currentGridScore: number;
   phase: GamePhase;
   result: GameResult;
@@ -155,6 +221,7 @@ export interface GameState {
   pendingSpinScore: number;
   pendingSpinAnimState: Partial<GameState> | null;
   pendingSpinNewMatchMaxLength: number;
+  pendingSpinTriggeredMatchKeys: string[];
   loadoutFreqs: Map<string, number> | null;
   loadoutDefs: SymbolDef[] | null;
   vineSymbols: Set<string> | undefined;
@@ -198,6 +265,7 @@ export function createInitialState(config: LevelConfig = generateLevelConfig(1),
     rotation: 0 as Rotation,
     respinsRemaining: config.respins,
     score: 0,
+    scoreBank: 0,
     currentGridScore: 0,
     phase: 'placing' as GamePhase,
     result: null as GameResult,
@@ -218,6 +286,7 @@ export function createInitialState(config: LevelConfig = generateLevelConfig(1),
     pendingSpinScore: 0,
     pendingSpinAnimState: null as Partial<GameState> | null,
     pendingSpinNewMatchMaxLength: 0,
+    pendingSpinTriggeredMatchKeys: [] as string[],
     loadoutFreqs: loadoutFreqs ?? null,
     loadoutDefs: loadoutDefs ?? null,
     vineSymbols: getVineSymbols(loadoutDefs ?? null),
@@ -369,70 +438,60 @@ export const useGameStore = create<GameState>((set, get) => ({
     const [rowOffset, colOffset] = getSecondCellOffset(rotation);
     const row2 = row + rowOffset;
     const col2 = col + colOffset;
-
     const [symbolFirst, symbolSecond] = getSymbolsForRotation(currentTile);
 
     const newGrid = cloneGrid(grid);
     newGrid[row][col] = symbolFirst;
     newGrid[row2][col2] = symbolSecond;
+    const newCells: [number, number][] = [[row, col], [row2, col2]];
 
-    // Use ability-aware scoring if loadout available, otherwise fall back
     const loadout = get().loadoutDefs;
+    const priorLockedCells = get().lockedCells;
+    const newLocked = new Set(priorLockedCells);
     let newTotalScore: number;
-    let matches: { cells: [number, number][]; symbol: string; length: number; score: number }[];
+    let matches: StoreMatch[];
+    let placementMatches: StoreMatch[];
     let effects: AbilityEffects | null = null;
 
     if (loadout) {
       const result = calculateScoreWithAbilities(newGrid, loadout, BOARD_SIZE);
       newTotalScore = result.score;
       matches = result.matches;
-      effects = result.effects;
+      placementMatches = getMatchesCreatedByCells(matches, newCells);
+      effects = evaluateOnMatch(placementMatches as AbilityMatch[], newGrid, loadout, BOARD_SIZE);
     } else {
       const result = calculateScore(newGrid);
       newTotalScore = result.score;
       matches = result.matches;
+      placementMatches = getMatchesCreatedByCells(matches, newCells);
     }
+    const scoreBeforeEffects = newTotalScore;
 
-    // Apply ability effects
     let extraTiles = 0;
     let extraRespins = 0;
+    let eventScoreBonus = 0;
     if (effects) {
       extraTiles = effects.extraTiles;
       extraRespins = effects.freeRespins;
-
-      // Clear cells (bomb)
-      for (const key of effects.cellsToClear) {
-        const [cr, cc] = key.split(',').map(Number);
-        if (cr >= 0 && cr < BOARD_SIZE && cc >= 0 && cc < BOARD_SIZE) {
-          newGrid[cr][cc] = null;
-        }
-      }
-
-      // Unlock cells (oil can)
-      // Applied to lockedCells below
+      const clearedCells = clearUnlockedCells(newGrid, priorLockedCells, effects.cellsToClear, newLocked);
+      eventScoreBonus += clearedCells * effects.clearScorePerCell;
     }
 
-    // Record stats for unlock tracking
     try {
       const meta = getMetaStore()?.getState();
       if (meta) {
-        for (const m of matches) {
+        for (const m of placementMatches) {
           meta.recordMatchLength(m.length);
           if (m.symbol === 'cherry') meta.recordCherryScore(m.score);
           if (m.symbol === 'bell') meta.recordBellMatch();
-          // Check for fruit salad recipe matches
-          if ((m as any).isRecipe && (m as any).recipeDefiner === 'apple') {
-            meta.recordFruitSalad();
-          }
+          if (m.isRecipe && m.recipeDefiner === 'apple') meta.recordFruitSalad();
         }
-        meta.recordLockedCellCount(get().lockedCells.size + matches.reduce((n, m) => n + m.cells.length, 0));
       }
     } catch {}
 
-    // Lock cells that are part of matches (skip no-lock symbols like ghost)
-    const newLocked = new Set(get().lockedCells);
+    const oilCanLockCells = getOilCanMatchCellKeys(placementMatches);
     if (loadout) {
-      matches.forEach(match => {
+      placementMatches.forEach(match => {
         match.cells.forEach(([r, c]) => {
           const sym = newGrid[r][c];
           if (sym && !hasNoLock(sym as SymbolId, loadout)) {
@@ -440,28 +499,27 @@ export const useGameStore = create<GameState>((set, get) => ({
           }
         });
       });
-      // Apply unlock effects (oil can)
       if (effects) {
         for (const key of effects.cellsToUnlock) {
           newLocked.delete(key);
         }
+        lockRemainingOilCanCells(newLocked, newGrid, oilCanLockCells);
       }
     } else {
-      matches.forEach(match => {
+      placementMatches.forEach(match => {
         match.cells.forEach(([r, c]) => newLocked.add(`${r},${c}`));
       });
     }
 
-    // Recalculate score after clears/unlocks if effects were applied
     if (effects && (effects.cellsToClear.size > 0 || effects.cellsToUnlock.size > 0)) {
-      if (loadout) {
-        newTotalScore = calculateScoreWithAbilities(newGrid, loadout, BOARD_SIZE).score;
-      } else {
-        newTotalScore = calculateScore(newGrid).score;
-      }
+      newTotalScore = loadout
+        ? calculateScoreWithAbilities(newGrid, loadout, BOARD_SIZE).score
+        : calculateScore(newGrid).score;
     }
+    try { getMetaStore()?.getState()?.recordLockedCellCount(newLocked.size); } catch {}
+    const scoreCandidate = Math.max(newTotalScore, scoreBeforeEffects + eventScoreBonus);
+    const scoreUpdate = advancePeakScore(get().score, get().scoreBank, scoreCandidate);
 
-    // Generate extra tiles from abilities (egg)
     const queuedTiles = tileQueue.slice();
     if (extraTiles > 0) {
       const getSymbol = get().loadoutFreqs
@@ -475,23 +533,19 @@ export const useGameStore = create<GameState>((set, get) => ({
     const nextTile = queuedTiles[0] ?? null;
     const newQueue = queuedTiles.slice(1);
     const isComplete = nextTile === null;
-
-    // Auto-end: once the player has enough score to earn the max +3 bonus respins
-    // (≥ 15% over threshold), cut the level short — playing out is boring when
-    // the outcome is decided. Disabled for Level 0 (FTUE) so the tutorial can
-    // complete its scripted beats even if the player overscores incidentally.
     const threshold = get().levelConfig.threshold;
     const autoEndForBonus = !get().levelConfig.disableAutoEnd
       && !isComplete
-      && newTotalScore >= threshold * 1.15;
+      && scoreUpdate.score >= threshold * 1.15;
 
     if (isComplete || autoEndForBonus) {
-      const result = newTotalScore >= threshold ? 'win' : 'lose';
+      const result = scoreUpdate.score >= threshold ? 'win' : 'lose';
       set({
         grid: newGrid,
         tileQueue: [],
         currentTile: null,
-        score: Math.max(get().score, newTotalScore),
+        score: scoreUpdate.score,
+        scoreBank: scoreUpdate.scoreBank,
         currentGridScore: newTotalScore,
         lockedCells: newLocked,
         phase: 'ended',
@@ -504,26 +558,25 @@ export const useGameStore = create<GameState>((set, get) => ({
       });
       if (result === 'win') {
         useRunStore.getState().completeLevel(
-          newTotalScore,
+          scoreUpdate.score,
           threshold,
           get().respinsRemaining,
           autoEndForBonus ? 'auto_end' : 'won',
         );
       } else {
-        useRunStore.getState().failLevel(newTotalScore);
+        useRunStore.getState().failLevel(scoreUpdate.score);
       }
     } else {
-      // Check if any entry has valid placements on the new grid
       const stuck = !anyEntryHasValidPlacement(newGrid, get().entrySpots, nextTile, getVineSymbols(loadoutDefs));
       if (stuck) {
-        // No valid placements remaining — end the game
-        const result = newTotalScore >= get().levelConfig.threshold ? 'win' : 'lose';
+        const result = scoreUpdate.score >= get().levelConfig.threshold ? 'win' : 'lose';
         set({
           grid: newGrid,
           tileQueue: newQueue,
           currentTile: nextTile,
-          score: Math.max(get().score, newTotalScore),
-        currentGridScore: newTotalScore,
+          score: scoreUpdate.score,
+          scoreBank: scoreUpdate.scoreBank,
+          currentGridScore: newTotalScore,
           lockedCells: newLocked,
           phase: 'ended',
           result,
@@ -535,21 +588,22 @@ export const useGameStore = create<GameState>((set, get) => ({
         });
         if (result === 'win') {
           useRunStore.getState().completeLevel(
-            newTotalScore,
+            scoreUpdate.score,
             get().levelConfig.threshold,
             get().respinsRemaining,
             'won',
           );
         } else {
-          useRunStore.getState().failLevel(newTotalScore);
+          useRunStore.getState().failLevel(scoreUpdate.score);
         }
       } else {
         set({
           grid: newGrid,
           tileQueue: newQueue,
           currentTile: nextTile,
-          score: Math.max(get().score, newTotalScore),
-        currentGridScore: newTotalScore,
+          score: scoreUpdate.score,
+          scoreBank: scoreUpdate.scoreBank,
+          currentGridScore: newTotalScore,
           lockedCells: newLocked,
           placementMode: 'idle',
           placedPosition: null,
@@ -560,20 +614,10 @@ export const useGameStore = create<GameState>((set, get) => ({
       }
     }
 
-    // Apply extra respins from abilities
     if (extraRespins > 0) {
       set({ respinsRemaining: get().respinsRemaining + extraRespins });
     }
 
-    // Trigger match animation for matches involving newly placed cells
-    const newCells: [number, number][] = [[row, col], [row2, col2]];
-    const newCellKeys = new Set(newCells.map(([r, c]) => `${r},${c}`));
-    const placementMatches = matches.filter(match =>
-      match.cells.some(([r, c]) => newCellKeys.has(`${r},${c}`))
-    );
-
-    // Sound effects: only react to matches caused by this placement, not
-    // matches that were already on the board from earlier turns.
     try {
       Sound.playTilePlace();
       if (placementMatches.length > 0) {
@@ -586,8 +630,11 @@ export const useGameStore = create<GameState>((set, get) => ({
       }
     } catch {}
 
-    if (matches.length > 0) {
-      get().triggerMatchAnimation(matches, newCells);
+    if (placementMatches.length > 0) {
+      const animationMatches = eventScoreBonus > 0
+        ? placementMatches.map((match, index) => index === 0 ? { ...match, score: match.score + eventScoreBonus } : match)
+        : placementMatches;
+      get().triggerMatchAnimation(animationMatches, newCells);
     }
   },
 
@@ -669,24 +716,23 @@ export const useGameStore = create<GameState>((set, get) => ({
   },
 
   respinLine: (type: 'row' | 'col', index: number) => {
-    const { phase, respinsRemaining, grid, score, matchingCells, spinningCells, lockedCells, loadoutFreqs, levelConfig } = get();
+    const { phase, respinsRemaining, grid, matchingCells, spinningCells, lockedCells, loadoutFreqs, loadoutDefs, levelConfig } = get();
     if (phase !== 'placing' || respinsRemaining <= 0) return;
     if (index < 0 || index >= BOARD_SIZE) return;
     if (!isTutorialRespinTargetAllowed(levelConfig, type, index)) return;
     if (matchingCells.size > 0) return; // Block respins during animation
     if (spinningCells.size > 0) return; // Block respins during active spin
 
-    // Apply locked-combo bias: locked cells in the respun line pull their own
-    // symbol. Each locked cell of symbol X adds +1 to X's weight for this roll.
     const biasedFreqs = loadoutFreqs
       ? computeBiasedRespinFreqs(loadoutFreqs, grid, lockedCells, { type, index })
       : null;
-
     const getSymbol = () => biasedFreqs
       ? getRandomSymbolFromFreqs(biasedFreqs)
       : getRandomSymbol(get().levelConfig.symbolCount);
 
-    const matchesBefore = findMatches(grid);
+    const matchesBefore = loadoutDefs
+      ? findMatchesWithAbilities(grid, loadoutDefs, BOARD_SIZE)
+      : findMatches(grid);
 
     const newGrid = cloneGrid(grid);
     const newSpinningCells = new Map<string, SpinCellInfo>();
@@ -738,20 +784,16 @@ export const useGameStore = create<GameState>((set, get) => ({
       }
     }
 
-    // If nothing can actually be respun (all cells locked/empty/wall), don't
-    // consume a respin — just bail silently.
     if (newSpinningCells.size === 0) return;
 
-    const newRespins = respinsRemaining - 1;
-    const matchesAfter = findMatches(newGrid);
-    const gridScore = matchesAfter.reduce((sum, m) => sum + m.score, 0);
-    const newScore = gridScore;
-
-    // Only animate new matches (blue highlight + positive popups).
-    // Broken matches are no longer shown — score can only go up, so red
-    // negative popups would be misleading.
-    const beforeKeys = new Set(matchesBefore.map(matchKey));
-    const newMatches = matchesAfter.filter(m => !beforeKeys.has(matchKey(m)));
+    const matchesAfter = loadoutDefs
+      ? findMatchesWithAbilities(newGrid, loadoutDefs, BOARD_SIZE)
+      : findMatches(newGrid);
+    const newScore = loadoutDefs
+      ? calculateScoreWithAbilities(newGrid, loadoutDefs, BOARD_SIZE).score
+      : matchesAfter.reduce((sum, m) => sum + m.score, 0);
+    const beforeKeys = new Set(matchesBefore.map(storeMatchKey));
+    const newMatches = matchesAfter.filter(m => !beforeKeys.has(storeMatchKey(m)));
 
     let animState: Partial<GameState> = {};
     if (newMatches.length > 0) {
@@ -773,10 +815,9 @@ export const useGameStore = create<GameState>((set, get) => ({
       animState = { matchingCells: phase2Cells, highlightColor: 'blue', scorePopups: phase2Popups };
     }
 
-    // Store pending results — grid/score/anim deferred until spin animation completes
     try { Sound.playRespin(); } catch {}
     set({
-      respinsRemaining: newRespins,
+      respinsRemaining: respinsRemaining - 1,
       respinsUsed: get().respinsUsed + 1,
       spinningCells: newSpinningCells,
       pendingSpinGrid: newGrid,
@@ -785,7 +826,8 @@ export const useGameStore = create<GameState>((set, get) => ({
       pendingSpinNewMatchMaxLength: newMatches.length > 0
         ? Math.max(...newMatches.map(m => m.length))
         : 0,
-      respinTarget: null, // committed; disarm
+      pendingSpinTriggeredMatchKeys: newMatches.map(storeMatchKey),
+      respinTarget: null,
     });
   },
 
@@ -799,13 +841,13 @@ export const useGameStore = create<GameState>((set, get) => ({
   },
 
   buyRespin: () => {
-    const { phase, score, respinsBought, spinningCells, matchingCells } = get();
+    const { phase, scoreBank, respinsBought, spinningCells, matchingCells } = get();
     if (phase !== 'placing') return;
     if (spinningCells.size > 0 || matchingCells.size > 0) return;
     const cost = BASE_RESPIN_COST + respinsBought * RESPIN_COST_STEP;
-    if (score < cost) return;
+    if (scoreBank < cost) return;
     set({
-      score: score - cost,
+      scoreBank: scoreBank - cost,
       respinsRemaining: get().respinsRemaining + 1,
       respinsBought: respinsBought + 1,
     });
@@ -819,21 +861,26 @@ export const useGameStore = create<GameState>((set, get) => ({
       pendingSpinScore,
       pendingSpinAnimState,
       pendingSpinNewMatchMaxLength,
+      pendingSpinTriggeredMatchKeys,
       lockedCells,
       loadoutDefs,
     } = get();
     if (!pendingSpinGrid) return;
 
     let finalScore = pendingSpinScore;
+    let scoreCandidate = pendingSpinScore;
+    let eventScoreBonus = 0;
     const newLocked = new Set(lockedCells);
 
     if (loadoutDefs) {
-      // Ability-aware: score, lock (respecting ghost), apply effects
-      const { score, matches, effects } = calculateScoreWithAbilities(pendingSpinGrid, loadoutDefs, BOARD_SIZE);
+      const { score, matches } = calculateScoreWithAbilities(pendingSpinGrid, loadoutDefs, BOARD_SIZE);
       finalScore = score;
+      scoreCandidate = score;
+      const triggeredKeys = new Set(pendingSpinTriggeredMatchKeys);
+      const triggeredMatches = matches.filter(match => triggeredKeys.has(storeMatchKey(match)));
+      const effects = evaluateOnMatch(triggeredMatches as AbilityMatch[], pendingSpinGrid, loadoutDefs, BOARD_SIZE);
 
-      // Lock matches (skip no-lock symbols like ghost)
-      matches.forEach(match => {
+      triggeredMatches.forEach(match => {
         match.cells.forEach(([r, c]) => {
           const sym = pendingSpinGrid[r][c];
           if (sym && !hasNoLock(sym as SymbolId, loadoutDefs)) {
@@ -842,20 +889,17 @@ export const useGameStore = create<GameState>((set, get) => ({
         });
       });
 
-      // Apply effects
+      const oilCanLockCells = getOilCanMatchCellKeys(triggeredMatches);
       if (effects.cellsToClear.size > 0) {
-        for (const key of effects.cellsToClear) {
-          const [cr, cc] = key.split(',').map(Number);
-          if (cr >= 0 && cr < BOARD_SIZE && cc >= 0 && cc < BOARD_SIZE) {
-            pendingSpinGrid[cr][cc] = null;
-          }
-          newLocked.delete(key);
-        }
+        const clearedCells = clearUnlockedCells(pendingSpinGrid, lockedCells, effects.cellsToClear, newLocked);
+        eventScoreBonus += clearedCells * effects.clearScorePerCell;
         finalScore = calculateScoreWithAbilities(pendingSpinGrid, loadoutDefs, BOARD_SIZE).score;
       }
       for (const key of effects.cellsToUnlock) {
         newLocked.delete(key);
       }
+      lockRemainingOilCanCells(newLocked, pendingSpinGrid, oilCanLockCells);
+
       if (effects.freeRespins > 0) {
         set({ respinsRemaining: get().respinsRemaining + effects.freeRespins });
       }
@@ -871,22 +915,15 @@ export const useGameStore = create<GameState>((set, get) => ({
         set({ tileQueue: [...currentQueue, ...extras] });
       }
 
-      // Ember: bonus for respin creating new matches
       const respinBonus = getRespinMatchBonus(loadoutDefs);
-      if (respinBonus > 0) {
-        const newMatchCount = matches.filter(m =>
-          m.cells.some(([r, c]) => !lockedCells.has(`${r},${c}`))
-        ).length;
-        if (newMatchCount > 0) {
-          finalScore += respinBonus * newMatchCount;
-        }
+      if (respinBonus > 0 && triggeredMatches.length > 0) {
+        eventScoreBonus += respinBonus * triggeredMatches.length;
       }
 
-      // Record stats
       try {
         const meta = getMetaStore()?.getState();
         if (meta) {
-          for (const m of matches) {
+          for (const m of triggeredMatches) {
             meta.recordMatchLength(m.length);
             if (m.symbol === 'cherry') meta.recordCherryScore(m.score);
             if (m.symbol === 'bell') meta.recordBellMatch();
@@ -895,17 +932,26 @@ export const useGameStore = create<GameState>((set, get) => ({
         }
       } catch {}
     } else {
-      // Fallback: original behavior
       const matches = findMatches(pendingSpinGrid);
       matches.forEach(match => {
         match.cells.forEach(([r, c]) => newLocked.add(`${r},${c}`));
       });
     }
 
-    const committedScore = Math.max(get().score, finalScore);
+    scoreCandidate = Math.max(scoreCandidate, finalScore) + eventScoreBonus;
+    const scoreUpdate = advancePeakScore(get().score, get().scoreBank, scoreCandidate);
+    const spinAnimState = eventScoreBonus > 0 && pendingSpinAnimState?.scorePopups?.length
+      ? {
+          ...pendingSpinAnimState,
+          scorePopups: pendingSpinAnimState.scorePopups.map((popup, index) =>
+            index === 0 ? { ...popup, score: popup.score + eventScoreBonus } : popup
+          ),
+        }
+      : pendingSpinAnimState;
     set({
       grid: pendingSpinGrid,
-      score: committedScore,
+      score: scoreUpdate.score,
+      scoreBank: scoreUpdate.scoreBank,
       currentGridScore: finalScore,
       lockedCells: newLocked,
       spinningCells: new Map(),
@@ -913,7 +959,8 @@ export const useGameStore = create<GameState>((set, get) => ({
       pendingSpinScore: 0,
       pendingSpinAnimState: null,
       pendingSpinNewMatchMaxLength: 0,
-      ...(pendingSpinAnimState ?? {}),
+      pendingSpinTriggeredMatchKeys: [],
+      ...(spinAnimState ?? {}),
     });
 
     try {
@@ -924,12 +971,9 @@ export const useGameStore = create<GameState>((set, get) => ({
       }
     } catch {}
 
-    // Auto-end: if the respin pushed us past +15% over threshold, end the level
-    // now. Max bonus respins are locked in — playing out is boring.
-    // Disabled in Level 0 (FTUE) so the tutorial completes its beats.
     const threshold = get().levelConfig?.threshold;
     const autoEndAllowed = !get().levelConfig?.disableAutoEnd;
-    if (autoEndAllowed && threshold && get().phase === 'placing' && committedScore >= threshold * 1.15) {
+    if (autoEndAllowed && threshold && get().phase === 'placing' && scoreUpdate.score >= threshold * 1.15) {
       set({
         phase: 'ended',
         result: 'win',
@@ -939,7 +983,7 @@ export const useGameStore = create<GameState>((set, get) => ({
         selectedEntry: null,
         reachableCells: null,
       });
-      useRunStore.getState().completeLevel(committedScore, threshold, get().respinsRemaining, 'auto_end');
+      useRunStore.getState().completeLevel(scoreUpdate.score, threshold, get().respinsRemaining, 'auto_end');
     }
   },
 

@@ -13,7 +13,7 @@ import {
 import { colors, fonts, symbolColors } from '../theme';
 import { useMetaStore, UNLOCK_CONDITIONS } from '../meta-store';
 import { useRunStore } from '../store';
-import { SYMBOL_ROSTER, type SymbolId, type SymbolDef } from '../symbols';
+import { SYMBOL_ROSTER, getSelectionSlots, type SymbolId, type SymbolDef } from '../symbols';
 import { SymbolIcon } from '../symbols/index';
 import { startMusic, stopMusic } from '../music';
 
@@ -250,9 +250,10 @@ export function DraftScreen() {
     }))
     .filter(x => x.def && !x.def.base);
 
-  // Check if crown is selected for +2 slots
-  const hasCrown = selectedLoadout.includes('crown');
-  const maxSlots = hasCrown ? 7 : 5;
+  const selectedDefs = selectedLoadout
+    .map(id => SYMBOL_ROSTER.find(s => s.id === id))
+    .filter(Boolean) as SymbolDef[];
+  const maxSlots = getSelectionSlots(selectedDefs);
   const isFull = selectedLoadout.length >= maxSlots;
 
   const handlePress = (id: SymbolId) => {

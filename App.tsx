@@ -14,6 +14,11 @@ import { GameOverScreen } from './src/components/GameOverScreen';
 import { UnlockReveal } from './src/components/UnlockReveal';
 import { initializeAdServices } from './src/ad-init';
 import { colors, fonts } from './src/theme';
+import {
+  installRunPersistence,
+  persistRunSnapshotNow,
+  restoreRunSnapshot,
+} from './src/run-persistence';
 
 export default function App() {
   const [fontsLoaded] = useFonts({
@@ -28,6 +33,7 @@ export default function App() {
   const pendingUnlock = useMetaStore(s => s.pendingUnlock);
   const settingsLoaded = useSettingsStore(s => s.loaded);
   const loadSettings = useSettingsStore(s => s.loadSettings);
+  const [runSnapshotLoaded, setRunSnapshotLoaded] = useState(false);
 
   const adServiceReady = useMetaStore(s => s.adServiceReady);
   const adServiceFailed = useMetaStore(s => s.adServiceFailed);
@@ -39,6 +45,19 @@ export default function App() {
     loadFromStorage();
     loadSettings();
   }, [loadFromStorage, loadSettings]);
+
+  useEffect(() => {
+    if (!metaLoaded || runSnapshotLoaded) return;
+    restoreRunSnapshot()
+      .catch(() => {})
+      .finally(() => setRunSnapshotLoaded(true));
+  }, [metaLoaded, runSnapshotLoaded]);
+
+  useEffect(() => {
+    if (!runSnapshotLoaded) return;
+    installRunPersistence();
+    persistRunSnapshotNow().catch(() => {});
+  }, [runSnapshotLoaded]);
 
   // Step 2: after meta loads, run the ad init state machine.
   // On web this is an immediate no-op that resolves ready=true.
@@ -69,7 +88,7 @@ export default function App() {
   // Note: ad init failure is not fatal — game still renders, ad-using
   // components see adServiceFailed=true and gracefully hide their CTAs.
 
-  if (!fontsLoaded || !metaLoaded || !settingsLoaded) {
+  if (!fontsLoaded || !metaLoaded || !settingsLoaded || !runSnapshotLoaded) {
     return (
       <View style={styles.boot}>
         <ActivityIndicator color={colors.cyan} size="large" />

@@ -69,11 +69,11 @@ export function HelpPanel({
 
       <Section title="Respins">
         <Body>Tap the Respin button to enter respin mode. Then tap a row or column button to shuffle all unlocked symbols in that line. Locked cells stay put.</Body>
-        <Body>You start each level with free respins. When they run out, you can buy more by spending score. The cost escalates: 100, 150, 200, 250...</Body>
+        <Body>You start each level with free respins. When they run out, you can buy more with your score bank. The cost escalates: 100, 150, 200, 250...</Body>
       </Section>
 
       <Section title="Score">
-        <Body>Your score is the highest grid total you've reached this level. It only ever goes up — a bad respin can't lower it. Respin freely to chase bigger matches.</Body>
+        <Body>Your score is the highest total you've reached this level. It only ever goes up. Your score bank is the spendable part used to buy respins.</Body>
         <Body>Formula: symbol value × length × multiplier</Body>
       </Section>
 
@@ -90,11 +90,11 @@ export function HelpPanel({
         <Body>Many symbols have special powers that trigger during play:</Body>
         <View style={styles.abilityList}>
           <SymbolRow symbol="jam" label="2x cherry matches in same row/column" />
-          <SymbolRow symbol="apple" label="Matches with cherry & lemon (Fruit Salad +200)" />
+          <SymbolRow symbol="apple" label="Matches with cherry & lemon (Fruit Salad +150)" />
           <SymbolRow symbol="ghost" label="Doesn't lock when matched, +1 free respin on match" />
-          <SymbolRow symbol="bomb" label="Clears unlocked adjacent cells on match" />
-          <SymbolRow symbol="oil_can" label="Unlocks entire row & column on match (ML1)" />
-          <SymbolRow symbol="egg" label="Adds 3 extra tiles on match (needs 4 in a row)" />
+          <SymbolRow symbol="bomb" label="Clears unlocked adjacent cells, +25 per cleared cell" />
+          <SymbolRow symbol="oil_can" label="Unlocks row & column, then locks itself (ML1)" />
+          <SymbolRow symbol="egg" label="Adds 1 extra tile on match" />
           <SymbolRow symbol="magnet" label="Increases bell & seven frequency" />
           <SymbolRow symbol="compass" label="Adds an extra entry point" />
           <SymbolRow symbol="vine" label="Can replace wall cells (+50 on match)" />
@@ -102,8 +102,8 @@ export function HelpPanel({
           <SymbolRow symbol="honey" label="+30 when an adjacent match forms" />
           <SymbolRow symbol="coral" label="+20 per unique symbol type adjacent to match" />
           <SymbolRow symbol="tide" label="+5 per empty cell on the board when matched" />
-          <SymbolRow symbol="banana" label="Matches with all fruits (Grand Salad +400)" />
-          <SymbolRow symbol="crown" label="+2 symbol selection slots (pick 7)" />
+          <SymbolRow symbol="banana" label="Matches with all fruits (Grand Salad +300)" />
+          <SymbolRow symbol="crown" label="Limits loadout to 4 symbols" />
         </View>
       </Section>
 
@@ -125,7 +125,7 @@ export function HelpPanel({
       <Section title="Tips">
         <Body>• Place tiles near existing symbols to set up matches before they lock.</Body>
         <Body>• Save respins for rows/columns with near-matches (2 in a row).</Body>
-        <Body>• Your score can't go down — respin aggressively when you see potential.</Body>
+        <Body>• Your score can't go down, but buying respins spends your score bank.</Body>
         <Body>• Buying respins is a gamble — only worth it if you can see a likely match.</Body>
         <Body>• Try different symbol loadouts — combos like cherry + jam or bell + magnet change the game.</Body>
       </Section>

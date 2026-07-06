@@ -141,7 +141,7 @@ function buildSteps(): TutorialStep[] {
     // Step 5: Respins
     {
       title: 'Respins',
-      body: 'Respin a row or column to shuffle its symbols. Locked cells stay put. Spend score to buy more respins.',
+      body: 'Respin a row or column to shuffle its symbols. Locked cells stay put. Spend your score bank to buy more respins.',
       visual: (
         <View style={{ alignItems: 'center', gap: 8 }}>
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>

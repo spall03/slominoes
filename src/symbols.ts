@@ -39,6 +39,7 @@ export type Verb =
   | 'respin_cost_reduction'
   | 'extra_tiles'
   | 'extra_slots'
+  | 'slot_limit'
   | 'extra_entry_spots'
   | 'place_on_wall'
   | 'no_lock'
@@ -146,8 +147,8 @@ export const SYMBOL_ROSTER: SymbolDef[] = [
       {
         trigger: 'recipe_match',
         verb: 'score_bonus',
-        params: { recipe: ['apple', 'cherry', 'lemon'], points: 200 },
-        description: 'Apple + Cherry + Lemon in a line = Fruit Salad (+200)',
+        params: { recipe: ['apple', 'cherry', 'lemon'], points: 150 },
+        description: 'Apple + Cherry + Lemon in a line = Fruit Salad (+150)',
       },
     ],
     base: false,
@@ -177,7 +178,7 @@ export const SYMBOL_ROSTER: SymbolDef[] = [
         trigger: 'on_match',
         verb: 'unlock',
         params: { scope: 'cross' },
-        description: 'Unlock all locked cells in the same row and column',
+        description: 'Unlock its row and column, then lock the oil can',
       },
     ],
     base: false,
@@ -187,9 +188,9 @@ export const SYMBOL_ROSTER: SymbolDef[] = [
     abilities: [
       {
         trigger: 'passive',
-        verb: 'extra_slots',
-        params: { count: 2 },
-        description: '+2 symbol selection slots',
+        verb: 'slot_limit',
+        params: { count: 4 },
+        description: 'Limit loadout to 4 symbols',
       },
     ],
     base: false,
@@ -200,20 +201,20 @@ export const SYMBOL_ROSTER: SymbolDef[] = [
       {
         trigger: 'on_match',
         verb: 'clear',
-        params: { scope: 'adjacent' },
-        description: 'Clear all unlocked adjacent cells and self on match',
+        params: { scope: 'adjacent', points: 25 },
+        description: 'Clear all unlocked adjacent cells and self, +25 per cleared cell',
       },
     ],
     base: false,
   },
   {
-    id: 'egg', name: 'Egg', matchLength: 4, scoreValue: 30, frequency: 3,
+    id: 'egg', name: 'Egg', matchLength: 3, scoreValue: 20, frequency: 3,
     abilities: [
       {
         trigger: 'on_match',
         verb: 'extra_tiles',
-        params: { count: 3 },
-        description: '+3 tiles added to queue on match',
+        params: { count: 1 },
+        description: '+1 tile added to queue on match',
       },
     ],
     base: false,
@@ -315,7 +316,7 @@ export const SYMBOL_ROSTER: SymbolDef[] = [
     base: false,
   },
   {
-    id: 'banana', name: 'Banana', matchLength: 3, scoreValue: 20, frequency: 3,
+    id: 'banana', name: 'Banana', matchLength: 3, scoreValue: 20, frequency: 2,
     abilities: [
       {
         trigger: 'wild_match',
@@ -326,8 +327,8 @@ export const SYMBOL_ROSTER: SymbolDef[] = [
       {
         trigger: 'recipe_match',
         verb: 'score_bonus',
-        params: { recipe: ['banana', 'apple', 'cherry', 'lemon'], points: 400 },
-        description: 'Banana + Apple + Cherry + Lemon = Grand Salad (+400)',
+        params: { recipe: ['banana', 'apple', 'cherry', 'lemon'], points: 300 },
+        description: 'Banana + Apple + Cherry + Lemon = Grand Salad (+300)',
       },
     ],
     base: false,
@@ -422,6 +423,8 @@ export function getSelectionSlots(loadout: SymbolDef[]): number {
     for (const ability of sym.abilities) {
       if (ability.trigger === 'passive' && ability.verb === 'extra_slots') {
         slots += ability.params.count ?? 0;
+      } else if (ability.trigger === 'passive' && ability.verb === 'slot_limit') {
+        slots = Math.min(slots, ability.params.count ?? slots);
       }
     }
   }

@@ -5,6 +5,7 @@ import { create } from 'zustand';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import {
   SYMBOL_ROSTER,
+  getSelectionSlots,
   type SymbolDef,
   type SymbolId,
 } from './symbols';
@@ -257,6 +258,19 @@ async function saveMeta(
 
 const BASE_SYMBOL_IDS: SymbolId[] = ['cherry', 'lemon', 'bar', 'bell', 'seven'];
 
+function normalizeSelectedLoadout(ids: SymbolId[]): SymbolId[] {
+  const unique = ids.filter((id, index) => ids.indexOf(id) === index);
+  const defs = unique
+    .map(id => SYMBOL_ROSTER.find(s => s.id === id))
+    .filter(Boolean) as SymbolDef[];
+  const maxSlots = getSelectionSlots(defs);
+  if (unique.length <= maxSlots) return unique;
+  if (!unique.includes('crown')) return unique.slice(0, maxSlots);
+
+  const withoutCrown = unique.filter(id => id !== 'crown');
+  return [...withoutCrown.slice(0, Math.max(0, maxSlots - 1)), 'crown'];
+}
+
 export type ATTStatus = 'granted' | 'denied' | 'restricted' | 'not_determined' | 'unsupported';
 
 export interface MetaState {
@@ -364,10 +378,11 @@ export const useMetaStore = create<MetaState>((set, get) => ({
 
   selectSymbol: (id: SymbolId) => {
     const { selectedLoadout } = get();
-    const maxSlots = get().getMaxSlots();
-    if (selectedLoadout.length >= maxSlots) return;
     if (selectedLoadout.includes(id)) return;
-    set({ selectedLoadout: [...selectedLoadout, id] });
+    const nextLoadout = [...selectedLoadout, id];
+    const normalized = normalizeSelectedLoadout(nextLoadout);
+    if (normalized.length < nextLoadout.length) return;
+    set({ selectedLoadout: normalized });
   },
 
   deselectSymbol: (id: SymbolId) => {
@@ -376,7 +391,7 @@ export const useMetaStore = create<MetaState>((set, get) => ({
   },
 
   setLoadout: (ids: SymbolId[]) => {
-    set({ selectedLoadout: ids });
+    set({ selectedLoadout: normalizeSelectedLoadout(ids) });
   },
 
   getAvailableSymbols: () => {
@@ -398,10 +413,11 @@ export const useMetaStore = create<MetaState>((set, get) => ({
   },
 
   getMaxSlots: () => {
-    const { selectedLoadout, unlockedSymbols } = get();
-    // Check if crown is in the loadout (not just unlocked)
-    const hasCrown = selectedLoadout.includes('crown');
-    return hasCrown ? 7 : 5;
+    const { selectedLoadout } = get();
+    const defs = selectedLoadout
+      .map(id => SYMBOL_ROSTER.find(s => s.id === id))
+      .filter(Boolean) as SymbolDef[];
+    return getSelectionSlots(defs);
   },
 
   startRun: () => {

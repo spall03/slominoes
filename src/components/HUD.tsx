@@ -10,6 +10,7 @@ import { AdRewardButton } from './AdRewardButton';
 interface HUDProps {
   level: number;
   score: number;
+  scoreBank: number;
   currentGridScore: number;
   threshold: number;
   respinsRemaining: number;
@@ -46,6 +47,7 @@ interface HUDProps {
 export function HUD({
   level,
   score,
+  scoreBank,
   currentGridScore,
   threshold,
   respinsRemaining,
@@ -104,6 +106,9 @@ export function HUD({
         <View style={styles.scoreBlock}>
           <Text style={styles.score}>{score}</Text>
           <Text style={styles.threshold}>/ {threshold}</Text>
+          {scoreBank !== score && (
+            <Text style={styles.scoreBank}>bank {scoreBank}</Text>
+          )}
         </View>
         <View style={styles.rightCluster}>
           {nextTileA && nextTileB && (
@@ -255,6 +260,12 @@ const styles = StyleSheet.create({
     color: colors.inkMute,
     fontFamily: fonts.regular,
     fontSize: 13,
+    fontVariant: ['tabular-nums'],
+  },
+  scoreBank: {
+    color: colors.cyan,
+    fontFamily: fonts.regular,
+    fontSize: 10,
     fontVariant: ['tabular-nums'],
   },
   rightCluster: {

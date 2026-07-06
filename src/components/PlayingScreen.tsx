@@ -33,6 +33,7 @@ export function PlayingScreen() {
     tileQueue,
     respinsRemaining,
     score,
+    scoreBank,
     currentGridScore,
     phase,
     result,
@@ -155,7 +156,7 @@ export function PlayingScreen() {
 
   // Auto-exit respin mode when respins run out AND can't afford more
   const nextCost = getNextRespinCost();
-  const canBuy = score >= nextCost;
+  const canBuy = scoreBank >= nextCost;
   const canShowRespinReward =
     Platform.OS !== 'web' &&
     !isTutorial &&
@@ -226,7 +227,7 @@ export function PlayingScreen() {
     const handleRespinKey = (e: KeyboardEvent) => {
       const state = useGameStore.getState();
       if (state.phase !== 'placing') return;
-      if (state.respinsRemaining <= 0 && state.score < state.getNextRespinCost()) return;
+      if (state.respinsRemaining <= 0 && state.scoreBank < state.getNextRespinCost()) return;
       if (state.placementMode === 'placed') return;
       const tutorialActive = useRunStore.getState().currentLevel === 0;
       if (tutorialActive && useTutorialHints.getState().step < 4) return;
@@ -300,6 +301,7 @@ export function PlayingScreen() {
       <HUD
         level={currentLevel}
         score={score}
+        scoreBank={scoreBank}
         currentGridScore={currentGridScore}
         threshold={levelConfig.threshold}
         respinsRemaining={respinsRemaining}

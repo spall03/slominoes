@@ -99,8 +99,10 @@ export function generateLevelConfig(level: number): LevelConfig {
 
   const wallCount = Math.floor(level * WALL_SCALAR);
 
-  // Place walls randomly, avoiding entry spot cells
-  const entryCells = new Set(['0,3', '0,4', '7,3', '7,4']);
+  // Place walls randomly, avoiding any cells that can become entry spots.
+  const entryCells = new Set(
+    getEntrySpots(4).flatMap(spot => spot.cells.map(([r, c]) => `${r},${c}`))
+  );
   const obstacles: { row: number; col: number; symbol: Symbol | 'wall' }[] = [];
   const usedPositions = new Set<string>();
 
@@ -115,7 +117,8 @@ export function generateLevelConfig(level: number): LevelConfig {
 
   const playableCells = 64 - wallCount;
   const levelScalar = 1 + (level - 1) * ((LEVEL_SCALAR_MAX - 1) / (NUM_LEVELS - 1));
-  const threshold = Math.round(playableCells * SCORE_COEFFICIENT * levelScalar);
+  const generatedThreshold = Math.round(playableCells * SCORE_COEFFICIENT * levelScalar);
+  const threshold = level === 1 ? 1400 : generatedThreshold;
 
   return {
     level,

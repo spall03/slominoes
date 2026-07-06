@@ -137,10 +137,17 @@ export function canPlaceTileWithEntry(
     const [ro, co] = getSecondCellOffset(rotation);
     const r2 = row + ro, c2 = col + co;
     const [symbolFirst, symbolSecond] = getSymbolsForRotation(tile);
-    const key1 = `${row},${col}`;
-    const key2 = `${r2},${c2}`;
-    const cell1Ok = reachableCells.has(key1) || (grid[row]?.[col] === 'wall' && vineSymbols.has(symbolFirst));
-    const cell2Ok = reachableCells.has(key2) || (grid[r2]?.[c2] === 'wall' && vineSymbols.has(symbolSecond));
+    const adjacentToReachable = (r: number, c: number): boolean => {
+      const dirs: [number, number][] = [[-1, 0], [1, 0], [0, -1], [0, 1]];
+      return dirs.some(([dr, dc]) => reachableCells.has(`${r + dr},${c + dc}`));
+    };
+    const cellOk = (r: number, c: number, symbol: Symbol): boolean => {
+      const key = `${r},${c}`;
+      return reachableCells.has(key) ||
+        (grid[r]?.[c] === 'wall' && vineSymbols.has(symbol) && adjacentToReachable(r, c));
+    };
+    const cell1Ok = cellOk(row, col, symbolFirst);
+    const cell2Ok = cellOk(r2, c2, symbolSecond);
     return cell1Ok && cell2Ok;
   }
 
